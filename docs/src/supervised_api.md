@@ -14,8 +14,8 @@ isn't boilerplate code for connection management.
 
 function myservice(input::DataFrame)
     # run your super-cool logic and get back the result
-    result = my_logic(input)
-    return df
+    output_df = my_logic(input)
+    return output_df
 end
 
 @expose myservice
