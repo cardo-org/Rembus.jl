@@ -1,9 +1,9 @@
 # Rembus
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://attdona.github.io/Rembus.jl/stable/)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://attdona.github.io/Rembus.jl/dev/)
-[![Build Status](https://github.com/attdona/Rembus.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/attdona/Rembus.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/attdona/Rembus.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/attdona/Rembus.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://cardo-org.github.io/Rembus.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cardo-org.github.io/Rembus.jl/dev/)
+[![Build Status](https://github.com/cardo-org/Rembus.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cardo-org/Rembus.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/cardo-org/Rembus.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cardo-org/Rembus.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 
 Rembus is a middleware to implement high performance and fault-tolerant distributed applications.
