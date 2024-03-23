@@ -1,0 +1,16 @@
+#!/bin/bash
+BIN_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PKG_DIR=$(dirname $BIN_DIR)
+
+cat << EOF | julia --startup-file=no --threads auto --project=${PKG_DIR}
+
+using PackageCompiler
+
+try
+    create_app(".", "build"; executables = ["caronte"=>"caronted"], force=true)
+catch e
+    println(e)
+    exit(1)
+end
+EOF
+

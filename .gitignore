@@ -1,0 +1,8 @@
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
+*.sav
+/docs/Manifest.toml
+/docs/build/
+/build
+/keystore
