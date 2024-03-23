@@ -27,8 +27,8 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Configuration" => "configuration.md",
-        "Plain API" => "api.md",
         "Supervised API" => "supervised_api.md",
+        "Unsupervised API" => "unsupervised_api.md",
     ],
 )
 

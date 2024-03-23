@@ -1,6 +1,6 @@
-# Plain API
+# Unsupervised API
 
-There is a set of functions that provide a plain API:
+There is a set of functions that provide the unsupervised API:
 
 - connect
 - publish
@@ -15,6 +15,8 @@ The `connect` function returns a connection handle used by the other APIs for ex
 
 > This API does not provide automatic reconnection in case of network
 failures, if this happen the exception must be handled explicitly by the application.
+
+For example to publish a message:
 
 ```julia
 using Rembus

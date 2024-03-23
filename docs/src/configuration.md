@@ -19,7 +19,7 @@ A Rembus component is affected by the following environement variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
-|`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component`&nbsp;`"ws://localhost:8000/myclient"`|
+|`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
 |`REMBUS_CA`|rembus-ca.crt|CA certificate file name. This file has to be in `$REMBUS_KEYSTORE` directory|
 |`REMBUS_DEBUG`|0| "1": enable debug traces|
 |`REMBUS_KEYSTORE`|\$HOME/keystore| Directory of CA certificate|
@@ -53,13 +53,14 @@ The database directory has the following layout:
 
 ```
 
-where `foo` and `bar` are the component identifiers (`cid`) of the two registered components that have at least one retroactive topic.
+where `foo` and `bar` are the component identifiers (`cid`).
 
 In case the component are offline the undelivered messages are temporarly persisted into `twins/bar` and `/twins/foo` files.
 
 ### Admin privileges
 
-`admins.json` contains the array of `cid` entries that have admin permission.
+`admins.json` contains the list of components that have the admin role.
+The element of this list is the component `cid`.
 
 ```text
 > cat admins.json
@@ -68,7 +69,7 @@ In case the component are offline the undelivered messages are temporarly persis
 
 ### RPC implementors
 
-`impls.json` is a map with `topic` as keywords and an array of `cid` as values that define which component implements which rpc topic.
+`impls.json` is a map with `topic` as keyword and an array of `cid` as values.
 
 For example:
 
@@ -85,8 +86,7 @@ For example:
 
 ### PubSub subscribers
 
-`twins.json` is a map with `cid` as keyword and a map as value.
-
+`twins.json` is a map: the keywords are `cid` and the values are map.
 The keys of the map are the subscribed topics and the boolean value is true if the
 subscription is retroactive:
 
@@ -97,11 +97,10 @@ subscription is retroactive:
 }
 ```
 
-`mycomponent` is interested to `mytopic1` and `mytopic2` messages, and `mytopic2` subscribed
-with option `before_now`:
+`mycomponent` is interested to `mytopic1` and `mytopic2` messages, and `mytopic1` subscribed with option `before_now`:
 
 ```julia
-@subscribe mytopic2 before_now
+@subscribe mytopic1 before_now
 ```
 
 ### Private topics

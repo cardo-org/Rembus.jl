@@ -12,7 +12,7 @@ Starting the broker is simple as:
 julia -e "using Rembus; caronte()"
 ```
 
-Providing a startup script could be useful. The following `caronte` script suffice:
+A startup script could be useful and the following `caronte` script suffice:
 
 ```julia
 ##!/bin/bash
@@ -26,13 +26,7 @@ using Rembus
 Rembus.caronte()
 ```
 
-If `caronte` is in `PATH` then executing:
-
-```sh
-shell> caronte
-```
-
-starts the broker with setup controlled by the [Broker environment variables](@ref).  
+See [Broker environment variables](@ref) for customizing the runtime setting.  
 
 ## Component
 
