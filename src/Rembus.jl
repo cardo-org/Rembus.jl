@@ -1032,7 +1032,7 @@ function rembus_task(pd, rb, protocol=:ws)
             msg = "[$pd]: $e"
         end
         @error msg
-        showerror(stdout, $(esc(e)), catch_backtrace())
+        showerror(stdout, e, catch_backtrace())
         @showerror e
         rethrow()
     finally
