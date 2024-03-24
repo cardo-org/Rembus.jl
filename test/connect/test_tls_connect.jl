@@ -2,6 +2,7 @@ include("../utils.jl")
 
 function run()
     for cid in ["tls://:8001/aaa", "wss://:8000/bbb"]
+        @info "TESTING $cid: $(get(ENV, "REMBUS_KEYSTORE", "unset")) - $(get(ENV, "HTTP_CA_BUNDLE", "unset"))"
         rb = connect(cid)
 
         @test isconnected(rb) === true
@@ -11,10 +12,22 @@ function run()
     end
 end
 
-# client env
-ENV["HTTP_CA_BUNDLE"] = joinpath(Rembus.keystore_dir(), "rembus-ca.crt")
+if Base.Sys.iswindows()
+    @info "Windows platform detected: skipping test-tls_connect"
+else
+    # create keystore
+    test_keystore = "/tmp/keystore"
+    script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
+    ENV["REMBUS_KEYSTORE"] = test_keystore
 
-args = Dict("secure" => true)
-execute(run, "test_tls_connect", args=args)
-
-delete!(ENV, "HTTP_CA_BUNDLE")
+    # reset the default value set by ws_connect()
+    delete!(ENV, "HTTP_CA_BUNDLE")
+    try
+        Base.run(`$script -k $test_keystore`)
+        args = Dict("secure" => true)
+        execute(run, "test_tls_connect", args=args)
+    finally
+        delete!(ENV, "REMBUS_KEYSTORE")
+        rm(test_keystore, recursive=true, force=true)
+    end
+end

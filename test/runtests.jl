@@ -6,7 +6,7 @@ addprocs(2)
 using SafeTestsets
 using Visor
 
-const GROUP = get(ENV, "GROUP", "unit")
+const GROUP = get(ENV, "GROUP", "all")
 
 Rembus.CONFIG = Rembus.Settings()
 Rembus.CONFIG.db = "/tmp/caronte_test"

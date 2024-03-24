@@ -1266,15 +1266,16 @@ end
 
 function ws_connect(rb, process, isconnected::Condition)
     try
-        if !haskey(ENV, "HTTP_CA_BUNDLE")
-            trust_store = keystore_dir()
-            ca_file = get(ENV, "REMBUS_CA", "rembus-ca.crt")
-            ENV["HTTP_CA_BUNDLE"] = joinpath(trust_store, ca_file)
-        end
-
         url = brokerurl(rb.client)
 
         if startswith(url, "wss:")
+
+            if !haskey(ENV, "HTTP_CA_BUNDLE")
+                trust_store = keystore_dir()
+                ca_file = get(ENV, "REMBUS_CA", "rembus-ca.crt")
+                ENV["HTTP_CA_BUNDLE"] = joinpath(trust_store, ca_file)
+            end
+
             HTTP.WebSockets.open(socket -> begin
                     read_socket(socket, process, rb, isconnected)
                 end, url)
