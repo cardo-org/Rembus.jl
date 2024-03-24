@@ -179,27 +179,15 @@ end
 
 types()
 
-##try
-##    for exposer_url in ["zmq://:8002/test_request_impl", "test_request_impl"]
-##        for request_url in ["zmq://:8002/test_request", "test_request"]
-##            @debug "rpc endpoints: $exposer_url, $subscriber_url, $request_url"
-##            request_api(request_url, exposer_url)
-##        end
-##    end
-##catch e
-##    @error e
-##    showerror(stdout, e, catch_backtrace())
-##end
-##
-try
-    waittime = 0.5
-    for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
-        for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
-            publish_macroapi(publisher, sub1, waittime=waittime)
-            publish_api(publisher, sub1, waittime=waittime)
-        end
-    end
-catch e
-    @error "precompile: $e"
-    showerror(stdout, e, catch_backtrace())
-end
+#try
+#    waittime = 0.5
+#    for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
+#        for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
+#            publish_macroapi(publisher, sub1, waittime=waittime)
+#            publish_api(publisher, sub1, waittime=waittime)
+#        end
+#    end
+#catch e
+#    @error "precompile: $e"
+#    showerror(stdout, e, catch_backtrace())
+#end
