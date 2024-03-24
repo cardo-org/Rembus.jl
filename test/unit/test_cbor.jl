@@ -9,11 +9,11 @@ n = Int32(1)
 e = encode(n)
 @test e == UInt8[0x1a, 0, 0, 0, 0x1]
 
-n = Int(1)
+n = Int64(1)
 e = encode(n)
 @test e == UInt8[0x1b, 0, 0, 0, 0, 0, 0, 0, 0x1]
 
-n = Int(-1)
+n = Int64(-1)
 e = encode(n)
 @test e == UInt8[0x3b, 0, 0, 0, 0, 0, 0, 0, 0]
 

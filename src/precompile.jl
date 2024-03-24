@@ -177,7 +177,12 @@ end
 @rpc uptime()
 @terminate
 
-types()
+try
+    types()
+catch e
+    @error "precompile: $e"
+    showerror(stdout, e, catch_backtrace())
+end
 
 #try
 #    waittime = 0.5
