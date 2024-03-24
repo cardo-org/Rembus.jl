@@ -12,10 +12,14 @@ Create a private key for `cid` component and return its public key.
 """
 function create_private_key(cid::AbstractString)
     file = "$(pkfile(cid)).tmp"
-    cmd = `openssl genrsa -out $file 2048 `
+    cmd = `ssh-keygen -f $file -m PEM -b 2048 -N ''`
     Base.run(cmd)
 
-    Vector{UInt8}(read(`openssl rsa -in $file -outform der -pubout`, String))
+    try
+        return read(`ssh-keygen -f $file -e -m PEM`)
+    finally
+        rm("$file.pub", force=true)
+    end
 end
 
 """
