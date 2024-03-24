@@ -184,15 +184,15 @@ catch e
     showerror(stdout, e, catch_backtrace())
 end
 
-#try
-#    waittime = 0.5
-#    for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
-#        for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
-#            publish_macroapi(publisher, sub1, waittime=waittime)
-#            publish_api(publisher, sub1, waittime=waittime)
-#        end
-#    end
-#catch e
-#    @error "precompile: $e"
-#    showerror(stdout, e, catch_backtrace())
-#end
+try
+    waittime = 0.5
+    for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
+        for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
+            publish_macroapi(publisher, sub1, waittime=waittime)
+            publish_api(publisher, sub1, waittime=waittime)
+        end
+    end
+catch e
+    @error "precompile: $e"
+    showerror(stdout, e, catch_backtrace())
+end
