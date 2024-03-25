@@ -2,13 +2,14 @@
 
 To play with the examples gets the required dependencies:
 
-```
+```shell
 > alias j='julia --project=. --startup-file=no'
-> j -e 'using Pkg; Pkg.develop(url=".."); Pkg.instantiate()'
+> j -e 'using Pkg; Pkg.instantiate()'
 ```
+
 and then starts a broker application:
 
-```
+```shell
 > j 'using Rembus; caronte()' 
 ```
 
@@ -41,7 +42,6 @@ df = @rpc all_announcements()
 
 Oh yes! The returned value is a `DataFrame`.
 
-
 Below there are some more details just for exposing the core concepts of Rembus.
 
 ### The minimal subscriber
@@ -50,13 +50,14 @@ In a distributed system governed by the Rembus middleware there are two types of
 
 - a Broker routes messages between Components;
 - a Component sends and receives messages and may be a publisher, a subscriber, a RPC client, a RPC Server
-  or all of these roles; 
+  or all of these roles;
 
-The first step for a Component application is to bind to a Broker and declare its name: 
+The first step for a Component application is to bind to a Broker and declare its name:
 
 ```julia
 @component "ws://caronte.com:8000/organizer"
 ```
+
 The above declares a component `organizer` that will connect to the broker hosted at `caronte.com` with protocol `ws` served at port `8000`.
 
 > There are some sensible defaults that may help to keep the code clean:
@@ -64,12 +65,11 @@ The above declares a component `organizer` that will connect to the broker hoste
 >
 > `export REMBUS_BASE_URL=<protocol>://<host>:<port>`
 >
->  If `REMBUS_BASE_URL` is not defined the default url will be `ws://127.0.0.1:8000`.
+> If `REMBUS_BASE_URL` is not defined the default url will be `ws://127.0.0.1:8000`.
 >
->  In this case the component may be declared as:
+> In this case the component may be declared as:
 >
->  `@component "organizer"`
-
+> `@component "organizer"`
 
 Suppose the `organizer` wants to receive all messages published to the `announcement` topic.
 
@@ -77,9 +77,9 @@ The messages are expected to have two fields: an username and a string containin
 
 > In general messages exchanged between distributed components may have any numbers of fields with primitive types mapped to [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html#name-cbor-data-models) types.
 
-How do we consume such messages? 
+How do we consume such messages?
 
-With a method which name equals to the topic name and with a number of arguments equals to the message fields: 
+With a method which name equals to the topic name and with a number of arguments equals to the message fields:
 
 ```julia
 function announcement(username, post)
@@ -94,7 +94,7 @@ using the macro `@subscribe`:
 @subscribe announcement
 ```
 
-The full code for this minimal `organizer` component that you can run in a REPL is then: 
+The full code for this minimal `organizer` component that you can run in a REPL is then:
 
 ```julia
 using Rembus
