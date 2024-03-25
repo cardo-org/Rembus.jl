@@ -38,7 +38,7 @@ catch e
 finally
     shutdown()
     remotecall(Visor.shutdown, 2)
-    sleep(3)
+    sleep(6)
     Visor.dump()
     @info "[test_process_fault] stop"
 end
