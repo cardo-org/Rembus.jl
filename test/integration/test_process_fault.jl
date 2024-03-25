@@ -19,10 +19,10 @@ function run()
     caronte_reset()
 
     Visor.trace_event = trace
-
+    Visor.dump()
     @async supervise([rembus(cid)], intensity=3)
     sleep(3)
-
+    Visor.dump()
     remotecall(Rembus.caronte, 2, exit_when_done=false)
     sleep(2)
 end
@@ -39,5 +39,6 @@ finally
     shutdown()
     remotecall(Visor.shutdown, 2)
     sleep(3)
+    Visor.dump()
     @info "[test_process_fault] stop"
 end

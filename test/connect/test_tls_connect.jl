@@ -2,7 +2,6 @@ include("../utils.jl")
 
 function run()
     for cid in ["tls://:8001/aaa", "wss://:8000/bbb"]
-        @info "TESTING $cid: $(get(ENV, "REMBUS_KEYSTORE", "unset")) - $(get(ENV, "HTTP_CA_BUNDLE", "unset"))"
         rb = connect(cid)
 
         @test isconnected(rb) === true
