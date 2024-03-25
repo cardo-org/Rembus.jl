@@ -24,7 +24,7 @@ function run()
     sleep(3)
     Visor.dump()
     remotecall(Rembus.caronte, 2, exit_when_done=false)
-    sleep(1)
+    sleep(2)
 end
 
 try
@@ -38,7 +38,7 @@ catch e
 finally
     remotecall(Visor.shutdown, 2)
     shutdown()
-    sleep(6)
+    sleep(15)
     Visor.dump()
     @info "[test_process_fault] stop"
 end
