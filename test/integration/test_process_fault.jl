@@ -9,6 +9,9 @@ function trace(supervisor, msg)
     global restarts
     if isa(msg, Visor.ProcessError)
         restarts += 1
+        if restarts == 2
+            shutdown()
+        end
     end
 end
 
@@ -19,12 +22,7 @@ function run()
     caronte_reset()
 
     Visor.trace_event = trace
-    Visor.dump()
-    @async supervise([rembus(cid)], intensity=3)
-    sleep(3)
-    Visor.dump()
-    remotecall(Rembus.caronte, 2, exit_when_done=false)
-    sleep(2)
+    supervise([rembus(cid)], intensity=3)
 end
 
 try
@@ -36,9 +34,5 @@ catch e
     @error "[test_process_fault]: $e"
     showerror(stdout, e, catch_backtrace())
 finally
-    remotecall(Visor.shutdown, 2)
-    shutdown()
-    sleep(15)
-    Visor.dump()
     @info "[test_process_fault] stop"
 end
