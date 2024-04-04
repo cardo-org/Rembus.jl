@@ -138,8 +138,8 @@ function broker_parse(pkt)
         return AckMsg(bytes2id(payload[2]))
     elseif ptype == TYPE_REGISTER
         @debug "<<message REGISTER, cid: $(payload[3])"
-        #                           id           cid        pubkey
-        return Register(bytes2id(payload[2]), payload[3], payload[4])
+        #                           id           cid        userid      pubkey
+        return Register(bytes2id(payload[2]), payload[3], payload[4], payload[5])
     elseif ptype == TYPE_UNREGISTER
         @debug "<<message UNREGISTER, cid: $(payload[3])"
         #                           id           cid
