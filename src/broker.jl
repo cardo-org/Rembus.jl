@@ -47,7 +47,7 @@ mutable struct Twin
         Dict(),
         fast,
         nothing,
-        true,
+        false,
     )
     Twin(router, id, queue, out_channel) = new(
         router,
@@ -63,7 +63,7 @@ mutable struct Twin
         Dict(),
         fast,
         nothing,
-        true,
+        false,
     )
 end
 
@@ -281,10 +281,10 @@ function dequeue_messages(twin)
 end
 
 function start_reactive(twin)
-    twin.reactive = true
     # sends to real client
     # all enqueued messages
-    @async twin.router.unpark(CONFIG.broker_ctx, twin)
+    twin.router.unpark(CONFIG.broker_ctx, twin)
+    twin.reactive = true
     return nothing
 end
 
@@ -618,6 +618,7 @@ function receiver_exception(router, twin, e)
 end
 
 function end_receiver(twin)
+    twin.reactive = false
     if twin.hasname
         detach(twin)
     else

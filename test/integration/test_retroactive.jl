@@ -1,8 +1,5 @@
 include("../utils.jl")
 
-
-#RECEIVED = false
-
 mutable struct TestBag
     broadcast_received::Bool
 end

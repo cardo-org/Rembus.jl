@@ -380,7 +380,6 @@ function unpark(ctx::Any, twin::Twin)
             # finally delete the file
             @debug "deleting enqueued messages file [$fn]"
             rm(fn)
-            #mv(fn, "$fn.sav", force=true)
         end
     catch e
         @error "[$twin] unpark_messages: $e"

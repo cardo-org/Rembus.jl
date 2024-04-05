@@ -45,8 +45,8 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
 
     @subscribe sub2 noarg from_now
 
-    # sub3 is not reactive: no messages delivered to sub3
     @component sub3
+    @reactive sub3
 
     @subscribe sub3 mytopic before_now
     if testholder !== missing

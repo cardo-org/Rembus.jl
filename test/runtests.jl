@@ -103,5 +103,13 @@ mkpath(joinpath(Rembus.CONFIG.db, "apps"))
                 include("auth/test_register.jl")
             end
         end
+        if GROUP == "all" || GROUP == "park"
+            @time @safetestset "park" begin
+                include("park/test_park.jl")
+            end
+            @time @safetestset "park" begin
+                include("park/test_park_macro.jl")
+            end
+        end
     end
 end

@@ -47,17 +47,20 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     shared(sub1, testbag)
 
     subscribe(sub1, my_topic, consume)
+    reactive(sub1)
 
     sub2 = connect(sub2)
     shared(sub2, testbag)
 
     subscribe(sub2, my_topic, consume)
     subscribe(sub2, noarg_topic, inspect)
+    reactive(sub2)
 
     # sub3 is not reactive: no messages delivered to sub3
     sub3 = connect(sub3)
     shared(sub3, testbag)
     subscribe(sub3, my_topic, consume, true)
+    reactive(sub3)
 
     publish(publisher, my_topic, 2)
     publish(publisher, my_topic, df)
