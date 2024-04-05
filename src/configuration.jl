@@ -75,7 +75,12 @@ function set_balancer(setting, policy)
 end
 
 function setup(setting)
-    home = get(ENV, "HOME", ".")
+    if Sys.iswindows()
+        home = get(ENV, "LOCALAPPDATA", ".")
+    else
+        home = get(ENV, "HOME", ".")
+    end
+
     cfg = get(Base.get_preferences(), "Rembus", Dict())
 
     setting.zmq_ping_interval = get(cfg, "zmq_ping_interval",

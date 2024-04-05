@@ -90,6 +90,9 @@ include("register.jl")
 function __init__()
     Visor.setroot(intensity=3)
     atexit(shutdown)
+    if isinteractive()
+        repl_log()
+    end
 end
 
 struct ConnectionClosed <: Exception
@@ -973,11 +976,23 @@ function rembus(cid=nothing)
         force_interrupt_after=3.0)
 end
 
+mutable struct LastErrorLog
+    msg::Union{Nothing,String}
+    LastErrorLog() = new(nothing)
+end
+
+const last_error = LastErrorLog()
+
 function rembus_task(pd, rb, protocol=:ws)
     try
         @debug "starting rembus process: $pd, protocol:$protocol"
 
         connect(pd, rb)
+        if last_error.msg !== nothing
+            @info "[$pd] connected"
+            last_error.msg = nothing
+        end
+
         for msg in pd.inbox
             @debug "[$pd] recv: $msg"
             if isshutdown(msg)
@@ -1031,7 +1046,12 @@ function rembus_task(pd, rb, protocol=:ws)
         else
             msg = "[$pd]: $e"
         end
-        @error msg
+
+        if last_error.msg !== msg
+            @error msg
+            last_error.msg = msg
+        end
+
         @showerror e
         rethrow()
     finally

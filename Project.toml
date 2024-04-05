@@ -58,8 +58,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 metering = false
 offline_store = "disk"
 overwrite_connection = true
-pathlib = "lib"
-rembus_cfg = "CaronteExt"
 stacktrace = false
 
 [targets]
