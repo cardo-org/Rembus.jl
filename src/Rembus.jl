@@ -1755,15 +1755,18 @@ function reactive(rb::RBHandle; exceptionerror=true)
 end
 
 """
+    subscribe(rb::RBHandle, fn::Function, retroactive::Bool=false; exceptionerror=true)
     subscribe(
         rb::RBHandle, topic::AbstractString, fn::Function, retroactive::Bool=false;
         exceptionerror=true
     )
 
-Declare interest for messages published on `topic`.
+Declare interest for messages published on `topic` logical channel.
 
 The function `fn` is called when a message is received on `topic` and
 [`reactive`](@ref) put the `rb` component in reactive mode.
+
+If the `topic` argument is omitted the function name must be equal to the topic name.
 
 If `retroactive` is `true` then `rb` component will receive messages published when it was
 offline.
@@ -1779,10 +1782,19 @@ function subscribe(
     )
 end
 
+function subscribe(
+    rb::RBHandle, fn::Function, retroactive::Bool=false;
+    exceptionerror=true
+)
+    return subscribe(rb, string(fn), fn, retroactive; exceptionerror=exceptionerror)
+end
+
 """
     unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+    unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true)
 
-No more messages published on `topic` will be delivered to `rb` component.
+No more messages published on a `topic` logical channel or a topic name equals to the name
+of the subscribed function will be delivered to `rb` component.
 """
 function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
@@ -1792,11 +1804,17 @@ function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     )
 end
 
+function unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true)
+    return unsubscribe(rb, string(fn); exceptionerror=exceptionerror)
+end
+
 """
+    expose(rb::RBHandle, fn::Function; exceptionerror=true)
     expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
 
-The methods of function `fn` are registered to be executed when
-a RPC `topic` request is received.
+The methods of function `fn` are to be executed when a RPC `topic` request is received.
+
+If the `topic` argument is omitted the function name must be equal to the RPC topic name.
 
 The returned value is the RPC response returned to the RPC client.
 """
@@ -1808,10 +1826,15 @@ function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerro
     )
 end
 
+function expose(rb::RBHandle, fn::Function; exceptionerror=true)
+    return expose(rb, string(fn), fn; exceptionerror=exceptionerror)
+end
+
 """
+    unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
     unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
 
-Stop servicing RPC `topic` request.
+Stop servicing RPC requests targeting `topic` or `fn` methods.
 """
 function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
@@ -1819,6 +1842,10 @@ function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
         AdminReqMsg(topic, Dict(COMMAND => REMOVE_IMPL_CMD)),
         exceptionerror=exceptionerror
     )
+end
+
+function unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
+    return unexpose(rb, string(fn), exceptionerror=exceptionerror)
 end
 
 function private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)

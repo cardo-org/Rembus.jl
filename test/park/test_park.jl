@@ -36,7 +36,7 @@ function run()
     @info "reconnecting"
     subscriber = connect("test_park_sub")
     shared(subscriber, ctx)
-    subscribe(subscriber, "consume", consume, true)
+    subscribe(subscriber, consume, true)
     reactive(subscriber)
 
     @async send(publisher, 10001, 20000)
