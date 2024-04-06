@@ -27,6 +27,14 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+
+      - name: Build the app image
+        run: ./bin/create_app
+        
       - name: Log in to Docker Hub
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
