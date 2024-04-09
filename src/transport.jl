@@ -691,6 +691,8 @@ function transport_write(ws::WebSockets.WebSocket, pkt)
             HTTP.WebSockets.send(ws, payload)
         end
     catch e
+        @error e
+        @showerror e
         throw(RembusDisconnect())
     end
 end

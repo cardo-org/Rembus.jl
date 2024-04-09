@@ -2042,7 +2042,8 @@ function broker_shutdown()
 end
 
 function forever()
-    process = from(CONFIG.cid)
+    component = getcomponent()
+    process = from(component.id)
     if process !== nothing
         cmp = process.args[1]
         reactive(cmp)
