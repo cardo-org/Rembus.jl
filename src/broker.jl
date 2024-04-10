@@ -1251,7 +1251,7 @@ function listener(proc, router, sslconfig)
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
     router.ws_server = server
     proto = (sslconfig === nothing) ? "ws" : "wss"
-    @info "rembus up and running at port $proto:$caronte_port"
+    @info "caronte up and running at port $proto:$caronte_port"
 
     setphase(proc, :listen)
 
@@ -1290,7 +1290,7 @@ function serve_zeromq(pd, router)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
 
     try
-        @info "rembus up and running at zmq ports $port"
+        @info "caronte up and running at port zmq:$port"
         setphase(pd, :listen)
         zeromq_receiver(router)
     catch e
@@ -1321,7 +1321,7 @@ function serve_tcp(pd, router, issecure=false)
 
             server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
             router.server = server
-            @info "rembus up and running at port $proto:$caronte_port"
+            @info "caronte up and running at port $proto:$caronte_port"
             while true
                 try
                     sock = accept(server)
@@ -1341,7 +1341,7 @@ function serve_tcp(pd, router, issecure=false)
         else
             server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
             router.server = server
-            @info "rembus up and running at port $proto:$caronte_port"
+            @info "caronte up and running at port $proto:$caronte_port"
             while true
                 try
                     sock = accept(server)
