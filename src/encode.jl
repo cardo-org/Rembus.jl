@@ -246,3 +246,45 @@ function encode(io::IO, struct_type::T) where {T}
         )
     )
 end
+
+function encode_partial(data)
+    io = IOBuffer()
+    encode_partial(io, data)
+    return take!(io)
+end
+
+function add_payload(io, payload)
+    if isa(payload, IOBuffer)
+        pos = position(payload)
+        write(io, payload)
+        seek(payload, pos)
+    elseif isa(payload, ZMQ.Message)
+        write(io, Vector{UInt8}(payload))
+    else
+        encode(io, payload)
+    end
+end
+
+function encode_partial(io, data::Vector)
+    type = data[1]
+    if type == TYPE_PUB
+        write(io, 0x83)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # topic
+        add_payload(io, data[3])
+    elseif type == TYPE_RPC
+        write(io, 0x85)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # topic
+        encode(io, data[4]) # target
+        add_payload(io, data[5])
+    elseif type == TYPE_RESPONSE
+        write(io, 0x84)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # status
+        add_payload(io, data[4])
+    else
+    end
+end

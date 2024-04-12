@@ -7,3 +7,4 @@ Manifest.toml
 /docs/build/
 /build
 /keystore
+LocalPreferences.toml

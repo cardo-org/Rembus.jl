@@ -815,7 +815,7 @@ function zeromq_receiver(router::Router)
 
                         # check if there are cached messages
                         if twin.reactive
-                            unpark_messages(CONFIG.broker_ctx, twin)
+                            unpark(CONFIG.broker_ctx, twin)
                         end
                     end
                 end
@@ -964,6 +964,7 @@ function signal!(twin, msg)
             transport_send(twin, twin.sock, pkt)
         catch e
             @debug "[$twin] going offline: $e"
+            @showerror e
             detach(twin)
             if msg.ptype === TYPE_PUB
                 twin.router.park(CONFIG.broker_ctx, twin, msg.content)
@@ -1576,8 +1577,13 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
     result = nothing
     sts = STS_GENERIC_ERROR
     if haskey(router.topic_function, msg.topic)
+        if isa(msg.data, ZMQ.Message)
+            payload = msg.data
+        else
+            payload = decode(msg.data)
+        end
         try
-            result = router.topic_function[msg.topic](twin, getargs(msg.data)...)
+            result = router.topic_function[msg.topic](twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
             @debug "[$(msg.topic)] embedded error (method too young?): $e"
@@ -1589,7 +1595,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
                     result = Base.invokelatest(
                         router.topic_function[msg.topic],
                         twin,
-                        getargs(msg.data)...
+                        getargs(payload)...
                     )
                     sts = STS_SUCCESS
                 catch e

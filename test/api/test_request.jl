@@ -14,7 +14,7 @@ function add_one(add_one_arg)
     add_one_arg + 1
 end
 
-function do_method_error(data)
+function do_method_error()
     error(reason)
 end
 
@@ -46,7 +46,6 @@ function run(request_url, subscriber_url, exposer_url)
 
     implementor = tryconnect(exposer_url)
     expose(implementor, rpc_topic, add_one)
-
     subscriber = tryconnect(subscriber_url)
     shared(subscriber, bag)
     reactive(subscriber)
@@ -76,7 +75,7 @@ function run(request_url, subscriber_url, exposer_url)
 
     expose(implementor, rpc_topic, do_args_error)
     try
-        res = rpc(client, rpc_topic)
+        res = rpc(client, rpc_topic, 1.0)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodException)

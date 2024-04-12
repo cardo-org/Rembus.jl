@@ -52,6 +52,7 @@ function execute_caronte_process(fn, testname; setup=nothing)
 end
 
 function execute(fn, testname; setup=nothing, args=Dict())
+    Rembus.setup(Rembus.CONFIG)
     @start_caronte setup args
     sleep(0.5)
     Rembus.logging(debug=[:test])

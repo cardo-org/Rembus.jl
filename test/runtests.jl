@@ -107,7 +107,7 @@ mkpath(joinpath(Rembus.CONFIG.db, "apps"))
             @time @safetestset "park" begin
                 include("park/test_park.jl")
             end
-            @time @safetestset "park" begin
+            @time @safetestset "park_macro" begin
                 include("park/test_park_macro.jl")
             end
         end

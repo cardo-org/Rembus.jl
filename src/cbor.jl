@@ -37,10 +37,6 @@ end
 Base.:(==)(a::Tag, b::Tag) = a.id == b.id && a.data == b.data
 Tag(id::Integer, data) = Tag(Int(id), data)
 
-### include("constants.jl")
-### include("encode.jl")
-### include("decode.jl")
-
 export encode
 export decode, decode_with_iana
 export Undefined
