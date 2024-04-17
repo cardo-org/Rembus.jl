@@ -375,8 +375,35 @@ function pong(socket, mid, identity)
     send(socket, MESSAGE_END, more=false)
 end
 
+data2payload(data) = data
+
+function data2payload(data::IOBuffer)
+    mark(data)
+    decode(read(data))
+    reset(data)
+end
+
+# Return data to be sent via ws or tcp from ZMQ
+function data2payload(data::ZMQ.Message)
+    # allocate instead of consuming message
+    decode(Vector{UInt8}(data))
+end
+
 function transport_file_io(msg::PubSubMsg)
-    payload = encode([msg.topic, message2data(msg.data)])
+    mark(msg.data)
+    seek(msg.data, 2)
+    payload = read(msg.data)
+    len::UInt32 = length(payload) + 1
+    io = IOBuffer(maxsize=4 + len)
+    write(io, len)
+    write(io, 0x82)
+    write(io, payload)
+    reset(msg.data)
+    return io
+end
+
+function transport_file_io(msg::PubSubMsg{ZMQ.Message})
+    payload = encode([msg.topic, data2payload(msg.data)])
     len::UInt32 = length(payload)
     io = IOBuffer(maxsize=4 + len)
     write(io, len)

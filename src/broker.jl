@@ -9,6 +9,16 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 abstract type AbstractRouter end
 
+const REMBUS_PAGE_SIZE = 100_000_000
+
+mutable struct Pager
+    io::Union{Nothing,IOBuffer}
+    ts::Int # epoch time
+    size::UInt # approximate page size
+    Pager(size=REMBUS_PAGE_SIZE) = new(nothing, Libc.TimeVal().sec, size)
+    Pager(io::IOBuffer, ts=Libc.TimeVal().sec, size=REMBUS_PAGE_SIZE) = new(io, ts, size)
+end
+
 #=
 Twin is the broker-side image of a component.
 
@@ -24,12 +34,11 @@ mutable struct Twin
     isauth::Bool
     sock::Any
     retroactive::Dict{String,Bool}
-    mq::Queue{PubSubMsg}
     out::Channel # router inbox
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
     acktimer::Dict{UInt128,Timer}
     qos::QoS
-    mfile::Union{IOStream,Nothing}
+    pager::Union{Nothing,Pager}
     reactive::Bool
     process::Visor.Process
 
@@ -41,23 +50,6 @@ mutable struct Twin
         false,
         nothing,
         Dict(),
-        Queue{PubSubMsg}(),
-        out_channel,
-        Dict(),
-        Dict(),
-        fast,
-        nothing,
-        false,
-    )
-    Twin(router, id, queue, out_channel) = new(
-        router,
-        id,
-        Dict(),
-        false,
-        false,
-        nothing,
-        Dict(),
-        queue,
         out_channel,
         Dict(),
         Dict(),
@@ -188,11 +180,11 @@ end
 
 named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothing
 
-function create_twin(id, router, queue=Queue{PubSubMsg}())
+function create_twin(id, router)
     if haskey(router.id_twin, id)
         return router.id_twin[id]
     else
-        twin = Twin(router, id, queue, router.process.inbox)
+        twin = Twin(router, id, router.process.inbox)
         spec = process(id, twin_task, args=(twin,))
         startup(from("caronte.twins"), spec)
         router.id_twin[id] = twin
@@ -257,34 +249,10 @@ function destroy_twin(twin, router::Embedded)
     return nothing
 end
 
-
-#=
-    dequeue_messages(twin)
-
-Take the in-memory messages and send to the component.
-=#
-function dequeue_messages(twin)
-    while !isempty(twin.mq) && isopen(twin.sock.io)
-        if twin.qos === with_ack
-            io = transport_file_io(first(twin.mq))
-            if write_waitack(twin.sock, io, 3)
-                popfirst!(twin.mq)
-            else
-                detach(twin)
-            end
-        elseif twin.qos === fast
-            transport_write(twin.sock, first(twin.mq))
-        end
-    end
-
-    return nothing
-end
-
 function start_reactive(twin)
-    # sends to real client
-    # all enqueued messages
-    twin.router.unpark(CONFIG.broker_ctx, twin)
     twin.reactive = true
+    # notify twin that cached messages has to be delivered
+    push!(twin.process.inbox, nothing)
     return nothing
 end
 
@@ -327,6 +295,8 @@ function setidentity(router, twin, msg, isauth=false)
     namedtwin = create_twin(msg.cid, router)
     # move the opened socket
     namedtwin.sock = twin.sock
+    #create a pager
+    namedtwin.pager = Pager(namedtwin)
     # destroy the anonymous process
     destroy_twin(twin, router)
     namedtwin.hasname = true
@@ -871,6 +841,8 @@ end
 
 close_is_ok(::Nothing, e) = true
 
+page_file(twin) = joinpath(twindir(), twin.id, string(twin.pager.ts))
+
 #=
     detach(twin)
 
@@ -906,7 +878,11 @@ function twin_task(self, twin)
             if isshutdown(msg)
                 break
             end
-            signal!(twin, msg)
+            if msg === nothing
+                twin.router.unpark(CONFIG.broker_ctx, twin)
+            else
+                signal!(twin, msg)
+            end
         end
     catch e
         @error "twin_task: $e" exception = (e, catch_backtrace())
@@ -951,25 +927,30 @@ function signal!(twin, msg)
     @debug "[$twin] message>>: $msg, offline:$(offline(twin)), type:$(msg.ptype)"
     if (offline(twin) || notreactive(twin, msg)) && msg.ptype === TYPE_PUB
         twin.router.park(CONFIG.broker_ctx, twin, msg.content)
-    else
-        # current message
-        if isa(msg.content, RpcReqMsg)
-            # add to sent table
-            twin.sent[msg.content.id] = SentData(time(), msg)
-        end
+        return nothing
 
-        pkt = msg.content
-        @mlog "[$twin] -> $pkt"
-        try
-            transport_send(twin, twin.sock, pkt)
-        catch e
-            @debug "[$twin] going offline: $e"
-            @showerror e
-            detach(twin)
-            if msg.ptype === TYPE_PUB
-                twin.router.park(CONFIG.broker_ctx, twin, msg.content)
-            end
+    elseif twin.pager !== nothing && twin.pager.io !== nothing
+        # it is online and reactive, send cached messages if any
+        twin.router.unpark(CONFIG.broker_ctx, twin)
+    end
+
+    # current message
+    if isa(msg.content, RpcReqMsg)
+        # add to sent table
+        twin.sent[msg.content.id] = SentData(time(), msg)
+    end
+
+    pkt = msg.content
+    @mlog "[$twin] -> $pkt"
+    try
+        transport_send(twin, twin.sock, pkt)
+    catch e
+        @debug "[$twin] going offline: $e"
+        @showerror e
+        if msg.ptype === TYPE_PUB
+            twin.router.park(CONFIG.broker_ctx, twin, msg.content)
         end
+        detach(twin)
     end
 
     return nothing
@@ -1693,6 +1674,10 @@ function broker(self, router)
         @showerror e
         rethrow()
     finally
+        for tw in values(router.id_twin)
+            detach(tw)
+            save_page(tw)
+        end
         save_configuration(router)
     end
     @debug "[broker] done"

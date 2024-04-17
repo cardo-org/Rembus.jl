@@ -10,6 +10,7 @@ catch e
     @test e.msg === "wrong balancer, must be one of first_up, less_busy, round_robin"
 finally
     close(tmr)
+    shutdown()
 end
 
 ENV["BROKER_BALANCER"] = "first_up"

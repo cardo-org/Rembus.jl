@@ -59,6 +59,9 @@ function execute(fn, testname; setup=nothing, args=Dict())
     @info "[$testname] start"
     try
         fn()
+    catch e
+        @error e
+        showerror(stdout, e, catch_backtrace())
     finally
         shutdown()
     end
@@ -93,6 +96,6 @@ end
 
 function caronte_reset()
     Rembus.CONFIG = Rembus.Settings()
-    foreach(rm, readdir(Rembus.twindir(), join=true))
+    foreach(d->rm(d, recursive=true), readdir(Rembus.twindir(), join=true))
     foreach(rm, filter(isfile, readdir(Rembus.CONFIG.db, join=true)))
 end

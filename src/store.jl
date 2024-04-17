@@ -5,6 +5,35 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
+function load_pages(twin_id::AbstractString)
+    tdir = joinpath(twindir(), twin_id)
+    if !isdir(tdir)
+        mkdir(tdir)
+    end
+
+    # Load the latest page if any
+    pages = readdir(tdir, join=true, sort=true)
+    return pages
+end
+
+function Pager(twin::Twin)
+    if twin.pager !== nothing
+        return twin.pager
+    end
+
+    pages = load_pages(twin.id)
+    if isempty(pages)
+        return Pager()
+    else
+        # load the latest page in memory
+        fn = last(pages)
+        ts = parse(Int, basename(fn))
+        pager = Pager(IOBuffer(read(fn); read=true, write=true, append=true), ts)
+        rm(fn)
+        return pager
+    end
+end
+
 """
     load_owners()
 
@@ -199,6 +228,7 @@ function load_twins(router)
     for (cid, topicsdict) in twin_topicsdict
         twin = create_twin(cid, router)
         twin.hasname = true
+        twin.pager = Pager(twin)
         twin.retroactive = topicsdict
 
         for topic in keys(topicsdict)
@@ -271,6 +301,18 @@ function save_twins(router)
     end
 end
 
+function save_page(twin)
+    if twin.pager !== nothing && twin.pager.io !== nothing
+        seekstart(twin.pager.io)
+        open(page_file(twin), create=true, write=true) do f
+            write(f, twin.pager.io)
+            seekstart(twin.pager.io)
+        end
+    else
+        @debug "[$twin]: no page to save"
+    end
+end
+
 function park(ctx::Any, twin::Twin, msg::RembusMsg)
     if !twin.hasname
         # do not persist messages addressed to anonymous components
@@ -278,17 +320,25 @@ function park(ctx::Any, twin::Twin, msg::RembusMsg)
     end
 
     try
-        if twin.mfile === nothing
-            tdir = twindir()
-            fn = joinpath(tdir, twin.id)
-            twin.mfile = open(fn, "a")
+        pager_io = twin.pager.io
+        if pager_io === nothing
+            @debug "[$twin] creating new Page"
+            twin.pager = Pager(IOBuffer(; write=true, read=true))
+            pager_io = twin.pager.io
         end
+
         io = transport_file_io(msg)
-        write(twin.mfile, io.data)
-        flush(twin.mfile)
+        psize = pager_io.size
+        if psize >= REMBUS_PAGE_SIZE
+            @debug "[$twin]: saving page on disk"
+            save_page(twin)
+            twin.pager = Pager(IOBuffer(; write=true, read=true))
+            pager_io = twin.pager.io
+        end
+
+        write(pager_io, io.data)
     catch e
         @error "[$twin] park_message: $e"
-        showerror(stdout, e, catch_backtrace())
         @showerror e
     end
 end
@@ -310,10 +360,10 @@ end
 
 
 function getmsg(f)
+    mark(f)
     lens = read(f, 4)
     len::UInt32 = lens[1] + Int(lens[2]) << 8 + Int(lens[3]) << 16 + Int(lens[4]) << 24
     content = read(f, len)
-
     io = IOBuffer(maxsize=len)
     write(io, content)
     seekstart(io)
@@ -322,68 +372,97 @@ function getmsg(f)
     return msg
 end
 
-function upload_to_queue(twin)
+function unpark_file(twin::Twin, fn::AbstractString)
+    @debug "unparking $fn"
+    content = read(fn)
+    io = IOBuffer(content)
     try
-        tdir = twindir()
-        fn = joinpath(tdir, twin.id)
-        if isfile(fn)
-            open(fn, "r") do f
-                while !eof(f)
-                    msg = getmsg(f)
-                    @mlog("[$(twin.id)] <- $(prettystr(msg))")
-                    enqueue!(twin.mq, msg)
-                end
-            end
-            if twin.mfile !== nothing
-                close(twin.mfile)
-                twin.mfile = nothing
-            end
-            # finally delete the file
-            @debug "deleting enqueued messages file [$fn]"
-            rm(fn)
-        end
+        send_cached(twin, io)
+        rm(fn)
     catch e
-        @error "upload_to_queue: $e"
-        @showerror e
+        reset(io)
+        @error "unparking $fn: $e"
+        # write back the remaining messages
+        open(fn, write=true) do f
+            write(f, io)
+        end
+        rethrow()
     end
 end
 
-function unpark(ctx::Any, twin::Twin)
-    count = 0
+function debug_unpark_file(twin::Twin, fn::AbstractString)
+    @debug "unparking $fn"
+    content = read(fn)
+    io = IOBuffer(content)
+    debug_cached(twin, io)
+end
+
+function unpark_page(twin::Twin)
+    io = twin.pager.io
+    io === nothing && return
+    @debug "[$twin] unparking page"
     try
-        tdir = twindir()
-        fn = joinpath(tdir, twin.id)
-        if isfile(fn)
-            open(fn, "r") do f
-                while !eof(f)
-                    msg = getmsg(f)
-                    count += 1
-                    @mlog("[$(twin.id)] <- $(prettystr(msg))")
-                    retro = get(twin.retroactive, msg.topic, true)
-                    if retro
-                        if (count % 5000) == 0
-                            # pause a little to give time at the receiver to
-                            # get the ack messages
-                            sleep(0.1)
-                        end
-                        transport_send(twin, twin.sock, msg)
-                    else
-                        @debug "[$twin] retroactive=$(retro): skipping msg $msg"
-                    end
-                end
-            end
-            @debug "[$twin] sent $count cached msgs"
-            if twin.mfile !== nothing
-                close(twin.mfile)
-                twin.mfile = nothing
-            end
-            # finally delete the file
-            @debug "deleting enqueued messages file [$fn]"
-            rm(fn)
-        end
+        send_cached(twin, io)
+        twin.pager.io = nothing
     catch e
-        @error "[$twin] unpark_messages: $e"
-        @showerror e
+        reset(io)
+        @error "unparking page: $e"
+        # write back the remaining messages
+        newio = IOBuffer(write=true, read=true)
+        write(newio, io)
+        twin.pager.io = newio
+        rethrow()
+    end
+end
+
+function send_cached(twin, io)
+    count = 0
+    seekstart(io)
+    while !eof(io)
+        msg = getmsg(io)
+        count += 1
+        retro = get(twin.retroactive, msg.topic, true)
+        if retro
+            @mlog("[$(twin.id)] <- $(prettystr(msg))")
+            transport_send(twin, twin.sock, msg)
+        else
+            @debug "[$twin] retroactive=$(retro): skipping msg $msg"
+        end
+    end
+end
+
+function debug_cached(twin, io)
+    count = 0
+    seekstart(io)
+    while !eof(io)
+        msg = getmsg(io)
+        count += 1
+        @info "[$twin]: $msg: $(msg.data)"
+    end
+    @info "tot messages: $count"
+end
+
+function unpark(ctx::Any, twin::Twin)
+    if twin.hasname
+        @debug "[$twin]: unparking"
+        files = load_pages(twin.id)
+        for fn in files
+            unpark_file(twin, fn)
+        end
+
+        # send the in-memory paged messages
+        unpark_page(twin)
+        twin.pager.io = nothing
+    end
+end
+
+function debug_unpark(ctx::Any, twin::Twin)
+    if twin.hasname
+        @debug "[$twin]: unparking"
+        files = load_pages(twin.id)
+        for fn in files
+            debug_unpark_file(twin, fn)
+        end
     end
 end
 
