@@ -107,4 +107,6 @@ end
 
 @subscribe announcement
 
+forever()
+
 ```
