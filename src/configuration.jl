@@ -42,6 +42,7 @@ mutable struct Settings
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
     broker_ctx::Any
+    page_size::UInt
     Settings() = begin
         zmq_ping_interval = 0
         ws_ping_interval = 0
@@ -55,10 +56,10 @@ mutable struct Settings
         cid = DEFAULT_APP_NAME
         connection_retry_period = 2.0
         debug_modules = []
-
+        page_size = get(ENV, "REMBUS_PAGE_SIZE", REMBUS_PAGE_SIZE)
         new(zmq_ping_interval, ws_ping_interval, balancer, db, log, debug_modules,
             overwrite_connection, stacktrace, metering, rawdump, cid,
-            connection_retry_period, nothing, nothing)
+            connection_retry_period, nothing, nothing, page_size)
     end
 end
 
@@ -97,6 +98,7 @@ function setup(setting)
     setting.rawdump = get(cfg, "rawdump", false)
     setting.cid = component_id(cfg)
     setting.connection_retry_period = get(cfg, "connection_retry_period", 2.0)
+    setting.page_size = get(cfg, "page_size", setting.page_size)
 
     if get(ENV, "REMBUS_DEBUG", "0") == "1"
         setting.debug_modules = [Rembus, Visor]
@@ -109,5 +111,7 @@ function setup(setting)
 
     return nothing
 end
+
+const Rembus.CONFIG = Rembus.Settings()
 
 context() = CONFIG.broker_ctx

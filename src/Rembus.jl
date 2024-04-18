@@ -74,8 +74,8 @@ export RembusTimeout
 export RembusDisconnect
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 
-include("configuration.jl")
 include("constants.jl")
+include("configuration.jl")
 include("logger.jl")
 include("cbor.jl")
 include("encode.jl")
@@ -307,13 +307,14 @@ mutable struct RBConnection <: RBHandle
     reactive::Bool
     client::Component
     receiver::Dict{String,Function}
+    subinfo::Dict{String,Bool}
     out::Dict{UInt128,Condition}
     context::Union{Nothing,ZMQ.Context}
     RBConnection(name::String) = new(
-        missing, nothing, false, Component(name), Dict(), Dict(), nothing
+        missing, nothing, false, Component(name), Dict(), Dict(), Dict(), nothing
     )
     RBConnection(client=getcomponent()) = new(
-        missing, nothing, false, client, Dict(), Dict(), nothing
+        missing, nothing, false, client, Dict(), Dict(), Dict(), nothing
     )
 end
 
@@ -1614,6 +1615,16 @@ The `process` supervisor try to auto-reconnect if an exception occurs.
 function connect(process::Visor.Supervised, rb::RBHandle)
     _connect(rb, process)
     authenticate(rb)
+
+    # register again callbacks
+    for (name, fn) in rb.receiver
+        if haskey(rb.subinfo, name)
+            subscribe(rb, name, fn, rb.subinfo[name], exceptionerror=false)
+        else
+            expose(rb, name, fn, exceptionerror=false)
+        end
+    end
+
     if rb.reactive
         reactive(rb)
     end
@@ -1776,6 +1787,7 @@ function subscribe(
     exceptionerror=true
 )
     add_receiver(rb, topic, fn)
+    rb.subinfo[topic] = retroactive
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => ADD_INTEREST_CMD, RETROACTIVE => retroactive)),
         exceptionerror=exceptionerror
@@ -1798,6 +1810,7 @@ of the subscribed function will be delivered to `rb` component.
 """
 function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
+    delete!(rb.subinfo, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => REMOVE_INTEREST_CMD)),
         exceptionerror=exceptionerror

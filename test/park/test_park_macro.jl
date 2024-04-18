@@ -38,7 +38,6 @@ function run()
     # just for communicating to the  broker the interest for consume topic
     subscribe(sub, ctx)
     @terminate sub
-    #sleep(10)
 
     # the subscriber was terminated, messages will be cached by the broker
     send(pub, 1, 10000)

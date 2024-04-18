@@ -9,14 +9,12 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 abstract type AbstractRouter end
 
-const REMBUS_PAGE_SIZE = 100_000_000
-
 mutable struct Pager
     io::Union{Nothing,IOBuffer}
     ts::Int # epoch time
     size::UInt # approximate page size
-    Pager(size=REMBUS_PAGE_SIZE) = new(nothing, Libc.TimeVal().sec, size)
-    Pager(io::IOBuffer, ts=Libc.TimeVal().sec, size=REMBUS_PAGE_SIZE) = new(io, ts, size)
+    Pager() = new(nothing, Libc.TimeVal().sec, CONFIG.page_size)
+    Pager(io::IOBuffer, ts=Libc.TimeVal().sec) = new(io, ts, CONFIG.page_size)
 end
 
 #=
@@ -1675,7 +1673,7 @@ function broker(self, router)
         rethrow()
     finally
         for tw in values(router.id_twin)
-            detach(tw)
+            ## detach(tw)
             save_page(tw)
         end
         save_configuration(router)

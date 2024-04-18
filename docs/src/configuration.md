@@ -1,4 +1,4 @@
-# Configuartion
+# Configuration
 
 ## Broker environment variables
 

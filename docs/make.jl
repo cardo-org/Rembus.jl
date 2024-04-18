@@ -29,6 +29,7 @@ makedocs(;
         "Configuration" => "configuration.md",
         "Supervised API" => "supervised_api.md",
         "Unsupervised API" => "unsupervised_api.md",
+        "Fault-tolerance features" => "fault_tolerance.md",
     ],
 )
 

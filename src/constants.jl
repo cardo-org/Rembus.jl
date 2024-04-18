@@ -7,7 +7,7 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 const VERSION = "0.1.0"
 
-const Rembus.CONFIG = Rembus.Settings()
+#const Rembus.CONFIG = Rembus.Settings()
 
 const DATAFRAME_TAG = 80
 
@@ -15,6 +15,8 @@ const APP_CONFIG_DIR = ".config"
 
 const PING_INTERVAL = 10
 const PONG_STRING = "*_pong_*"
+
+const REMBUS_PAGE_SIZE = 1_000_000
 
 const BROKER_CONFIG = "__config__"
 const CID = "cid"
