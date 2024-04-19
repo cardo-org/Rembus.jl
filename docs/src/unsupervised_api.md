@@ -28,6 +28,8 @@ optionally a persistent unique name for the component.
 rb = connect("ws://hostname:8000/mycomponent")
 ```
 
+The [Supervised API](./supervised_api.md#component) page documents the URL format.
+
 ## expose
 
 Take a Julia function and exposes all of its the methods.

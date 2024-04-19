@@ -4,9 +4,23 @@
 CurrentModule = Rembus
 ```
 
+Rembus is a middleware for Pub/Sub and RPC communication styles.
+
+There are two types of processes: Components and Brokers.
+
+- A Component connect to a Broker;
+- A Broker dispatch messages between Components;
+- A Component expose RPC services and/or subscribe to Pub/Sub topics;
+- A Component make RPC requests and/or publish messages to Pub/Sub topics;
+
 ## Broker
 
-Starting the broker is simple as:
+A `Broker` is a process that routes messages between components.
+
+A `Broker` is capable of making components that use different transport protocols talk to each other. For example a component that uses a ZeroMQ socket may talk to a component
+that uses the WebSocket protocol.
+
+Starting a `Broker` is simple as:
 
 ```sh
 julia -e "using Rembus; caronte()"
@@ -30,55 +44,23 @@ See [Broker environment variables](@ref) for customizing the runtime setting.
 
 ## Component
 
-A `Component` is a broker client who uses the Rembus protocol for RPC commands and
-for streaming data in a Pub/Sub fashion.
+A `Component` is a process that plays one or more of the following roles:
 
-The macro `@component` declares a component whom identity and the connection parameters are defined with an URL:
+- Publisher (Pub/Sub) : produce messages;
+- Subscriber (Pub/Sub): consume published messages;
+- Requestor (RPC): request a service;
+- Exposer (RPC): execute a service request and give back a response;
 
-```julia
-component_url = "[<protocol>://][<host>][:<port>/]<cid>"
+There are two flavors of components: anonymous and named ones.
 
-@component component_url
-```
+An anonymous component assume a random and ephemeral identity each time it connects to the broker. Example usage for anonymous components may be:
 
-`<protocol>` is one of:
+- when it is not required to trace the originating source of messages;
+- for a `Subscriber` when it is not required to receive messages published before the
+  component goes online;
+- for preliminary prototyping;
 
-- `ws` web socket
-- `wss` secure web socket
-- `tcp` tcp socket
-- `tls` TLS over tcp socket
-- `zmq` ZeroMQ socket
-
-`<host>` and `<port>` are the hostname/ip and the port of the broker listening endpoint.
-
-`<cid>` is the unique name of the component.
-
-For example:
-
-```julia
-@component "ws://caronte.org:8000/myclient"
-```
-
-defines the component `myclient` that communicates with the broker hosted on `caronte.org`, listening on port `8000` and accepting web socket connections.
-
-### Default component URL parameters
-
-The string that define a component may be simplified by using the enviroment
-variable `REMBUS_BASE_URL` that set the connection default parameters:
-
-For example:
-
-```sh
-REMBUS_BASE_URL=ws://localhost:8000
-```
-
-define the default protocol, host and port, so that the above `component_url` may be simplified as:
-
-```julia
-@component "myclient"
-```
-
-Uses the web socket protocol to connect to `localhost` on port `8000`.
+An URL string defines the identity and the connection parameters of a component. The [Supervised API](./supervised_api.md#component) page documents the URL format.
 
 ## Index
 

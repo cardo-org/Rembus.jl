@@ -27,11 +27,43 @@ and optionally it has to declare a persistent unique name for the component.
 These settings are defined with a URL string:
 
 ```julia
-@component "ws://hostname:8000/mycomponent"
+component_url = "[<protocol>://][<host>][:<port>/][<cid>]"
+
+@component component_url
 ```
 
-> Rembus is "lazy": declaring a component does not open a connection to the broker.
+`<protocol>` is one of:
+
+- `ws` web socket
+- `wss` secure web socket
+- `tcp` tcp socket
+- `tls` TLS over tcp socket
+- `zmq` ZeroMQ socket
+
+`<host>` and `<port>` are the hostname/ip and the port of the listening broker.
+
+`<cid>` is the unique name of the component. If it is not defined create an anonymous component.
+
+For example:
+
+```julia
+@component "ws://caronte.org:8000/myclient"
+```
+
+defines the component `myclient` that communicates with the broker hosted on `caronte.org`, listening on port `8000` and accepting web socket connections.
+
+> **NOTE** Rembus is "lazy": declaring a component does not open a connection to the broker.
 > The connection will be opened when first needed.
+
+### Default component URL parameters
+
+The URL string may be simplified by using the enviroment variable `REMBUS_BASE_URL`.
+
+Setting for example `REMBUS_BASE_URL=ws://localhost:8000` the above `component_url` may be simplified as:
+
+```julia
+@component "myclient"
+```
 
 ## expose
 
@@ -74,7 +106,7 @@ The arguments of the local function call `myservice` is transported to the remot
 The return value of `myservice` is transported back to the RPC client calling site
 and `@rpc` returns.
 
-If the remote method throws an Exception then the local RPC client will throw either an Exception reporting the reason of the remote error.
+If the remote method throws an Exception then the local RPC client throws an Exception reporting the reason of the remote error.
 
 ## subscribe
 

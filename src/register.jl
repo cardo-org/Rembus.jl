@@ -5,11 +5,11 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-"""
+#=
     create_private_key(cid::AbstractString)
 
 Create a private key for `cid` component and return its public key.
-"""
+=#
 function create_private_key(cid::AbstractString)
     file = "$(pkfile(cid)).tmp"
     cmd = `ssh-keygen -f $file -m PEM -b 2048 -N ''`

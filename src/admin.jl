@@ -1,8 +1,8 @@
-"""
+#=
     private_topic(router, twin, msg)
 
 Administration command to declare a private topic.
-"""
+=#
 function private_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PRIVATE_TOPIC_CMD)
@@ -17,11 +17,11 @@ function private_topic(router, twin, msg)
     return sts
 end
 
-"""
+#=
     public_topic(router, twin, msg)
 
 Administration command to reset a topic to public.
-"""
+=#
 function public_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PUBLIC_TOPIC_CMD)
@@ -34,11 +34,16 @@ function public_topic(router, twin, msg)
     return sts
 end
 
-"""
+#=
     authorize(router, twin, msg)
 
-Administration command to authorize a component to publish/subscribe to a private topic.
-"""
+Administration command to authorize a component:
+
+- to publish
+- to subscribe to a private topic.
+- to make rpc requests to a remote method
+- to expose a method
+=#
 function authorize(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, AUTHORIZE_CMD) &&
@@ -57,11 +62,11 @@ function authorize(router, twin, msg)
     return sts
 end
 
-"""
+#=
     unauthorize(router, twin, msg)
 
 Administration command to unauthorize a component to publish/subscribe to a private topic.
-"""
+=#
 function unauthorize(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, UNAUTHORIZE_CMD) &&

@@ -16,11 +16,11 @@ function run()
     Rembus.register(url, uid, pin)
 
     # check configuration
-    # token_app file contains the app component
+    # component_owner file contains the component component
     df = Rembus.load_token_app()
-    @debug "token_app: $df" _group = :test
-    @test df[df.app.==cmp.id, :app][1] === cmp.id
-    @test df[df.app.==cmp.id, :uid][1] === uid
+    @debug "component_owner: $df" _group = :test
+    @test df[df.component.==cmp.id, :component][1] === cmp.id
+    @test df[df.component.==cmp.id, :uid][1] === uid
 
     # private key was created
     @test isfile(Rembus.pkfile(cmp.id))
@@ -36,8 +36,8 @@ function run()
 
         df = Rembus.load_token_app()
 
-        # the app component was removed from token_app file
-        @test isempty(df[df.app.==cmp.id, :])
+        # the component was removed from component_owner file
+        @test isempty(df[df.component.==cmp.id, :])
 
         # the public key was removed
         @test_throws ErrorException Rembus.pubkey_file(cmp.id)

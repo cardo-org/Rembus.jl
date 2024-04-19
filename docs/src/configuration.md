@@ -44,7 +44,7 @@ The database directory has the following layout:
 ├── impls.json
 ├── interests.json
 ├── owners.csv
-├── token_app.csv
+├── component_owner.csv
 ├── topic_auth.json
 ├── twins
     ├── bar
@@ -133,14 +133,14 @@ pin,uid,name,enabled
 
 ### Components ownership
 
-`token_app.csv` is a csv file containing the mapping between the registered components and the user that performed the registration.
+`component_owner.csv` is a csv file containing the mapping between the registered components and the user that performed the registration.
 
-`uid` is the user identity and `app` is the component identifier.
+`uid` is the user identity and `component` is the component identifier.
 
 For example if the user Paperoga registered the component `foo` then:
 
 ```text
-> cat token_app.csv
-uid,app
+> cat component_owner.csv
+uid,component
 paperoga@topolinia.com,foo
 ```

@@ -42,6 +42,7 @@ export @publish
 export @reactive, @unreactive
 export @shared
 export @rpc_timeout
+export @forever
 export @terminate
 
 # rembus client api
@@ -111,7 +112,7 @@ Base.@kwdef struct RembusError <: RembusException
 end
 
 """
-`RpcMethodNotFound` is thrown from a rpc request when a remote method is unknown.
+`RpcMethodNotFound` is thrown from a rpc request when the called method is unknown.
 
 fields:
 $(FIELDS)
@@ -139,7 +140,7 @@ end
 
 Thrown when a RPC method is unavailable.
 
-A method is considered unavailable when some component that expose the method is
+A method is considered unavailable when some component that exposed the method is
 currently disconnected from the broker.
 
 # Fields
@@ -155,7 +156,7 @@ end
 """
     RpcMethodLoopback
 
-Thrown when a RPC request to a locally exposed method.
+Thrown when a RPC request would invoke a locally exposed method.
 
 # Fields
 $(FIELDS)
@@ -441,7 +442,6 @@ end
 ctx = Context(0)
 @subscribe topic
 @shared ctx
-@reactive
 ```
 
 Using `@shared` to set a `container` object means that if some component
@@ -871,7 +871,7 @@ macro unreactive(cid=nothing)
     end
 end
 
-"""
+#=
     @enable_ack
 
 Enable acknowledge receipt of published messages.
@@ -880,7 +880,7 @@ This feature assure that messages get delivered at least one time to the
 subscribed component.
 
 For default the acknowledge is disabled.
-"""
+=#
 macro enable_ack(cid=nothing)
     ex = enable_ack_expr(true, cid)
     quote
@@ -889,14 +889,14 @@ macro enable_ack(cid=nothing)
     end
 end
 
-"""
+#=
     @disable_ack
 
 Disable acknowledge receipt of published messages.
 
 This feature assure that messages get delivered at least one to the
 subscribed component.
-"""
+=#
 macro disable_ack(cid=nothing)
     ex = disable_ack_expr(false, cid)
     quote
@@ -944,6 +944,8 @@ Bind a `ctx` context object to the `rb` component.
 
 When a `ctx` context object is bound then it will be the first argument of subscribed and
 exposed methods.
+
+See [`@shared`](@ref) for more details.
 """
 shared(rb::RBHandle, ctx) = rb.shared = ctx
 
@@ -1063,7 +1065,8 @@ end
 
 mutable struct NullProcess <: Visor.Supervised
     id::String
-    inbox::Channel
+    inbo
+    x::Channel
     NullProcess(id) = new(id, Channel(1))
 end
 
@@ -1222,6 +1225,11 @@ function trim_msg(msg)
     end
 end
 
+#=
+    parse_msg(rb, response)
+
+Handle a received message.
+=#
 function parse_msg(rb, response)
     try
         msg = connected_socket_load(response)
@@ -1571,9 +1579,12 @@ end
 """
     connect()
 
-Connect anonymously to the broker.
+Connect anonymously to the endpoint declared with `REMBUS_BASE_URL` env variable.
 
-A random v4 UUID is used as component identifier.
+`REMBUS_BASE_URL` default to `ws://127.0.0.1:8000`
+
+A component is considered anonymous when a different and random UUID is used as
+component identifier each time the application connect to the broker.
 """
 function connect()
     rb = RBConnection()
@@ -1595,6 +1606,22 @@ using Rembus
 rb = connect("mycomponent")
 publish(rb, "temperature", ["room_1", 21.5])
 ```
+
+The `url` argument string is formatted as:
+
+`url = [<protocol>://][<host>][:<port>/]<cid>`
+
+`<protocol>` is one of:
+
+- `ws` web socket
+- `wss` secure web socket
+- `tcp` tcp socket
+- `tls` TLS over tcp socket
+- `zmq` ZeroMQ socket
+
+`<host>` and `<port>` are the hostname/ip and the port of the listening broker.
+
+`<cid>` is the unique name of the component.
 """
 function connect(url::AbstractString)::RBHandle
     process = NullProcess(url)
@@ -1825,11 +1852,12 @@ end
     expose(rb::RBHandle, fn::Function; exceptionerror=true)
     expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
 
-The methods of function `fn` are to be executed when a RPC `topic` request is received.
+Expose the methods of function `fn` to be executed by rpc clients using `topic` as
+RPC method name.
 
-If the `topic` argument is omitted the function name must be equal to the RPC topic name.
+If the `topic` argument is omitted the function name equals to the RPC method name.
 
-The returned value is the RPC response returned to the RPC client.
+`fn` returns the RPC response.
 """
 function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
     add_receiver(rb, topic, fn)
@@ -1917,11 +1945,43 @@ end
 """
     publish(rb::RBHandle, topic::AbstractString, data=[])
 
-Publish `data` values on topic `topic`.
+Publish `data` values on `topic`.
 
-`data` may be any type of data, but if the components are implemented in different languages
-then data has to be a DataFrame or a [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html)
-basic data type.
+`data` may be a value or a vector of values. Each value map to the arguments of the
+subscribed method.
+
+For example if the subscriber is a method that expects two arguments:
+
+```
+mytopic(x,y) = @info "x=\$x, y=\$y"
+```
+
+The published message needs an array of two elements:
+
+```
+publish(rb, "mytopic", [1, 2])
+```
+
+When a subscribed method expect one argument instead of passing an array of one element
+it may be better to pass the value:
+
+```
+mytopic(x) = @info "x=\$x"
+
+publish(rb, "mytopic", 1)
+```
+
+If the subscribed method has no arguments invoke `publish` as:
+
+```
+mytopic() = @info "mytopic invoked"
+
+publish(rb, "mytopic")
+```
+
+`data` array may contains any type, but if the components are implemented in different
+languages then data has to be a DataFrame or a primitive type that is
+[CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
 function publish(rb::RBHandle, topic::AbstractString, data=[])
     return rembus_write(rb, PubSubMsg(topic, data))
@@ -2054,16 +2114,42 @@ function broker_shutdown()
     rpcreq(admin, AdminReqMsg("__config__", Dict(COMMAND => SHUTDOWN_CMD)))
 end
 
-function forever()
-    component = getcomponent()
-    process = from(component.id)
-    if process !== nothing
-        cmp = process.args[1]
-        reactive(cmp)
-        # Don't block the REPL!
-        isinteractive() ? nothing : supervise()
+function waiter(pd)
+    for msg in pd.inbox
+        if isshutdown(pd)
+            break
+        end
     end
 end
+
+"""
+    forever(rb::RBHandle)
+
+    Start the event loop awaiting to execute exposed and subscribed methods.
+"""
+function forever(rb::RBHandle)
+    reactive(rb)
+    supervise([process(waiter)])
+end
+
+"""
+    @forever
+
+Start the event loop awaiting to execute exposed and subscribed methods.
+"""
+macro forever()
+    quote
+        component = getcomponent()
+        process = from(component.id)
+        if process !== nothing
+            cmp = process.args[1]
+            reactive(cmp)
+            # Don't block the REPL!
+            isinteractive() ? nothing : supervise()
+        end
+    end
+end
+
 
 @setup_workload begin
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"

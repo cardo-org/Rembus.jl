@@ -103,7 +103,7 @@ mutable struct Router <: AbstractRouter
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
     owners::DataFrame
-    token_app::DataFrame
+    component_owner::DataFrame
     Router() = new(
         time(),
         Dict(),
@@ -390,7 +390,7 @@ end
 #=
     register(router, twin, msg)
 
-Register a client app.
+Register a component.
 =#
 function register(router, twin, msg)
     @debug "[$(twin.id)] registering pubkey of $(msg.cid), id: $(msg.id)"
@@ -409,10 +409,10 @@ function register(router, twin, msg)
     else
         try
             save_pubkey(msg.cid, msg.pubkey)
-            if !(msg.cid in router.token_app.app)
-                push!(router.token_app, [msg.userid, msg.cid])
+            if !(msg.cid in router.component_owner.component)
+                push!(router.component_owner, [msg.userid, msg.cid])
             end
-            save_token_app(router.token_app)
+            save_token_app(router.component_owner)
         catch e
             @error "[$(msg.cid)] register: $e"
             sts = STS_GENERIC_ERROR
@@ -427,7 +427,7 @@ end
 #=
     unregister(twin, msg)
 
-Unregister a client app.
+Unregister a component.
 =#
 function unregister(router, twin, msg)
     @debug "[$twin] unregistering $(msg.cid), isauth: $(twin.isauth)"
@@ -443,8 +443,8 @@ function unregister(router, twin, msg)
     else
         try
             remove_pubkey(msg.cid)
-            deleteat!(router.token_app, router.token_app.app .== msg.cid)
-            save_token_app(router.token_app)
+            deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
+            save_token_app(router.component_owner)
         catch e
             @error "[$(msg.cid)] unregister: $e"
             sts = STS_GENERIC_ERROR
@@ -683,7 +683,7 @@ function anonymous_twin_receiver(router, twin)
                 if isempty(msg.cid)
                     transport_send(twin, ws, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid"))
                 end
-                # close connection if a client with the same cid is already connected
+                # close connection if someone with the same cid is already connected
                 named = named_twin(msg.cid, router)
                 if named !== nothing && !offline(named)
                     @warn "a component with id [$(msg.cid)] is already connected"
@@ -1002,16 +1002,17 @@ function callback_and(
     end
 end
 
-"""
+#=
     set_broker_plugin(extension::Module)
 
-Inject the module that implements the functions related to twin lifecycle.
-"""
+Inject the module that implements the functions invoked at specific entry points of
+twin state machine.
+=#
 function set_broker_plugin(extension::Module)
     CONFIG.broker_plugin = extension
 end
 
-"""
+#=
     set_broker_context(ctx)
 
 Set the object to be passed ad first argument to functions related to twin lifecycle.
@@ -1022,7 +1023,7 @@ Actually the functions that use `ctx` are:
 - `twin_finalize`
 - `park`
 - `unpark`
-"""
+=#
 function set_broker_context(ctx)
     CONFIG.broker_ctx = ctx
 end

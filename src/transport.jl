@@ -13,13 +13,13 @@ const HEADER_LEN4 = 0x8F
 
 zmqsocketlock = ReentrantLock()
 
-"""
+#=
     zmq_load(socket::ZMQ.Socket)
 
 Get a Rembus message from a ZeroMQ multipart message.
 
 The decoding is performed at the client side.
-"""
+=#
 function zmq_load(socket::ZMQ.Socket)
 
     pkt = zmq_message(socket)
@@ -53,15 +53,15 @@ function zmq_load(socket::ZMQ.Socket)
     msg
 end
 
-"""
-    connected_socket_load(pkt)
+#=
+    connected_socket_load(packet)
 
-Get a Rembus message from a CBOR encoded packet.
+Get a Rembus message decoding the CBOR packet.
 
-The decoding is performed at the client side.
-"""
-function connected_socket_load(pkt)
-    payload = decode(pkt)
+The decoding is performed at the component side.
+=#
+function connected_socket_load(packet)
+    payload = decode(packet)
 
     ptype = payload[1] & 0x3f
     flags = payload[1] & 0xc0
@@ -85,13 +85,13 @@ function connected_socket_load(pkt)
     end
 end
 
-"""
+#=
     broker_parse(pkt)
 
 Get a Rembus message from a CBOR encoded packet.
 
 The decoding is performed at the broker side.
-"""
+=#
 function broker_parse(pkt)
     io = IOBuffer(pkt)
     header = read(io, UInt8)
@@ -177,13 +177,13 @@ mutable struct ZMQDealerPacket
     data::ZMQ.Message
 end
 
-"""
+#=
     zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
 
 Receive a Multipart ZeroMQ message.
 
 Return the packet header and data values extracted from a DEALER socket.
-"""
+=#
 function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
     expect_empty = true
     while true
@@ -223,13 +223,13 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
     end
 end
 
-"""
+#=
     zmq_message(router::Router)::ZMQPacket
 
 Receive a Multipart ZeroMQ message.
 
 Return the packet identity, header and data values extracted from a ROUTER socket.
-"""
+=#
 function zmq_message(router::Router)::ZMQPacket
     expect_empty = true
     cached_identity = nothing
@@ -286,13 +286,13 @@ function zmq_message(router::Router)::ZMQPacket
     end
 end
 
-"""
+#=
     broker_parse(router::Router, pkt::ZMQPacket)
 
-The Broker parser of ZeroMQ messages.
+AAAA The Broker parser of ZeroMQ messages.
 
 `pkt` is the zeromq message decoded as `[identity, header, data]`.
-"""
+=#
 function broker_parse(router::Router, pkt::ZMQPacket)
     id = pkt.identity
     type = pkt.header[1]

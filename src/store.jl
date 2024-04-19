@@ -34,11 +34,11 @@ function Pager(twin::Twin)
     end
 end
 
-"""
+#=
     load_owners()
 
 Return the owners dataframe
-"""
+=#
 function load_owners()
     fn = joinpath(CONFIG.db, "owners.csv")
     if isfile(fn)
@@ -49,39 +49,39 @@ function load_owners()
     end
 end
 
-"""
+#=
     save_owners(owners_df)
 
 Save the owners table.
-"""
+=#
 function save_owners(owners_df)
     fn = joinpath(CONFIG.db, "owners.csv")
     CSV.write(fn, owners_df)
 end
 
-"""
+#=
     load_token_app()
 
-Return the token_app dataframe
-"""
+Return the component_owner dataframe
+=#
 function load_token_app()
-    fn = joinpath(CONFIG.db, "token_app.csv")
+    fn = joinpath(CONFIG.db, "component_owner.csv")
     if isfile(fn)
         df = DataFrame(CSV.File(fn, types=Dict(1 => String, 2 => String)))
         return df
     else
-        @debug "token_app.csv not found"
-        DataFrame(uid=String[], app=String[])
+        @debug "component_owner.csv not found"
+        DataFrame(uid=String[], component=String[])
     end
 end
 
-"""
+#=
     save_token_app(df)
 
-Save the owners table.
-"""
+Save the component_owner table.
+=#
 function save_token_app(df)
-    fn = joinpath(CONFIG.db, "token_app.csv")
+    fn = joinpath(CONFIG.db, "component_owner.csv")
     CSV.write(fn, df)
 end
 
@@ -210,11 +210,11 @@ function load_admins(router)
     end
 end
 
-"""
+#=
     load_twins(router)
 
-Instantiates twins that have one or more interests.
-"""
+Instantiates twins that subscribed to one or more topics.
+=#
 function load_twins(router)
     fn = joinpath(CONFIG.db, "twins.json")
     if isfile(fn)
@@ -269,7 +269,7 @@ function load_twins(router)
 
 end
 
-"""
+#=
     save_twins(router)
 
 Persist twins to storage.
@@ -277,7 +277,7 @@ Persist twins to storage.
 Save twins configuration only if twin has a name.
 
 Persist undelivered messages if they are queued in memory.
-"""
+=#
 function save_twins(router)
     if !isdir(CONFIG.db)
         mkdir(CONFIG.db)
@@ -466,11 +466,11 @@ function debug_unpark(ctx::Any, twin::Twin)
     end
 end
 
-"""
+#=
     save_configuration(router::Router)
 
 Persist router configuration on disk.
-"""
+=#
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "saving configuration on disk"
@@ -490,6 +490,6 @@ function load_configuration(router)
         load_admins(router)
 
         router.owners = load_owners()
-        router.token_app = load_token_app()
+        router.component_owner = load_token_app()
     end
 end
