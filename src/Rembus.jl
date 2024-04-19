@@ -111,6 +111,10 @@ Base.@kwdef struct RembusError <: RembusException
     reason::Union{String,Nothing} = nothing
 end
 
+struct AlreadyConnected <: RembusException
+    cid::String
+end
+
 """
 `RpcMethodNotFound` is thrown from a rpc request when the called method is unknown.
 
@@ -1044,6 +1048,12 @@ function rembus_task(pd, rb, protocol=:ws)
             end
         end
     catch e
+        if isa(e, AlreadyConnected)
+            @error "[$(e.cid)] already connected"
+            Rembus.CONFIG.cid = "rembus"
+            return
+        end
+
         if isa(e, HTTP.Exceptions.ConnectError)
             msg = "[$pd]: $(e.url) connection error"
         else
@@ -1065,8 +1075,7 @@ end
 
 mutable struct NullProcess <: Visor.Supervised
     id::String
-    inbo
-    x::Channel
+    inbox::Channel
     NullProcess(id) = new(id, Channel(1))
 end
 
@@ -1472,13 +1481,14 @@ function authenticate(rb)
     if isa(response, RembusTimeout)
         close(rb.socket)
         throw(response)
+    elseif (response.status == STS_GENERIC_ERROR)
+        throw(AlreadyConnected(rb.client.id))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)
         response = wait_response(rb, msg, request_timeout())
     end
 
     if (response.status != STS_SUCCESS)
-        # Avoid DOS attack: this has to be the server work!!
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
     end

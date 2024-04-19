@@ -687,7 +687,10 @@ function anonymous_twin_receiver(router, twin)
                 named = named_twin(msg.cid, router)
                 if named !== nothing && !offline(named)
                     @warn "a component with id [$(msg.cid)] is already connected"
-                    close(ws)
+                    ## close(ws)
+                    transport_send(twin, ws, ResMsg(
+                        msg.id, STS_GENERIC_ERROR, "already connected"
+                    ))
                 else
                     # check if cid is registered
                     rembus_login = isfile(joinpath(CONFIG.db, "apps", msg.cid))
