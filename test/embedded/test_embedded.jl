@@ -25,12 +25,12 @@ end
 
 
 function start_server()
-    emb = Rembus.Embedded()
+    emb = embedded()
     provide(emb, df_service)
     provide(emb, rpc_service)
     provide(emb, rpc_fault)
     provide(emb, signal)
-    Rembus.serve(emb, wait=false, exit_when_done=false)
+    serve(emb, wait=false, exit_when_done=false)
 end
 
 

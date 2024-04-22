@@ -47,7 +47,7 @@ mutable struct Settings
         zmq_ping_interval = 0
         ws_ping_interval = 0
         balancer = "first_up"
-        db = joinpath(get(ENV, "HOME", "."), "caronte")
+        db = joinpath(get(ENV, "HOME", "."), ".config", "caronte")
         log = "stdout"
         overwrite_connection = true
         stacktrace = false
@@ -90,7 +90,7 @@ function setup(setting)
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "120")))
 
-    setting.db = get(cfg, "db", get(ENV, "REMBUS_DB", joinpath(home, "caronte")))
+    setting.db = get(cfg, "db", get(ENV, "BROKER_DIR", setting.db))
     setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)

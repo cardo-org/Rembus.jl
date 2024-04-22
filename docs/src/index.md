@@ -51,14 +51,24 @@ A `Component` is a process that plays one or more of the following roles:
 - Requestor (RPC): request a service;
 - Exposer (RPC): execute a service request and give back a response;
 
-There are two flavors of components: anonymous and named ones.
+There are three type of components:
 
-An anonymous component assume a random and ephemeral identity each time it connects to the broker. Example usage for anonymous components may be:
+- Anonymous
+- Named
+- Authenticated
+
+An `Anonymous` component assume a random and ephemeral identity each time it connects to the broker. Example usage for anonymous components may be:
 
 - when it is not required to trace the originating source of messages;
 - for a `Subscriber` when it is not required to receive messages published before the
   component goes online;
 - for preliminary prototyping;
+
+A `Named` component has a unique and persistent name that make possible to receive messages published when the component was offline.
+
+An `Authenticated` component is a named component that own a private key or a shared secret which can prove its identity.
+
+Only authenticated components may use Pub/Sub private topics and private RPC methods.
 
 An URL string defines the identity and the connection parameters of a component. The [Supervised API](./supervised_api.md#component) page documents the URL format.
 

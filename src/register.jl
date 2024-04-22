@@ -23,9 +23,14 @@ function create_private_key(cid::AbstractString)
 end
 
 """
-  register(cid::AbstractString)
+    register(cid::AbstractString, userid::AbstractString, pin::AbstractString)
 
-Register the client identified by `cid`.
+Register the component with name `cid`.
+
+To register a component a user must be provisioned in the `owners.csv` table.
+
+The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
+
 """
 function register(cid::AbstractString, userid::AbstractString, pin::AbstractString)
     cmp = Component(cid)

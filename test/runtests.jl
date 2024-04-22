@@ -11,7 +11,7 @@ const GROUP = get(ENV, "GROUP", "all")
 Rembus.CONFIG = Rembus.Settings()
 Rembus.CONFIG.db = "/tmp/caronte_test"
 
-mkpath(joinpath(Rembus.CONFIG.db, "apps"))
+mkpath(joinpath(Rembus.CONFIG.db, "keys"))
 
 @testset "Rembus" begin
     @testset "unit" begin

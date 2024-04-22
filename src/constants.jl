@@ -11,7 +11,7 @@ const VERSION = "0.1.0"
 
 const DATAFRAME_TAG = 80
 
-const APP_CONFIG_DIR = ".config"
+const REMBUS_CA = "rembus-ca.crt"
 
 const PING_INTERVAL = 10
 const PONG_STRING = "*_pong_*"

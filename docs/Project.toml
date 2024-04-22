@@ -1,8 +1,9 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterMermaid = "a078cd44-4d9c-4618-b545-3ab9d77f9177"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 Rembus = "aa126574-2ec3-42c9-8bf5-7f62001d6bce"
 Weave = "44d3d7a6-8a23-5bf8-98c5-b353f8df5ec9"
 
 [compat]
-Documenter = "0.27"
+Documenter = "1.4"

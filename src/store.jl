@@ -113,7 +113,7 @@ end
 
 function save_impl_table(router)
     @debug "saving impls table"
-    save_table(router.topic_impls, "impls.json")
+    save_table(router.topic_impls, "exposers.json")
 end
 
 function save_topic_auth_table(router)
@@ -139,21 +139,21 @@ function save_admins(router)
 end
 
 function save_pubkey(cid::AbstractString, pubkey)
-    fn = joinpath(CONFIG.db, "apps", cid)
+    fn = joinpath(CONFIG.db, "keys", cid)
     open(fn, "w") do io
         write(io, pubkey)
     end
 end
 
 function remove_pubkey(cid::AbstractString)
-    fn = joinpath(CONFIG.db, "apps", cid)
+    fn = joinpath(CONFIG.db, "keys", cid)
     if isfile(fn)
         rm(fn)
     end
 end
 
 function pubkey_file(cid::AbstractString)
-    fn = joinpath(CONFIG.db, "apps", cid)
+    fn = joinpath(CONFIG.db, "keys", cid)
 
     if isfile(fn)
         return fn
@@ -162,13 +162,12 @@ function pubkey_file(cid::AbstractString)
     end
 end
 
-isregistered(cid::AbstractString) = isfile(joinpath(CONFIG.db, "apps", cid))
+isregistered(cid::AbstractString) = isfile(joinpath(CONFIG.db, "keys", cid))
 
 function load_impl_table(router)
     try
         @debug "loading impls table"
-        ## load_table(router, "impls_table", router.topic_impls, "impls.json")
-        fn = joinpath(CONFIG.db, "impls.json")
+        fn = joinpath(CONFIG.db, "exposers.json")
         if isfile(fn)
             content = read(fn, String)
             table = JSON3.read(content, Dict)
@@ -184,7 +183,7 @@ function load_impl_table(router)
             end
         end
     catch e
-        @error "[impls.json] load failed: $e"
+        @error "[exposers.json] load failed: $e"
     end
 end
 
@@ -216,7 +215,7 @@ end
 Instantiates twins that subscribed to one or more topics.
 =#
 function load_twins(router)
-    fn = joinpath(CONFIG.db, "twins.json")
+    fn = joinpath(CONFIG.db, "subscribers.json")
     if isfile(fn)
         content = read(fn, String)
         twin_topicsdict = JSON3.read(content, Dict)
@@ -295,7 +294,7 @@ function save_twins(router)
             twin_cfg[twin_id] = twin.retroactive
         end
     end
-    fn = joinpath(CONFIG.db, "twins.json")
+    fn = joinpath(CONFIG.db, "subscribers.json")
     open(fn, "w") do io
         write(io, JSON3.write(twin_cfg))
     end

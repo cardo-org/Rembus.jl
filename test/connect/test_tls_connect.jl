@@ -1,13 +1,18 @@
 include("../utils.jl")
 
 function run()
-    for cid in ["tls://:8001/aaa", "wss://:8000/bbb"]
-        rb = connect(cid)
+    try
+        for cid in ["tls://:8001/aaa", "wss://:8000/bbb"]
+            rb = connect(cid)
 
-        @test isconnected(rb) === true
+            @test isconnected(rb) === true
 
-        close(rb)
-        @test !isconnected(rb) === true
+            close(rb)
+            @test !isconnected(rb) === true
+        end
+    catch e
+        # throws an exception is connection fails.
+        @test false
     end
 end
 
@@ -18,15 +23,14 @@ else
     test_keystore = "/tmp/keystore"
     script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
     ENV["REMBUS_KEYSTORE"] = test_keystore
-
-    # reset the default value set by ws_connect()
-    delete!(ENV, "HTTP_CA_BUNDLE")
+    ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, Rembus.REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
         args = Dict("secure" => true)
         execute(run, "test_tls_connect", args=args)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
+        delete!(ENV, "HTTP_CA_BUNDLE")
         rm(test_keystore, recursive=true, force=true)
     end
 end

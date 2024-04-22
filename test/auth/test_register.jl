@@ -28,33 +28,66 @@ function run()
     # public key was provisioned
     fname = Rembus.pubkey_file(cmp.id)
     @test basename(fname) === cmp.id
+end
 
+function run_embedded()
+    try
+        rb = embedded()
+        serve(rb, wait=false, exit_when_done=false)
+
+        client = connect(cid)
+        close(client)
+    catch e
+        @error "run_embedded: $e"
+        @test false
+    finally
+        shutdown()
+    end
+
+end
+
+function unregister()
     client = tryconnect(url)
 
     try
-        Rembus.unregister(client, cmp.id)
+        Rembus.unregister(client, cid)
 
         df = Rembus.load_token_app()
 
         # the component was removed from component_owner file
-        @test isempty(df[df.component.==cmp.id, :])
+        @test isempty(df[df.component.==cid, :])
 
         # the public key was removed
-        @test_throws ErrorException Rembus.pubkey_file(cmp.id)
+        @test_throws ErrorException Rembus.pubkey_file(cid)
 
         # the private key was removed
-        @test isfile(Rembus.pkfile(cmp.id)) === false
+        @test isfile(Rembus.pkfile(cid)) === false
     catch
-        @test 0 == 1
+        @test false
         rethrow()
     finally
         close(client)
     end
 end
 
+
+
 uid = "rembus_user"
-url = "zmq://:8002/regcomp"
+cid = "regcomp"
+url = "zmq://:8002/$cid"
 pin = "11223344"
 
 setup() = init(uid, pin)
-execute(run, "test_register", setup=setup)
+try
+    execute(run, "test_register", setup=setup)
+
+    @info "[test_authenticated_embedded] start"
+    run_embedded()
+
+    execute(unregister, "test_unregister", setup=setup)
+catch e
+    @error "[test_register]: $e"
+    @test false
+finally
+    remove_keys(cid)
+end

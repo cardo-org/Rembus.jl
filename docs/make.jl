@@ -1,5 +1,6 @@
 using Rembus
 using Documenter
+using DocumenterMermaid
 using Weave
 
 #const EXAMPLES_DIR = "examples"
@@ -15,7 +16,7 @@ DocMeta.setdocmeta!(Rembus, :DocTestSetup, :(using Rembus); recursive=true)
 makedocs(;
     modules=[Rembus],
     authors="Attilio Donà",
-    repo="https://github.com/cardo-org/Rembus.jl/blob/{commit}{path}#{line}",
+    repo=Documenter.Remotes.GitHub("cardo-org", "Rembus.jl"),
     sitename="Rembus.jl",
     doctest=true,
     format=Documenter.HTML(;
@@ -26,10 +27,12 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Configuration" => "configuration.md",
         "Supervised API" => "supervised_api.md",
         "Unsupervised API" => "unsupervised_api.md",
+        "Brokerless" => "brokerless.md",
         "Fault-tolerance features" => "fault_tolerance.md",
+        "Security" => "security.md",
+        "Configuration" => "configuration.md",
     ],
 )
 

@@ -76,11 +76,15 @@ mutable struct Embedded <: AbstractRouter
     id_twin::Dict{String,Twin}
     process::Visor.Process
     ws_server::Sockets.TCPServer
-    Embedded() = new(
-        Dict(),
-        Dict(),
-    )
+    Embedded() = new(Dict(), Dict())
 end
+
+"""
+    embedded()
+
+Initialize an embedded server for brokerless rpc and one way pub/sub.
+"""
+embedded() = Embedded()
 
 mutable struct Router <: AbstractRouter
     start_ts::Float64
@@ -273,7 +277,7 @@ function verify_signature(twin, msg)
         @debug "verify signature with password string"
         secret = readline(file)
         plain = encode([challenge, secret])
-        digest = MbedTLS.digest(MbedTLS.MD_SHA256, plain)
+        digest = MbedTLS.digest(MD_SHA256, plain)
         @debug "[$twin] digest plain: $plain"
         if digest != msg.signature
             error("authentication failed")
@@ -693,7 +697,7 @@ function anonymous_twin_receiver(router, twin)
                     ))
                 else
                     # check if cid is registered
-                    rembus_login = isfile(joinpath(CONFIG.db, "apps", msg.cid))
+                    rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
 
                     if rembus_login
                         # authentication mode, send the challenge
@@ -757,7 +761,7 @@ function zeromq_receiver(router::Router)
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
                 # check if cid is registered
-                rembus_login = isfile(joinpath(CONFIG.db, "apps", msg.cid))
+                rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
                 if rembus_login
                     # authentication mode, send the challenge
                     response = challenge(router, twin, msg)
@@ -772,7 +776,7 @@ function zeromq_receiver(router::Router)
                     # broker restarted
                     # start the authentication flow if cid is registered
                     @debug "lost connection to broker: restarting $(msg.cid)"
-                    rembus_login = isfile(joinpath(CONFIG.db, "apps", msg.cid))
+                    rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
                     if rembus_login
                         response = challenge(router, twin, msg)
                         transport_send(twin, router.zmqsocket, response)
@@ -1102,8 +1106,15 @@ function caronted()::Cint
     return 0
 end
 
+"""
+    serve(embedded::Embedded; wait=true, exit_when_done=true, secure=false)
 
+Start an embedded server and accept connections.
+"""
 function serve(embedded::Embedded; wait=true, exit_when_done=true, secure=false)
+    setup(CONFIG)
+    init_log()
+
     tasks = [
         supervisor("twins", terminateif=:shutdown),
         process(
@@ -1247,11 +1258,11 @@ end
 function serve_ws(td, router, issecure=false)
     sslconfig = nothing
 
-    if issecure
-        sslconfig = secure_config()
-    end
-
     try
+        if issecure
+            sslconfig = secure_config()
+        end
+
         listener(td, router, sslconfig)
     catch e
         if !isa(e, Visor.ProcessInterrupt)
@@ -1489,6 +1500,13 @@ function broadcast!(router, msg)
 
     return nothing
 end
+
+"""
+    isauth(session)
+
+Return true if the connected component is authenticated.
+"""
+isauth(session) = session.isauth
 
 #=
     isauth(router::Router, twin::Twin, topic::AbstractString)
@@ -1730,7 +1748,7 @@ end
 Setup the router.
 =#
 function boot(router)
-    appdir = joinpath(CONFIG.db, "apps")
+    appdir = joinpath(CONFIG.db, "keys")
     if !isdir(appdir)
         mkpath(appdir)
     end
@@ -1739,12 +1757,16 @@ function boot(router)
     return nothing
 end
 
-function init(router)
+function init_log()
     if isinteractive()
         Logging.disable_logging(Logging.Info)
     else
         logging(debug=[])
     end
+end
+
+function init(router)
+    init_log()
 
     boot(router)
     @debug "broker datadir: $(CONFIG.db)"

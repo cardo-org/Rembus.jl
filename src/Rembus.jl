@@ -47,6 +47,9 @@ export @terminate
 
 # rembus client api
 export connect
+export isauth
+export embedded
+export serve
 export expose, unexpose
 export subscribe, unsubscribe
 export direct
@@ -335,7 +338,11 @@ mutable struct RBPool <: RBHandle
     RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
 end
 
-keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(get(ENV, "HOME", "."), "keystore"))
+rembus_dir() = get(ENV, "REMBUS_DIR", joinpath(get(ENV, "HOME", "."), ".config", "rembus"))
+
+broker_dir() = get(ENV, "BROKER_DIR", joinpath(get(ENV, "HOME", "."), ".config", "caronte"))
+
+keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(), "keystore"))
 
 request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "5"))
 
@@ -1305,24 +1312,25 @@ end
 function ws_connect(rb, process, isconnected::Condition)
     try
         url = brokerurl(rb.client)
+        uri = URI(url)
 
-        if startswith(url, "wss:")
+        if uri.scheme == "wss"
 
             if !haskey(ENV, "HTTP_CA_BUNDLE")
-                trust_store = keystore_dir()
-                ca_file = get(ENV, "REMBUS_CA", "rembus-ca.crt")
-                ENV["HTTP_CA_BUNDLE"] = joinpath(trust_store, ca_file)
+                ENV["HTTP_CA_BUNDLE"] = joinpath(rembus_dir(), "ca", REMBUS_CA)
             end
 
             HTTP.WebSockets.open(socket -> begin
                     read_socket(socket, process, rb, isconnected)
                 end, url)
-        else
+        elseif uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     ## Sockets.nagle(socket.io.io, false)
                     ## Sockets.quickack(socket.io.io, true)
                     read_socket(socket, process, rb, isconnected)
                 end, url, idle_timeout=1, forcenew=true)
+        else
+            error("ws endpoint: wrong $(uri.scheme) scheme")
         end
     catch e
         notify(isconnected, e, error=true)
@@ -1369,15 +1377,10 @@ end
 
 function tcp_connect(rb, process, isconnected::Condition)
     try
-        trust_store = keystore_dir()
-        ca_file = get(ENV, "REMBUS_CA", "rembus-ca.crt")
-
         url = brokerurl(rb.client)
         uri = URI(url)
-
-        cacert = get(ENV, "HTTP_CA_BUNDLE", joinpath(trust_store, ca_file))
-
-        @debug "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
+        cacert = get(ENV, "HTTP_CA_BUNDLE", joinpath(rembus_dir(), "ca", REMBUS_CA))
+        @info "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
         if uri.scheme == "tls"
             entropy = MbedTLS.Entropy()
             rng = MbedTLS.CtrDrbg()
@@ -1407,6 +1410,8 @@ function tcp_connect(rb, process, isconnected::Condition)
         elseif uri.scheme == "tcp"
             sock = Sockets.connect(uri.host, parse(Int, uri.port))
             @async read_socket(sock, process, rb, isconnected)
+        else
+            error("tcp endpoint: wrong $(uri.scheme) scheme")
         end
     catch e
         @error "tcp_connect: $e"
@@ -1415,7 +1420,7 @@ function tcp_connect(rb, process, isconnected::Condition)
 end
 
 function pkfile(name)
-    cfgdir = joinpath(get(ENV, "HOME", "."), APP_CONFIG_DIR, "rembus")
+    cfgdir = rembus_dir()
     if !isdir(cfgdir)
         mkpath(cfgdir)
     end
@@ -1477,7 +1482,6 @@ function authenticate(rb)
     reason = nothing
     msg = IdentityMsg(rb.client.id)
     response = wait_response(rb, msg, request_timeout())
-
     if isa(response, RembusTimeout)
         close(rb.socket)
         throw(response)
@@ -1492,15 +1496,23 @@ function authenticate(rb)
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
     end
-
     return nothing
+end
+
+function connect_timeout(rb, isconnected)
+    @debug "[$(rb.client.id)] socket: $(rb.socket)"
+    if rb.socket === nothing
+        notify(isconnected, ErrorException("connection failed"), error=true)
+    end
 end
 
 function _connect(rb, process)
     if rb.client.protocol === :ws || rb.client.protocol === :wss
         isconnected = Condition()
+        t = Timer((tim) -> connect_timeout(rb, isconnected), request_timeout())
         @async ws_connect(rb, process, isconnected)
         wait(isconnected)
+        close(t)
     elseif rb.client.protocol === :tcp || rb.client.protocol === :tls
         isconnected = Condition()
         @async tcp_connect(rb, process, isconnected)
