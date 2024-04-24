@@ -232,9 +232,6 @@ Thrown when a rembus connection get unexpectedly down.
 struct RembusDisconnect <: RembusException
 end
 
-# Workaround lock for HTTP.WebSockets methods (close and send)
-# Under heavy concurrent messaging data corruption may happens.
-websocketlock = ReentrantLock()
 
 function rembuserror(raise::Bool=true; code, cid=nothing, topic=nothing, reason=nothing)
     if code == STS_METHOD_NOT_FOUND
@@ -1380,7 +1377,7 @@ function tcp_connect(rb, process, isconnected::Condition)
         url = brokerurl(rb.client)
         uri = URI(url)
         cacert = get(ENV, "HTTP_CA_BUNDLE", joinpath(rembus_dir(), "ca", REMBUS_CA))
-        @info "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
+        @debug "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
         if uri.scheme == "tls"
             entropy = MbedTLS.Entropy()
             rng = MbedTLS.CtrDrbg()
@@ -1722,9 +1719,7 @@ function Base.close(rb::RBHandle)
                 transport_send(rb.socket, Close())
                 close(rb.context)
             else
-                lock(websocketlock) do
-                    close(rb.socket)
-                end
+                close(rb.socket)
             end
         end
     catch e

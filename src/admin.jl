@@ -84,6 +84,16 @@ function unauthorize(router, twin, msg)
     return sts
 end
 
+function shutdown_caronte(router)
+    @debug "shutting down caronte ..."
+    try
+        Visor.shutdown(router.process.supervisor)
+        save_configuration(router)
+    catch e
+        @error "$SHUTDOWN_CMD: $e"
+    end
+end
+
 function admin_command(router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
         return AdminResMsg(msg.id, STS_GENERIC_ERROR, nothing)
@@ -175,7 +185,8 @@ function admin_command(router, twin, msg::AdminReqMsg)
     elseif cmd == REACTIVE_CMD
         enabled = get(msg.data, STATUS, false)
         if enabled
-            start_reactive(twin)
+            twin.reactive = true
+            return EnableReactiveMsg(msg.id)
         else
             twin.reactive = false
         end
@@ -195,13 +206,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         empty!(router.topic_impls)
         empty!(router.topic_interests)
     elseif cmd == SHUTDOWN_CMD
-        @debug "shutting down ..."
-        sts = STS_SHUTDOWN
-        try
-            Visor.shutdown(router.process.supervisor)
-        catch e
-            @error "$SHUTDOWN_CMD: $e"
-        end
+        @async shutdown_caronte(router)
     elseif cmd == ENABLE_DEBUG_CMD
         CONFIG.debug_modules = [Rembus, Visor]
     elseif cmd == DISABLE_DEBUG_CMD

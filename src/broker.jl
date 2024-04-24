@@ -7,6 +7,10 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 @enum QoS fast with_ack
 
+struct EnableReactiveMsg
+    id::UInt128
+end
+
 abstract type AbstractRouter end
 
 mutable struct Pager
@@ -251,13 +255,6 @@ function destroy_twin(twin, router::Embedded)
     return nothing
 end
 
-function start_reactive(twin)
-    twin.reactive = true
-    # notify twin that cached messages has to be delivered
-    push!(twin.process.inbox, nothing)
-    return nothing
-end
-
 function verify_signature(twin, msg)
     challenge = pop!(twin.session, "challenge")
     @debug "verify signature, challenge $challenge"
@@ -481,11 +478,7 @@ end
 function admin_msg(router, twin, msg)
     admin_res = admin_command(router, twin, msg)
     @debug "admin response: $admin_res"
-    transport_send(twin, twin.sock, admin_res, true)
-    if admin_res.status === STS_SHUTDOWN
-        save_configuration(router)
-    end
-
+    push!(twin.process.inbox, admin_res)
     return nothing
 end
 
@@ -882,8 +875,10 @@ function twin_task(self, twin)
         for msg in self.inbox
             if isshutdown(msg)
                 break
-            end
-            if msg === nothing
+            elseif isa(msg, ResMsg)
+                transport_send(twin, twin.sock, msg, true)
+            elseif isa(msg, EnableReactiveMsg)
+                transport_send(twin, twin.sock, ResMsg(msg.id, STS_SUCCESS, nothing), true)
                 twin.router.unpark(CONFIG.broker_ctx, twin)
             else
                 signal!(twin, msg)

@@ -749,9 +749,7 @@ end
 function ws_write(ws::WebSockets.WebSocket, payload)
     @rawlog("out: $payload")
     try
-        lock(websocketlock) do
-            HTTP.WebSockets.send(ws, payload)
-        end
+        HTTP.WebSockets.send(ws, payload)
     catch e
         @error e
         @showerror e
