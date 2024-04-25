@@ -401,28 +401,19 @@ function register(router, twin, msg)
     if token === nothing
         sts = STS_GENERIC_ERROR
         reason = "wrong pin"
-    elseif twin.isauth
-        sts = STS_GENERIC_ERROR
-        reason = "already registered"
     elseif isregistered(msg.cid)
         sts = STS_NAME_ALREADY_TAKEN
         reason = "name $(msg.cid) not available for registration"
     else
-        try
-            save_pubkey(msg.cid, msg.pubkey)
-            if !(msg.cid in router.component_owner.component)
-                push!(router.component_owner, [msg.userid, msg.cid])
-            end
-            save_token_app(router.component_owner)
-        catch e
-            @error "[$(msg.cid)] register: $e"
-            sts = STS_GENERIC_ERROR
+        save_pubkey(msg.cid, msg.pubkey)
+        if !(msg.cid in router.component_owner.component)
+            push!(router.component_owner, [msg.userid, msg.cid])
         end
+        save_token_app(router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
     @mlog("[$twin] -> $response")
     transport_send(twin, twin.sock, response)
-
 end
 
 #=
@@ -442,22 +433,15 @@ function unregister(router, twin, msg)
         sts = STS_GENERIC_ERROR
         reason = "invalid cid"
     else
-        try
-            remove_pubkey(msg.cid)
-            deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
-            save_token_app(router.component_owner)
-        catch e
-            @error "[$(msg.cid)] unregister: $e"
-            sts = STS_GENERIC_ERROR
-        end
+        remove_pubkey(msg.cid)
+        deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
+        save_token_app(router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
     @mlog("[$twin] -> $response")
     transport_send(twin, twin.sock, response)
-
 end
 
-# Response to an Rpc request
 function rpc_response(router, twin, msg)
     if haskey(twin.sent, msg.id)
         twinput = twin.sent[msg.id].request.twchannel
@@ -578,6 +562,7 @@ function receiver_exception(router, twin, e)
         @showerror e
     else
         @error "[$twin] internal error: $e"
+        showerror(stdout, e, catch_backtrace())
         @showerror e
     end
 end
@@ -690,7 +675,7 @@ function anonymous_twin_receiver(router, twin)
                     ))
                 else
                     # check if cid is registered
-                    rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
+                    rembus_login = isfile(key_file(msg.cid))
 
                     if rembus_login
                         # authentication mode, send the challenge
@@ -754,7 +739,7 @@ function zeromq_receiver(router::Router)
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
                 # check if cid is registered
-                rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
+                rembus_login = isfile(key_file(msg.cid))
                 if rembus_login
                     # authentication mode, send the challenge
                     response = challenge(router, twin, msg)
@@ -769,7 +754,7 @@ function zeromq_receiver(router::Router)
                     # broker restarted
                     # start the authentication flow if cid is registered
                     @debug "lost connection to broker: restarting $(msg.cid)"
-                    rembus_login = isfile(joinpath(CONFIG.db, "keys", msg.cid))
+                    rembus_login = isfile(key_file(msg.cid))
                     if rembus_login
                         response = challenge(router, twin, msg)
                         transport_send(twin, router.zmqsocket, response)
@@ -839,7 +824,7 @@ end
 
 close_is_ok(::Nothing, e) = true
 
-page_file(twin) = joinpath(twindir(), twin.id, string(twin.pager.ts))
+page_file(twin) = joinpath(twins_dir(), twin.id, string(twin.pager.ts))
 
 #=
     detach(twin)
@@ -886,6 +871,7 @@ function twin_task(self, twin)
         end
     catch e
         @error "twin_task: $e" exception = (e, catch_backtrace())
+        rethrow()
     end
     @debug "[$twin] task done"
 end
@@ -1047,7 +1033,8 @@ function command_line()
 end
 
 function caronte_reset()
-    foreach(rm, readdir(Rembus.twindir(), join=true))
+    rm(twins_dir(), force=true, recursive=true)
+    #foreach(rm, readdir(Rembus.twins_dir(), join=true))
     foreach(rm, filter(isfile, readdir(Rembus.CONFIG.db, join=true)))
 end
 
@@ -1132,9 +1119,12 @@ function serve(embedded::Embedded; wait=true, exit_when_done=true, secure=false)
 end
 
 function router_configuration(router)
-    cfg = Dict("twins" => Dict())
-    for (tid, twin) in router.id_twin
-        cfg["twins"][tid] = Dict("retroactives" => twin.retroactive)
+    cfg = Dict("exposers" => Dict(), "subscribers" => Dict())
+    for (topic, twins) in router.topic_impls
+        cfg["exposers"][topic] = [t.id for t in twins]
+    end
+    for (topic, twins) in router.topic_interests
+        cfg["subscribers"][topic] = [t.id for t in twins]
     end
 
     return cfg
@@ -1698,28 +1688,6 @@ function broker(self, router)
     @debug "[broker] done"
 end
 
-function watch_extfile(router, extfile, time_window=4)
-    changed = false
-    while true
-        try
-            event = watch_folder(extfile, time_window)
-            if event.second.timedout
-                if changed
-                    @debug "rembus $extfile change detected: reloading"
-                    app_topics(router)
-                    changed = false
-                else
-                    # @info "watching ..."
-                end
-            else
-                changed = true
-            end
-        catch e
-            @error "watch extfile: $e"
-        end
-    end
-end
-
 function caronte_context(fn, ctx)
     if ctx === nothing
         return data -> fn(data...)
@@ -1743,9 +1711,18 @@ end
 Setup the router.
 =#
 function boot(router)
-    appdir = joinpath(CONFIG.db, "keys")
+    if !isdir(CONFIG.db)
+        mkdir(CONFIG.db)
+    end
+
+    appdir = keys_dir()
     if !isdir(appdir)
-        mkpath(appdir)
+        mkdir(appdir)
+    end
+
+    twin_dir = twins_dir()
+    if !isdir(twin_dir)
+        mkdir(twin_dir)
     end
 
     load_configuration(router)
@@ -1781,10 +1758,12 @@ function init(router)
         end
 
         topics = names(CONFIG.broker_plugin)
-        exposed = filter(sym -> sym !== Symbol(CONFIG.broker_plugin), topics)
-        @debug "plugin exposed methods: $exposed"
+        exposed = filter(
+            sym -> isa(sym, Function),
+            [getfield(Rembus.CONFIG.broker_plugin, t) for t in topics]
+        )
         for topic in exposed
-            router.topic_function[String(topic)] = getfield(CONFIG.broker_plugin, topic)
+            router.topic_function[string(topic)] = topic
         end
     end
 

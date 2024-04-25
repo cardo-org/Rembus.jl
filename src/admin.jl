@@ -96,7 +96,7 @@ end
 
 function admin_command(router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
-        return AdminResMsg(msg.id, STS_GENERIC_ERROR, nothing)
+        return ResMsg(msg.id, STS_GENERIC_ERROR, nothing)
     end
 
     sts = STS_SUCCESS
@@ -164,8 +164,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         else
             sts = STS_GENERIC_ERROR
         end
-    elseif cmd == TOPICS_CONFIG_CMD
-        # only admins is authorized
+    elseif cmd == PRIVATE_TOPICS_CONFIG_CMD
         if isadmin(router, twin, cmd)
             data = Dict()
             for (topic, cids) in router.topic_auth
@@ -195,24 +194,41 @@ function admin_command(router, twin, msg::AdminReqMsg)
     elseif cmd === DISABLE_ACK_CMD
         twin.qos = fast
     elseif cmd === BROKER_CONFIG_CMD
-        data = router_configuration(router)
+        if isadmin(router, twin, cmd)
+            data = router_configuration(router)
+        else
+            sts = STS_GENERIC_ERROR
+        end
     elseif cmd === LOAD_CONFIG_CMD
-        # first save data to disk and then return the configuration
-        load_configuration(router)
+        if isadmin(router, twin, cmd)
+            load_configuration(router)
+        else
+            sts = STS_GENERIC_ERROR
+        end
     elseif cmd === SAVE_CONFIG_CMD
-        # first save data to disk and then return the configuration
-        save_configuration(router)
-    elseif cmd === RESET_ROUTER_CMD
-        empty!(router.topic_impls)
-        empty!(router.topic_interests)
+        if isadmin(router, twin, cmd)
+            save_configuration(router)
+        else
+            sts = STS_GENERIC_ERROR
+        end
     elseif cmd == SHUTDOWN_CMD
-        @async shutdown_caronte(router)
+        if isadmin(router, twin, cmd)
+            @async shutdown_caronte(router)
+        else
+            sts = STS_GENERIC_ERROR
+        end
     elseif cmd == ENABLE_DEBUG_CMD
-        CONFIG.debug_modules = [Rembus, Visor]
+        if isadmin(router, twin, cmd)
+            CONFIG.debug_modules = [Rembus, Visor]
+        else
+            sts = STS_GENERIC_ERROR
+        end
     elseif cmd == DISABLE_DEBUG_CMD
-        CONFIG.debug_modules = []
-    elseif cmd == UPTIME_CMD
-        data = uptime(router)
+        if isadmin(router, twin, cmd)
+            CONFIG.debug_modules = []
+        else
+            sts = STS_GENERIC_ERROR
+        end
     else
         @error "invalid admin command: $cmd"
         sts = STS_UNKNOWN_ADMIN_CMD

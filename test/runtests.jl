@@ -11,7 +11,7 @@ const GROUP = get(ENV, "GROUP", "all")
 Rembus.CONFIG = Rembus.Settings()
 Rembus.CONFIG.db = "/tmp/caronte_test"
 
-mkpath(joinpath(Rembus.CONFIG.db, "keys"))
+rm(Rembus.CONFIG.db, force=true, recursive=true)
 
 @testset "Rembus" begin
     @testset "unit" begin
@@ -77,6 +77,18 @@ mkpath(joinpath(Rembus.CONFIG.db, "keys"))
             @time @safetestset "wrong_balancer" begin
                 include("integration/test_wrong_balancer.jl")
             end
+            @time @safetestset "admin_commands" begin
+                include("integration/test_admin_commands.jl")
+            end
+            @time @safetestset "indefinite_len" begin
+                include("integration/test_indefinite_len.jl")
+            end
+            @time @safetestset "unexpected_response" begin
+                include("integration/test_unexpected_response.jl")
+            end
+            @time @safetestset "wrong_admin_command" begin
+                include("integration/test_wrong_admin_command.jl")
+            end
         end
         if GROUP == "all" || GROUP == "api"
             @time @safetestset "publish_api" begin
@@ -84,6 +96,9 @@ mkpath(joinpath(Rembus.CONFIG.db, "keys"))
             end
             @time @safetestset "publish_macros" begin
                 include("api/test_publish_macros.jl")
+            end
+            @time @safetestset "publish_ack" begin
+                include("api/test_publish_ack.jl")
             end
             @time @safetestset "request_api" begin
                 include("api/test_request.jl")
@@ -109,6 +124,11 @@ mkpath(joinpath(Rembus.CONFIG.db, "keys"))
             end
             @time @safetestset "park_macro" begin
                 include("park/test_park_macro.jl")
+            end
+        end
+        if GROUP == "all" || GROUP == "broker"
+            @time @safetestset "broker_plugin" begin
+                include("broker_plugin/test_plugin.jl")
             end
         end
     end

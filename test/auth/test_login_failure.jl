@@ -11,7 +11,7 @@ function init(cid)
     end
 
     # broker side
-    fn = joinpath(Rembus.broker_dir(), "keys", cid)
+    fn = Rembus.key_file(cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end

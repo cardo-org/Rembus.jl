@@ -31,9 +31,14 @@ function zmq_load(socket::ZMQ.Socket)
     ptype = type & 0x3f
     flags = type & 0xc0
     if ptype == TYPE_PUB
-        topic = header[2]
-        h = UInt128(hash(topic)) + UInt128(hash(data)) << 64
-        msg = PubSubMsg(topic, dataframe_if_tagvalue(decode(data)), flags, h)
+        if flags == ACK_FLAG
+            ackid = bytes2id(header[2])
+            topic = header[3]
+        else
+            ackid = 0
+            topic = header[2]
+        end
+        msg = PubSubMsg(topic, dataframe_if_tagvalue(decode(data)), flags, ackid)
     elseif ptype == TYPE_RPC
         id = bytes2id(header[2])
         topic = header[3]
@@ -62,14 +67,19 @@ The decoding is performed at the component side.
 =#
 function connected_socket_load(packet)
     payload = decode(packet)
-
     ptype = payload[1] & 0x3f
     flags = payload[1] & 0xc0
     if ptype == TYPE_PUB
-        h = UInt128(hash(payload[2])) + UInt128(hash(payload[3])) << 64
-        data = dataframe_if_tagvalue(payload[3])
+        if flags == ACK_FLAG
+            ackid = bytes2id(payload[2])
+            data = dataframe_if_tagvalue(payload[4])
+            return PubSubMsg(payload[3], data, flags, ackid)
+        else
+            ackid = 0
+            data = dataframe_if_tagvalue(payload[3])
+            return PubSubMsg(payload[2], data, flags, ackid)
+        end
         #                  topic     data
-        return PubSubMsg(payload[2], data, flags, h)
     elseif ptype == TYPE_RPC
         if length(payload) == 5
             data = dataframe_if_tagvalue(payload[5])
@@ -138,8 +148,9 @@ function broker_parse(pkt)
         @debug "<<message: RESPONSE, id:$id, status: $status"
         return ResMsg(bytes2id(id), status, io, flags)
     elseif ptype == TYPE_ACK
-        @debug "<<message ACK: id: $(payload[2])"
-        return AckMsg(bytes2id(payload[2]))
+        id = decode_internal(io, Val(TYPE_2))
+        @debug "<<message ACK: id: $id)"
+        return AckMsg(bytes2id(id))
     elseif ptype == TYPE_REGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
@@ -470,14 +481,15 @@ data2message(data::ZMQ.Message) = Vector{UInt8}(data)
 
 function transport_send(twin::Twin, ws, msg::PubSubMsg)
     if twin.qos === with_ack
-        msg.flags |= 0x80
-        msgid = UInt128(hash(msg.topic)) + UInt128(hash(msg.data)) << 64
+        msg.flags |= ACK_FLAG
+        msgid = id()
         twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msgid
             ), ACK_WAIT_TIME)
+        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
+    else
+        pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
     end
-
-    pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
     broker_transport_write(ws, pkt)
 
 end
@@ -500,17 +512,20 @@ function transport_send(twin::Twin, socket::ZMQ.Socket, msg::PubSubMsg)
     address = twin.router.twin2address[twin.id]
     data = data2message(msg.data)
     if twin.qos === with_ack
-        msg.flags |= 0x80
-        msgid = UInt128(hash(msg.topic)) + UInt128(hash(data)) << 64
+        msg.flags |= ACK_FLAG
+        msgid = id()
         twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msgid
             ), ACK_WAIT_TIME)
+        header = encode([TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic])
+    else
+        header = encode([TYPE_PUB | msg.flags, msg.topic])
     end
 
     lock(zmqsocketlock) do
         send(socket, address, more=true)
         send(socket, Message(), more=true)
-        send(socket, encode([TYPE_PUB | msg.flags, msg.topic]), more=true)
+        send(socket, header, more=true)
         send(socket, data, more=true)
         send(socket, MESSAGE_END, more=false)
     end
@@ -831,7 +846,7 @@ function transport_read(sock::TCPSocket)
     while true
         headers = read(sock, 1)
         if isempty(headers)
-            throw(ConnectionClosed())
+            return headers # empty response
         end
         type = headers[1]
         if type === HEADER_LEN1

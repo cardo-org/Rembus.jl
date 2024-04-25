@@ -6,7 +6,7 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
 function load_pages(twin_id::AbstractString)
-    tdir = joinpath(twindir(), twin_id)
+    tdir = joinpath(twins_dir(), twin_id)
     if !isdir(tdir)
         mkdir(tdir)
     end
@@ -85,16 +85,12 @@ function save_token_app(df)
     CSV.write(fn, df)
 end
 
-function twindir()
-    if !isdir(CONFIG.db)
-        mkdir(CONFIG.db)
-    end
-    twin_dir = joinpath(CONFIG.db, "twins")
-    if !isdir(twin_dir)
-        mkdir(twin_dir)
-    end
-    twin_dir
-end
+twins_dir() = joinpath(CONFIG.db, "twins")
+
+keys_dir() = joinpath(CONFIG.db, "keys")
+
+key_file(cid::AbstractString) = joinpath(CONFIG.db, "keys", cid)
+
 
 function save_table(router_tbl, filename)
     if !isdir(CONFIG.db)
@@ -139,21 +135,21 @@ function save_admins(router)
 end
 
 function save_pubkey(cid::AbstractString, pubkey)
-    fn = joinpath(CONFIG.db, "keys", cid)
+    fn = key_file(cid)
     open(fn, "w") do io
         write(io, pubkey)
     end
 end
 
 function remove_pubkey(cid::AbstractString)
-    fn = joinpath(CONFIG.db, "keys", cid)
+    fn = key_file(cid)
     if isfile(fn)
         rm(fn)
     end
 end
 
 function pubkey_file(cid::AbstractString)
-    fn = joinpath(CONFIG.db, "keys", cid)
+    fn = key_file(cid)
 
     if isfile(fn)
         return fn
@@ -162,7 +158,7 @@ function pubkey_file(cid::AbstractString)
     end
 end
 
-isregistered(cid::AbstractString) = isfile(joinpath(CONFIG.db, "keys", cid))
+isregistered(cid::AbstractString) = isfile(key_file(cid))
 
 function load_impl_table(router)
     try
@@ -344,7 +340,7 @@ end
 
 function test_file(file::String)
     count = 0
-    tdir = twindir()
+    tdir = twins_dir()
     fn = joinpath(tdir, file)
     if isfile(fn)
         open(fn, "r") do f

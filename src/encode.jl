@@ -266,12 +266,22 @@ function add_payload(io, payload)
 end
 
 function encode_partial(io, data::Vector)
-    type = data[1]
+    type = data[1] & 0x3f
     if type == TYPE_PUB
-        write(io, 0x83)
+        if (data[1] & 0xc0) == ACK_FLAG
+            write(io, 0x84)
+        else
+            write(io, 0x83)
+        end
         encode(io, data[1]) # type
-        encode(io, data[2]) # topic
-        add_payload(io, data[3])
+        if (data[1] & 0xc0) == ACK_FLAG
+            encode(io, data[2]) # msgid
+            encode(io, data[3]) # topic
+            add_payload(io, data[4])
+        else
+            encode(io, data[2]) # topic
+            add_payload(io, data[3])
+        end
     elseif type == TYPE_RPC
         write(io, 0x85)
         encode(io, data[1]) # type
@@ -285,6 +295,5 @@ function encode_partial(io, data::Vector)
         encode(io, data[2]) # id
         encode(io, data[3]) # status
         add_payload(io, data[4])
-    else
     end
 end

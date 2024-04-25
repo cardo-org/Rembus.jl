@@ -41,7 +41,7 @@ const AUTHORIZE_CMD = "authorize"
 const UNAUTHORIZE_CMD = "unauthorize"
 const PRIVATE_TOPIC_CMD = "private_topic"
 const PUBLIC_TOPIC_CMD = "public_topic"
-const TOPICS_CONFIG_CMD = "topics_config"
+const PRIVATE_TOPICS_CONFIG_CMD = "private_topics_config"
 const BROKER_CONFIG_CMD = "broker_config"
 const LOAD_CONFIG_CMD = "load_config"
 const SAVE_CONFIG_CMD = "save_config"
@@ -84,6 +84,8 @@ const STS_SHUTDOWN::UInt8 = 100
 
 # Rembus timeout
 const STS_TIMEOUT::UInt8 = 70
+
+const ACK_FLAG = 0x80
 
 const TYPE_0 = zero(UInt8)
 const TYPE_1 = one(UInt8) << 5

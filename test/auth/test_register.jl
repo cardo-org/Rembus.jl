@@ -15,6 +15,32 @@ function run()
 
     Rembus.register(url, uid, pin)
 
+    # private key was created
+    @test isfile(Rembus.pkfile(cmp.id))
+
+    try
+        # wrong token
+        Rembus.register("mycomponent", uid, "00000000")
+        @test false
+    catch e
+        @info "[test_register] expected error: $e"
+        @test true
+    end
+
+    # move private key to test the case another client try to register
+    # with the same name
+    pkfile = Rembus.pkfile(cid)
+    mv(pkfile, "$pkfile.staged")
+    try
+        # register again
+        Rembus.register(url, uid, pin)
+        @test false
+    catch e
+        @info "[test_register] expected error: $e"
+        @test true
+    end
+    mv("$pkfile.staged", pkfile)
+
     # check configuration
     # component_owner file contains the component component
     df = Rembus.load_token_app()
@@ -22,8 +48,6 @@ function run()
     @test df[df.component.==cmp.id, :component][1] === cmp.id
     @test df[df.component.==cmp.id, :uid][1] === uid
 
-    # private key was created
-    @test isfile(Rembus.pkfile(cmp.id))
 
     # public key was provisioned
     fname = Rembus.pubkey_file(cmp.id)
@@ -50,6 +74,14 @@ function unregister()
     client = tryconnect(url)
 
     try
+        Rembus.unregister(client, "wrong_cid")
+        @test false
+    catch e
+        @info "[unregister]: expected error: $e"
+        @test true
+    end
+
+    try
         Rembus.unregister(client, cid)
 
         df = Rembus.load_token_app()
@@ -68,6 +100,18 @@ function unregister()
     finally
         close(client)
     end
+
+    client = tryconnect("public_component")
+    try
+        Rembus.unregister(client, "some_cid")
+        @test false
+    catch e
+        @info "[unregister]: expected error: $e"
+        @test true
+    finally
+        close(client)
+    end
+
 end
 
 

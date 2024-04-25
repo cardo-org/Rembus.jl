@@ -60,12 +60,9 @@ export enable_ack, disable_ack
 export authorize, unauthorize
 export private_topic, public_topic
 export provide
-export admin
 export close
-export enable_debug, disable_debug
 export isconnected
 export rembus
-export setting
 export shared
 export set_balancer
 export forever
@@ -77,6 +74,7 @@ export RembusError
 export RembusTimeout
 export RembusDisconnect
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
+export SmallInteger
 
 include("constants.jl")
 include("configuration.jl")
@@ -231,7 +229,6 @@ Thrown when a rembus connection get unexpectedly down.
 """
 struct RembusDisconnect <: RembusException
 end
-
 
 function rembuserror(raise::Bool=true; code, cid=nothing, topic=nothing, reason=nothing)
     if code == STS_METHOD_NOT_FOUND
@@ -1167,7 +1164,6 @@ function rembus_handler(rb, msg, receiver)
         catch e
             @showerror e
             io = IOBuffer()
-            showerror(io, e)
             return STS_METHOD_EXCEPTION, String(take!(io))
         end
     elseif haskey(rb.receiver, "*")
@@ -1220,7 +1216,7 @@ function handle_input(rb, msg)
             response = ResMsg(msg.id, sts, result)
             @debug "response: $response"
             transport_send(rb.socket, response)
-        elseif isa(msg, PubSubMsg) && (msg.flags & 0x80) == 0x80
+        elseif isa(msg, PubSubMsg) && (msg.flags & ACK_FLAG) == ACK_FLAG
             # check if ack is enabled
             # @debug "$msg sending Ack with hash=$(msg.hash)"
             transport_send(rb.socket, AckMsg(msg.hash))
@@ -1294,7 +1290,7 @@ function read_socket(socket, process, rb, isconnected::Condition)
                 @debug "[$(rb.client.id)] connection closed"
             end
         end
-        @info "[$process] socket closed"
+        @debug "[$process] connection closed"
     catch e
         @debug "[$(rb.client.id)] connection closed: $e"
         if !isa(e, HTTP.WebSockets.WebSocketError) ||
@@ -1735,44 +1731,65 @@ function assert_rembus(process::Visor.Process)
     end
 end
 
-function enable_debug(rb::RBHandle)
-    return rpcreq(rb, AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_DEBUG_CMD)))
+function enable_debug(rb::RBHandle; exceptionerror=true)
+    return rpcreq(
+        rb,
+        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_DEBUG_CMD)),
+        exceptionerror=exceptionerror
+    )
 end
 
-function disable_debug(rb::RBHandle)
-    return rpcreq(rb, AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => DISABLE_DEBUG_CMD)))
+function disable_debug(rb::RBHandle; exceptionerror=true)
+    return rpcreq(
+        rb,
+        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => DISABLE_DEBUG_CMD)),
+        exceptionerror=exceptionerror
+    )
 end
 
 function broker_config(rb::RBHandle; exceptionerror=true)
-    return rpcreq(rb,
+    return rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => BROKER_CONFIG_CMD)),
         exceptionerror=exceptionerror
     )
 end
 
+function private_topics_config(rb::RBHandle; exceptionerror=true)
+    return rpcreq(
+        rb,
+        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => PRIVATE_TOPICS_CONFIG_CMD)),
+        exceptionerror=exceptionerror
+    )
+end
+
 function load_config(rb::RBHandle; exceptionerror=true)
-    return rpcreq(rb,
+    return rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => LOAD_CONFIG_CMD)),
         exceptionerror=exceptionerror
     )
 end
 
 function save_config(rb::RBHandle; exceptionerror=true)
-    return rpcreq(rb,
+    return rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => SAVE_CONFIG_CMD)),
         exceptionerror=exceptionerror
     )
 end
 
 function disable_ack(rb::RBHandle; exceptionerror=true)
-    return rpcreq(rb,
+    return rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => DISABLE_ACK_CMD)),
         exceptionerror=exceptionerror
     )
 end
 
 function enable_ack(rb::RBHandle, timeout=5; exceptionerror=true)
-    return rpcreq(rb,
+    return rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_ACK_CMD)),
         exceptionerror=exceptionerror
     )
@@ -1784,7 +1801,8 @@ end
 Stop the delivery of published message.
 """
 function unreactive(rb::RBHandle; exceptionerror=true)
-    response = rpcreq(rb,
+    response = rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => false)),
         exceptionerror=exceptionerror
     )
@@ -1800,7 +1818,8 @@ Start the delivery of published messages for which there was declared
 an interest with [`subscribe`](@ref).
 """
 function reactive(rb::RBHandle; exceptionerror=true)
-    response = rpcreq(rb,
+    response = rpcreq(
+        rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => true)),
         exceptionerror=exceptionerror
     )
@@ -2113,6 +2132,8 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
         end
     elseif response.status == STS_SUCCESS
         outcome = response.data
+    elseif (response.status == STS_SHUTDOWN)
+        outcome = "shutting down"
     else
         outcome = rembuserror(exceptionerror, code=response.status,
             cid=rb.client.id,
@@ -2126,8 +2147,7 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
     return outcome
 end
 
-function broker_shutdown()
-    admin = connect("admin")
+function broker_shutdown(admin::RBConnection)
     rpcreq(admin, AdminReqMsg("__config__", Dict(COMMAND => SHUTDOWN_CMD)))
 end
 

@@ -87,6 +87,8 @@ struct ResMsg{T} <: RembusMsg
     end
 end
 
+Base.show(io::IO, message::ResMsg) = show(io, "msgid:$(message.id) status:$(message.status)")
+
 struct Register <: RembusMsg
     id::UInt128
     cid::String # client name

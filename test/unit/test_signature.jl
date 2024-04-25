@@ -27,8 +27,10 @@ end
 cid = "plain_test"
 secret = "pippo"
 
+mkpath(Rembus.keys_dir())
+
 client_fn = Rembus.pkfile(cid)
-server_fn = joinpath(Rembus.CONFIG.db, "keys", cid)
+server_fn = Rembus.key_file(cid)
 @info "secret file: $client_fn"
 
 # create client and server files
@@ -65,7 +67,7 @@ pubkey = Rembus.create_private_key(cid)
 mv("$(client_fn).tmp", client_fn, force=true)
 
 # create public secret
-server_fn = joinpath(Rembus.CONFIG.db, "keys", cid)
+server_fn = Rembus.key_file(cid)
 open(server_fn, "w") do f
     write(f, pubkey)
 end

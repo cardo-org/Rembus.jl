@@ -96,12 +96,12 @@ end
 
 function caronte_reset()
     Rembus.CONFIG = Rembus.Settings()
-    foreach(d -> rm(d, recursive=true), readdir(Rembus.twindir(), join=true))
+    foreach(d -> rm(d, recursive=true), readdir(Rembus.twins_dir(), join=true))
     foreach(rm, filter(isfile, readdir(Rembus.CONFIG.db, join=true)))
 end
 
 function remove_keys(cid)
-    for fn in [Rembus.pkfile(cid), joinpath(Rembus.broker_dir(), "keys", cid)]
+    for fn in [Rembus.pkfile(cid), Rembus.key_file(cid)]
         @info "removing $fn"
         rm(fn, force=true)
     end
