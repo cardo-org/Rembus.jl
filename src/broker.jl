@@ -285,17 +285,20 @@ function verify_signature(twin, msg)
 end
 
 #=
-    setidentity(router, twin, msg)
+    setidentity(router, twin, msg; isauth=false, paging=true)
 
 Update twin identity parameters.
 =#
-function setidentity(router, twin, msg, isauth=false)
+function setidentity(router, twin, msg; isauth=false, paging=true)
     # get the eventually created twin associate with cid
     namedtwin = create_twin(msg.cid, router)
     # move the opened socket
     namedtwin.sock = twin.sock
     #create a pager
-    namedtwin.pager = Pager(namedtwin)
+    if paging
+        namedtwin.pager = Pager(namedtwin)
+    end
+
     # destroy the anonymous process
     destroy_twin(twin, router)
     namedtwin.hasname = true
@@ -331,7 +334,7 @@ function attestation(router, twin, msg, authenticate=true)
         if authenticate
             login(router, twin, msg)
         end
-        authtwin = setidentity(router, twin, msg, authenticate)
+        authtwin = setidentity(router, twin, msg, isauth=authenticate)
     catch e
         @error "[$(msg.cid)] attestation: $e"
         sts = STS_GENERIC_ERROR
@@ -659,34 +662,10 @@ function anonymous_twin_receiver(router, twin)
             end
             msg::RembusMsg = broker_parse(payload)
             @mlog("[$(twin.id)] <- $(prettystr(msg))")
-
             if isa(msg, IdentityMsg)
-                @debug "[$twin] auth identity: $(msg.cid)"
-                if isempty(msg.cid)
-                    transport_send(twin, ws, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid"))
-                end
-                # close connection if someone with the same cid is already connected
-                named = named_twin(msg.cid, router)
-                if named !== nothing && !offline(named)
-                    @warn "a component with id [$(msg.cid)] is already connected"
-                    ## close(ws)
-                    transport_send(twin, ws, ResMsg(
-                        msg.id, STS_GENERIC_ERROR, "already connected"
-                    ))
-                else
-                    # check if cid is registered
-                    rembus_login = isfile(key_file(msg.cid))
-
-                    if rembus_login
-                        # authentication mode, send the challenge
-                        response = challenge(router, twin, msg)
-                    else
-                        authtwin = setidentity(router, twin, msg)
-                        transport_send(authtwin, ws, ResMsg(msg.id, STS_SUCCESS, nothing))
-                        return authtwin
-                    end
-                    @mlog("[$(twin.id)] -> $response")
-                    transport_send(twin, ws, response)
+                auth_twin = identity_check(router, twin, msg, paging=true)
+                if auth_twin !== nothing
+                    return auth_twin
                 end
             elseif isa(msg, Register)
                 register(router, twin, msg)
@@ -861,8 +840,10 @@ function twin_task(self, twin)
             if isshutdown(msg)
                 break
             elseif isa(msg, ResMsg)
+                @mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.sock, msg, true)
             elseif isa(msg, EnableReactiveMsg)
+                @mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.sock, ResMsg(msg.id, STS_SUCCESS, nothing), true)
                 twin.router.unpark(CONFIG.broker_ctx, twin)
             else
@@ -1034,8 +1015,9 @@ end
 
 function caronte_reset()
     rm(twins_dir(), force=true, recursive=true)
-    #foreach(rm, readdir(Rembus.twins_dir(), join=true))
-    foreach(rm, filter(isfile, readdir(Rembus.CONFIG.db, join=true)))
+    if isdir(root_dir())
+        foreach(rm, filter(isfile, readdir(root_dir(), join=true)))
+    end
 end
 
 """
@@ -1161,13 +1143,37 @@ function client_receiver(router::Router, sock)
     return nothing
 end
 
+function identity_check(router, twin, msg; paging=true)
+    @debug "[$twin] auth identity: $(msg.cid)"
+    if isempty(msg.cid)
+        respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid", twin))
+    end
+    named = named_twin(msg.cid, router)
+    if named !== nothing && !offline(named)
+        @warn "a component with id [$(msg.cid)] is already connected"
+        respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "already connected"), twin)
+    else
+        # check if cid is registered
+        rembus_login = isfile(key_file(msg.cid))
+        if rembus_login
+            # authentication mode, send the challenge
+            response = challenge(router, twin, msg)
+            respond(router, response, twin)
+        else
+            authtwin = setidentity(router, twin, msg, paging=paging)
+            respond(router, ResMsg(msg.id, STS_SUCCESS, nothing), authtwin)
+            return authtwin
+        end
+    end
+    return nothing
+end
+
 function client_receiver(router::Embedded, ws)
     cid = string(uuid4())
     twin = create_twin(cid, router)
     @debug "[embedded] client bound to twin id [$cid]"
     # start the trusted client task
     twin.sock = ws
-    @debug "embedded receiver is connected"
     while isopen(ws)
         try
             payload = transport_read(ws)
@@ -1183,9 +1189,7 @@ function client_receiver(router::Embedded, ws)
             elseif isa(msg, PubSubMsg)
                 pubsub_msg(router, twin, msg)
             elseif isa(msg, IdentityMsg)
-                dare = challenge(router, twin, msg)
-                response = Msg(TYPE_RESPONSE, dare, twin)
-                respond(router, response)
+                identity_check(router, twin, msg, paging=false)
             elseif isa(msg, Attestation)
                 attestation(router, twin, msg)
             elseif isa(msg, AckMsg)
@@ -1537,7 +1541,9 @@ function respond(router::Router, msg::Msg)
     return nothing
 end
 
-respond(router::Embedded, msg::Msg) = put!(msg.twchannel.process.inbox, msg)
+respond(::Embedded, msg::Msg) = put!(msg.twchannel.process.inbox, msg)
+
+respond(::AbstractRouter, msg::RembusMsg, twin::Twin) = put!(twin.process.inbox, msg)
 
 function uptime(router)
     utime = time() - router.start_ts

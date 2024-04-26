@@ -10,7 +10,7 @@ macro start_caronte(init, args)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
         if !running
-            caronte_reset()
+            Rembus.caronte_reset()
             fn = $(esc(init))
             if fn !== nothing
                 fn()
@@ -92,12 +92,6 @@ function tryconnect(id)
         end
         sleep(1)
     end
-end
-
-function caronte_reset()
-    Rembus.CONFIG = Rembus.Settings()
-    foreach(d -> rm(d, recursive=true), readdir(Rembus.twins_dir(), join=true))
-    foreach(rm, filter(isfile, readdir(Rembus.CONFIG.db, join=true)))
 end
 
 function remove_keys(cid)

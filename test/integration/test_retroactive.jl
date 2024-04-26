@@ -33,13 +33,15 @@ function run()
 
     close(subscriber)
     publish(client, topic, UInt8(1))
+    sleep(1)
 
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
     subscribe(subscriber, topic, consume, true)
     reactive(subscriber)
 
-    sleep(0.2)
+    #sleep(0.2)
+    sleep(2)
     @test bag.broadcast_received === true
 
     for cli in [client, subscriber]

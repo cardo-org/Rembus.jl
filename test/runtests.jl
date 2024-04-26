@@ -117,6 +117,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             @time @safetestset "register" begin
                 include("auth/test_register.jl")
             end
+            @time @safetestset "login_failure" begin
+                include("auth/test_login_failure.jl")
+            end
         end
         if GROUP == "all" || GROUP == "park"
             @time @safetestset "park" begin

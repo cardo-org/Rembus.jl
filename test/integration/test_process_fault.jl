@@ -19,7 +19,7 @@ function run()
     # Component Under Test
     cid = "test_process"
 
-    caronte_reset()
+    Rembus.caronte_reset()
 
     Visor.trace_event = trace
     supervise([rembus(cid)], intensity=3)

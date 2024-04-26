@@ -54,6 +54,26 @@ function run(request_url, subscriber_url, exposer_url)
     res = rpc(client, rpc_topic, request_arg)
     @test res == 2
 
+    res = direct(client, "test_request_impl", rpc_topic, request_arg)
+    @test res == 2
+
+    try
+        res = direct(client, "test_request_impl", "unknow_service", request_arg)
+    catch e
+        @test isa(e, Rembus.RpcMethodNotFound)
+        @test e.cid === "test_request"
+        @test e.topic === "unknow_service"
+    end
+
+    try
+        res = direct(client, "wrong_target", rpc_topic, request_arg)
+    catch e
+        @test isa(e, Rembus.RembusError)
+        @test e.code === Rembus.STS_TARGET_NOT_FOUND
+        @test e.cid === "test_request"
+        @test e.topic === rpc_topic
+    end
+
     try
         res = rpc(implementor, rpc_topic, exceptionerror=true)
         @test 0 == 1
@@ -112,6 +132,7 @@ Rembus.CONFIG.zmq_ping_interval = 0
 Rembus.CONFIG.ws_ping_interval = 0
 
 function run()
+    #run("zmq://:8002/test_request", "zmq://:8002/test_request_sub", "zmq://:8002/test_request_impl")
     for exposer_url in ["zmq://:8002/test_request_impl", "test_request_impl"]
         for subscriber_url in ["zmq://:8002/test_request_sub", "test_request_sub"]
             for request_url in ["zmq://:8002/test_request", "test_request"]

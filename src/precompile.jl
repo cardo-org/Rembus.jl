@@ -129,20 +129,29 @@ end
 mutable struct Holder
     valuemap::Vector
     Holder() = new([ # type of value received => value sent
-        UInt8 => Int(1),
-        UInt8 => 255,
-        UInt16 => 256,
-        UInt32 => 65536,
-        Int8 => -1,
-        Int16 => -129,
-        Int32 => -40000,
-        Float32 => Float32(1.2),
+        SmallInteger => SmallInteger(UInt(1)),
+        SmallInteger => SmallInteger(1),
+        SmallInteger => SmallInteger(-1),
+        BigInt => BigInt(1),
+        BigInt => BigInt(-1),
+        UInt8 => Int8(1),
+        UInt8 => UInt8(255),
+        UInt16 => UInt16(256),
+        UInt32 => UInt32(65536),
+        UInt64 => UInt64(1),
+        Int8 => Int8(-1),
+        Int16 => Int16(-129),
+        Int32 => Int32(-40000),
+        Int64 => Int64(1),
+        Float16 => Float16(1.0),
+        Float32 => Float32(1.1),
         Float64 => Float64(1.2),
         DataFrame => DataFrame(:a => [1, 2]),
         String => "foo",
         Dict => Dict(1 => 2),
-        Vector => [1, 2]
-    ])
+        Vector => [1, 2],
+        Rembus.UndefLength => Rembus.UndefLength([1, 2]),
+        Undefined => Undefined()])
 end
 
 function type_consumer(bag, n)

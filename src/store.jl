@@ -7,12 +7,16 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 function load_pages(twin_id::AbstractString)
     tdir = joinpath(twins_dir(), twin_id)
-    if !isdir(tdir)
-        mkdir(tdir)
+    pages = []
+    try
+        if !isdir(tdir)
+            mkdir(tdir)
+        end
+        # Load the latest page if any
+        pages = readdir(tdir, join=true, sort=true)
+    catch e
+        @error "[$twin_id] load_pages error: $e"
     end
-
-    # Load the latest page if any
-    pages = readdir(tdir, join=true, sort=true)
     return pages
 end
 
@@ -84,6 +88,8 @@ function save_token_app(df)
     fn = joinpath(CONFIG.db, "component_owner.csv")
     CSV.write(fn, df)
 end
+
+root_dir() = CONFIG.db
 
 twins_dir() = joinpath(CONFIG.db, "twins")
 

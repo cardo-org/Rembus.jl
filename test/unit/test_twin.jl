@@ -19,9 +19,13 @@ supervise(process(Rembus.twin_task, args=(twin,)), wait=false)
 router.address2twin[identity] = twin
 router.topic_impls["topic"] = Set([twin])
 
+msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", "mydata"), twin)
+@info "build msg: $msg"
+msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", zeros(UInt8, 11)), twin)
+@info "build msg: $msg"
+
 yield()
 Rembus.destroy_twin(twin, router)
 
 @test isempty(router.topic_impls)
 @test !haskey(router.address2twin, identity)
-

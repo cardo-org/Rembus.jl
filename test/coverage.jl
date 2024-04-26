@@ -1,9 +1,12 @@
 using Pkg
 using Coverage
 
-Pkg.test("Rembus", coverage=true)
-coverage = process_folder()
-LCOV.writefile("lcov.info", coverage)
+try
+    Pkg.test("Rembus", coverage=true)
+finally
+    coverage = process_folder()
+    LCOV.writefile("lcov.info", coverage)
+end
 
 for dir in [
     "src",

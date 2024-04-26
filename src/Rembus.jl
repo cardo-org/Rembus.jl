@@ -1173,9 +1173,9 @@ function rembus_handler(rb, msg, receiver)
         catch e
             rethrow()
         end
+    else
+        return STS_METHOD_NOT_FOUND, "method $fn not found"
     end
-    # no response: it is a broadcasted message or a published message
-    return STS_SUCCESS, nothing
 end
 
 function handle_input(rb, msg)
@@ -2072,7 +2072,7 @@ end
 
 function direct(
     rb::RBHandle, target::AbstractString, topic::AbstractString, data=nothing;
-    exceptionerror=false
+    exceptionerror=true
 )
     return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
 end

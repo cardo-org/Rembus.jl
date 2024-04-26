@@ -48,7 +48,7 @@ function run()
             @rpc rpc_service(1)
             @test false
         catch e
-            @info "[test_embedded] rpc_service error: $e"
+            @info "[test_embedded] expected rpc_service error: $e"
             @test isa(e, Rembus.RpcMethodException)
         end
 
@@ -56,20 +56,35 @@ function run()
             result = @rpc rpc_fault(0, 0)
             @test false
         catch e
-            @info "[test_embedded] rpc_fault error: $e"
+            @info "[test_embedded] expected rpc_fault error: $e"
             @test isa(e, Rembus.RpcMethodException)
+        end
+
+        try
+            result = @rpc rpc_unknow()
+        catch e
+            @info "[test_embedded] expected rpc_unknow error: $e"
+            @test isa(e, Rembus.RpcMethodNotFound)
         end
 
         @publish signal(smoke_message)
         @terminate
 
-        rb = connect()
+        rb = connect("mycomponent")
+
         publish(rb, "signal", smoke_message)
 
         # if an error on the embedded side occurred the connection is closed
-        @test Rembus.isconnected(rb)
+        @test isconnected(rb)
 
         close(rb)
+        @info "second round"
+        sleep(3)
+        # reconnect
+        rb = connect("mycomponent")
+        @test isconnected(rb)
+        close(rb)
+
     catch e
         @error "[test_embedded] error: $e"
         @test false

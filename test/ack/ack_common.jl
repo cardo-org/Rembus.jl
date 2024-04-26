@@ -10,7 +10,7 @@ function consume(data)
     #if (count % 10000) == 0
     if (count % 10000) == 0
         delta = time() - ts
-        @info "*** $count records received in $delta secs"
+        @info "$count records received in $delta secs"
     end
     #print(".")
 end
