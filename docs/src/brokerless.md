@@ -17,7 +17,7 @@ for others components and respond only to authorized components:
 using Rembus
 
 function my_service(session, x,y)
-    isauth(session) || error("unauthorized")
+    isauthorized(session) || error("unauthorized")
     return x+y
 end
 
@@ -52,7 +52,7 @@ a value to the rpc client.
 This means that one `expose` API works in place of `expose` and `subscribe` APIs required for configuring a broker.
 
 The signature of `mymethod` must have a `session` object as first argument. The `session` object may be
-useful for serving only authorized components with `isauth(session)`.
+useful for serving only authorized components with `isauthorized(session)`.
 
 For example if rpc method is invoked with two arguments:
 

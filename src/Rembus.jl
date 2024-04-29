@@ -47,7 +47,7 @@ export @terminate
 
 # rembus client api
 export connect
-export isauth
+export isauthorized
 export embedded
 export serve
 export expose, unexpose

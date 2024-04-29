@@ -103,7 +103,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
     data = nothing
     cmd = msg.data[COMMAND]
     if cmd == ADD_INTEREST_CMD
-        if isauth(router, twin, msg.topic)
+        if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(ADD_INTEREST_CMD), router, twin, msg) do
                 retroactive = get(msg.data, RETROACTIVE, true)
                 twin.retroactive[msg.topic] = retroactive
@@ -117,7 +117,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == ADD_IMPL_CMD
-        if isauth(router, twin, msg.topic)
+        if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(ADD_IMPL_CMD), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     push!(router.topic_impls[msg.topic], twin)
@@ -129,7 +129,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == REMOVE_INTEREST_CMD
-        if isauth(router, twin, msg.topic)
+        if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(REMOVE_INTEREST_CMD), router, twin, msg) do
                 if haskey(router.topic_interests, msg.topic)
                     if twin in router.topic_interests[msg.topic]
@@ -149,7 +149,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == REMOVE_IMPL_CMD
-        if isauth(router, twin, msg.topic)
+        if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(REMOVE_IMPL_CMD), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     if twin in router.topic_impls[msg.topic]

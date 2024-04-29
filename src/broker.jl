@@ -492,7 +492,7 @@ rpc_request(router::Embedded, twin, msg) = embedded_msg(router, twin, msg)
 pubsub_msg(router::Embedded, twin, msg) = embedded_msg(router, twin, msg)
 
 function rpc_request(router, twin, msg)
-    if !isauth(router, twin, msg.topic)
+    if !isauthorized(router, twin, msg.topic)
         put!(
             twin.process.inbox,
             Msg(TYPE_RESPONSE, ResMsg(msg, STS_GENERIC_ERROR, "unauthorized"), twin)
@@ -526,7 +526,7 @@ function rpc_request(router, twin, msg)
 end
 
 function pubsub_msg(router, twin, msg)
-    if !isauth(router, twin, msg.topic)
+    if !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
     else
         # msg is routable, get it to router
@@ -1477,18 +1477,18 @@ function broadcast!(router, msg)
 end
 
 """
-    isauth(session)
+    isauthorized(session)
 
 Return true if the connected component is authenticated.
 """
-isauth(session) = session.isauth
+isauthorized(session) = session.isauth
 
 #=
-    isauth(router::Router, twin::Twin, topic::AbstractString)
+    isauthorized(router::Router, twin::Twin, topic::AbstractString)
 
 Return true if topic is public or client is authorized to bind to topic.
 =#
-function isauth(router::Router, twin::Twin, topic::AbstractString)
+function isauthorized(router::Router, twin::Twin, topic::AbstractString)
     # check if topic is private
     if haskey(router.topic_auth, topic)
         # check if twin is authorized to bind to topic
