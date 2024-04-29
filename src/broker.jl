@@ -619,12 +619,10 @@ function twin_receiver(router, twin)
     return nothing
 end
 
-function isauthenticated(session)
-    return haskey(session, "isauthenticated") && session["isauthenticated"] == true
-end
+isauthenticated(twin) = twin.isauth
 
 function challenge(router, twin, msg)
-    if isauthenticated(twin.session)
+    if isauthenticated(twin)
         error("already authenticated")
     elseif haskey(router.topic_function, "challenge")
         challenge = router.topic_function["challenge"](twin)
