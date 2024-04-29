@@ -129,6 +129,11 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
                 include("park/test_park_macro.jl")
             end
         end
+        if GROUP == "all" || GROUP == "zmq"
+            @time @safetestset "zmq" begin
+                include("zmq/test_zmq.jl")
+            end
+        end
         if GROUP == "all" || GROUP == "broker"
             @time @safetestset "broker_plugin" begin
                 include("broker_plugin/test_plugin.jl")

@@ -32,6 +32,10 @@ function rpc_method(bag, rpc_method_arg)
 end
 
 function run(request_url, subscriber_url, exposer_url)
+
+    connect("")
+    @test true
+
     bag = TestBag(false)
     client = tryconnect(request_url)
 
@@ -104,6 +108,16 @@ function run(request_url, subscriber_url, exposer_url)
     end
 
     close(implementor)
+
+    try
+        res = direct(client, "test_request_impl", rpc_topic, request_arg)
+    catch e
+        @test isa(e, Rembus.RembusError)
+        @test e.code === Rembus.STS_TARGET_DOWN
+        @test e.cid === "test_request"
+        @test e.topic === rpc_topic
+    end
+
     try
         res = rpc(client, rpc_topic, timeout=2)
         @test 0 == 1

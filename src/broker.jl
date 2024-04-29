@@ -275,7 +275,6 @@ function verify_signature(twin, msg)
         secret = readline(file)
         plain = encode([challenge, secret])
         digest = MbedTLS.digest(MD_SHA256, plain)
-        @debug "[$twin] digest plain: $plain"
         if digest != msg.signature
             error("authentication failed")
         end
@@ -556,17 +555,13 @@ function receiver_exception(router, twin, e)
             @debug "[$twin] connection closed"
         else
             @error "[$twin] connection closed: $e"
-            @showerror e
         end
     elseif isa(e, InterruptException)
         rethrow()
     elseif isa(e, ArgumentError)
         @error "[$twin] invalid message format: $e"
-        @showerror e
     else
         @error "[$twin] internal error: $e"
-        showerror(stdout, e, catch_backtrace())
-        @showerror e
     end
 end
 
@@ -598,14 +593,8 @@ function twin_receiver(router, twin)
             msg::RembusMsg = broker_parse(payload)
             @mlog("[$(twin.id)] <- $(prettystr(msg))")
 
-            if isa(msg, IdentityMsg)
-                error("identity: already authenticated")
-            elseif isa(msg, Register)
-                error("register: already authenticated")
-            elseif isa(msg, Unregister)
+            if isa(msg, Unregister)
                 unregister(router, twin, msg)
-            elseif isa(msg, Attestation)
-                error("attestation: already authenticated")
             elseif isa(msg, ResMsg)
                 rpc_response(router, twin, msg)
             elseif isa(msg, AdminReqMsg)
@@ -616,6 +605,8 @@ function twin_receiver(router, twin)
                 pubsub_msg(router, twin, msg)
             elseif isa(msg, AckMsg)
                 ack_msg(twin, msg)
+            else
+                error("unexpected rembus message")
             end
         end
     catch e
@@ -669,8 +660,6 @@ function anonymous_twin_receiver(router, twin)
                 end
             elseif isa(msg, Register)
                 register(router, twin, msg)
-            elseif isa(msg, Unregister)
-                unregister(router, twin, msg)
             elseif isa(msg, Attestation)
                 return attestation(router, twin, msg)
             elseif isa(msg, ResMsg)
@@ -681,12 +670,11 @@ function anonymous_twin_receiver(router, twin)
                 rpc_request(router, twin, msg)
             elseif isa(msg, PubSubMsg)
                 pubsub_msg(router, twin, msg)
-            elseif isa(msg, AckMsg)
-                ack_msg(twin, msg)
             end
         end
     catch e
         receiver_exception(router, twin, e)
+        @showerror e
     finally
         end_receiver(twin)
     end
@@ -856,8 +844,6 @@ function twin_task(self, twin)
     end
     @debug "[$twin] task done"
 end
-
-msghash(pkt) = UInt128(hash(pkt.topic)) + UInt128(hash(pkt.data)) << 64
 
 acklock = ReentrantLock()
 
@@ -1745,7 +1731,6 @@ end
 
 function init(router)
     init_log()
-
     boot(router)
     @debug "broker datadir: $(CONFIG.db)"
 

@@ -40,24 +40,27 @@ function run(authorized_component)
     rb = tryconnect(authorized_component)
 
     private_topic(rb, priv_topic)
+    private_topic(rb, another_priv_topic)
     private_topic(rb, priv_service)
 
     authorize(rb, myproducer, priv_topic)
 
-    authorize(rb, myproducer, another_priv_topic)
     authorize(rb, myconsumer, priv_topic)
     authorize(rb, myconsumer, priv_service)
 
     producer = connect(myproducer)
 
+    sleep(0.1)
+    try
+        # authenticating again is considered a protocol error
+        # the connection get closed
+        Rembus.authenticate(producer)
+    catch e
+        @info "[$producer] expected error: $e"
+    end
+
+    producer = connect(myproducer)
     # producer is not an admin
-    #    try
-    #        authorize(producer, myproducer, another_priv_topic)
-    #    catch e
-    #        @debug "expected error: $e" _group = :test
-    #        @test isa(e, Rembus.RembusError)
-    #        @test e.code === Rembus.STS_GENERIC_ERROR
-    #    end
     @test_throws RembusError authorize(producer, myproducer, another_priv_topic)
     @test_throws RembusError unauthorize(producer, myproducer, another_priv_topic)
 
@@ -104,6 +107,8 @@ function run(authorized_component)
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
+
+    publish(producer, another_priv_topic, "some_data")
 
     try
         public_topic(producer, "some_topic")

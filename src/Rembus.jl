@@ -1356,8 +1356,6 @@ function zmq_connect(rb)
         url = brokerurl(rb.client)
         ZMQ.connect(rb.socket, url)
         @async zmq_receive(rb)
-
-        CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
     catch e
         @showerror e
         close(rb.socket)
@@ -1459,7 +1457,7 @@ function attestate(rb, response)
         if isa(e, MbedTLS.MbedException)
             # try with a plain secret
             secret = readline(file)
-            plain = encode([response.data, secret])
+            plain = encode([Vector{UInt8}(response.data), secret])
             hash = MbedTLS.digest(MD_SHA256, plain)
             @debug "[$(rb.client.id)] digest: $hash"
             return Attestation(rb.client.id, hash)
@@ -1488,6 +1486,10 @@ function authenticate(rb)
     if (response.status != STS_SUCCESS)
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
+    else
+        if rb.client.protocol == :zmq
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+        end
     end
     return nothing
 end
@@ -1968,8 +1970,12 @@ end
 # """
 function ping(rb::RBHandle)
     try
-        rpcreq(rb, PingMsg(rb.client.id))
-        CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+        if rb.client.protocol == :zmq
+            if isconnected(rb)
+                rpcreq(rb, PingMsg(rb.client.id))
+            end
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+        end
     catch e
         @debug "[$(rb.client.id)]: pong not received"
         @showerror e
@@ -2132,12 +2138,21 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
         end
     elseif response.status == STS_SUCCESS
         outcome = response.data
+    elseif response.status == STS_CHALLENGE
+        @async resend_attestate(rb, response)
     elseif (response.status == STS_SHUTDOWN)
         outcome = "shutting down"
     else
-        outcome = rembuserror(exceptionerror, code=response.status,
+        if isa(msg, PingMsg)
+            topic = nothing
+        else
+            topic = msg.topic
+        end
+        outcome = rembuserror(
+            exceptionerror,
+            code=response.status,
             cid=rb.client.id,
-            topic=msg.topic,
+            topic=topic,
             reason=response.data)
         if exceptionerror
             throw(outcome)
