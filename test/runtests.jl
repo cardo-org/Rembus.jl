@@ -45,7 +45,7 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
                 include("embedded/test_embedded.jl")
             end
         end
-        if GROUP == "ack"
+        if GROUP == "all" || GROUP == "ack"
             @time @safetestset "ws_ack" begin
                 include("ack/test_ws_ack.jl")
             end
@@ -132,6 +132,11 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         if GROUP == "all" || GROUP == "zmq"
             @time @safetestset "zmq" begin
                 include("zmq/test_zmq.jl")
+            end
+        end
+        if GROUP == "all" || GROUP == "tcp"
+            @time @safetestset "zmq" begin
+                include("tcp/test_tcp.jl")
             end
         end
         if GROUP == "all" || GROUP == "broker"

@@ -1,8 +1,10 @@
 include("ack_common.jl")
 
+Rembus.setup(Rembus.CONFIG)
+
 publisher = "test_ack_pub"
 consumer = "test_ack_sub"
-num_msg = 100000
+num_msg = 1000
 
 count = 0
 

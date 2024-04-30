@@ -113,7 +113,6 @@ function broker_parse(pkt)
     type = read(io, UInt8)
     ptype = type & 0x3f
     flags = type & 0xc0
-
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
@@ -300,7 +299,7 @@ end
 #=
     broker_parse(router::Router, pkt::ZMQPacket)
 
-AAAA The Broker parser of ZeroMQ messages.
+The Broker parser of ZeroMQ messages.
 
 `pkt` is the zeromq message decoded as `[identity, header, data]`.
 =#

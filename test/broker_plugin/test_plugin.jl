@@ -30,12 +30,17 @@ module CarontePlugin
 using Rembus #needed for session()
 
 export add_interest
+export challenge
 export login
 export myfunction
 
 function myfunction(twin)
     @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
     return "hello from caronte plugin"
+end
+
+function challenge(twin)
+    return UInt8[0, 0, 0, 0]
 end
 
 function login(twin, user, hash)

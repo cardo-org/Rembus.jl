@@ -587,7 +587,7 @@ function twin_receiver(router, twin)
             payload = transport_read(ws)
             if isempty(payload)
                 twin.sock = nothing
-                @debug "client [$(twin.id)]: connection close"
+                @debug "component [$(twin.id)]: connection closed"
                 break
             end
             msg::RembusMsg = broker_parse(payload)
@@ -619,12 +619,8 @@ function twin_receiver(router, twin)
     return nothing
 end
 
-isauthenticated(twin) = twin.isauth
-
 function challenge(router, twin, msg)
-    if isauthenticated(twin)
-        error("already authenticated")
-    elseif haskey(router.topic_function, "challenge")
+    if haskey(router.topic_function, "challenge")
         challenge = router.topic_function["challenge"](twin)
     else
         challenge = rand(RandomDevice(), UInt8, 4)
@@ -646,7 +642,7 @@ function anonymous_twin_receiver(router, twin)
             payload = transport_read(ws)
             if isempty(payload)
                 twin.sock = nothing
-                @debug "client [$(twin.id)]: connection close"
+                @debug "component [$(twin.id)]: connection closed"
                 break
             end
             msg::RembusMsg = broker_parse(payload)

@@ -1163,8 +1163,7 @@ function rembus_handler(rb, msg, receiver)
             return receiver(rb, fn, msg)
         catch e
             @showerror e
-            io = IOBuffer()
-            return STS_METHOD_EXCEPTION, String(take!(io))
+            return STS_METHOD_EXCEPTION, string(e)
         end
     elseif haskey(rb.receiver, "*")
         try
@@ -1209,9 +1208,8 @@ function handle_input(rb, msg)
         end
 
         if sts === STS_METHOD_EXCEPTION
-            @warn "[$(msg.topic)]: $result"
+            @warn "[$(msg.topic)] method error: $result"
         end
-
         if isa(msg, RpcReqMsg)
             response = ResMsg(msg.id, sts, result)
             @debug "response: $response"
@@ -1285,7 +1283,7 @@ function read_socket(socket, process, rb, isconnected::Condition)
         while isopen(socket)
             response = transport_read(socket)
             if !isempty(response)
-                @async parse_msg(rb, response)
+                parse_msg(rb, response)
             else
                 @debug "[$(rb.client.id)] connection closed"
             end
