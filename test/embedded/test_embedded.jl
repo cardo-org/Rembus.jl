@@ -90,6 +90,7 @@ function run()
         @test false
     finally
         shutdown()
+        sleep(2)
     end
 
 end

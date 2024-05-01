@@ -13,6 +13,10 @@ function consume(ctx, data)
     global count
     global ts
 
+    if data == 1
+        @info "recv msg $data"
+    end
+
     if current > data
         ctx.ordered = false
         delta = time() - ts
@@ -21,12 +25,10 @@ function consume(ctx, data)
     current = data
 
     count += 1
-    #if (count % 10000) == 0
-    if (count % 100) == 0
+    if (count % 1000) == 0
         delta = time() - ts
         @info "$count records received in $delta secs"
     end
-    #print(".")
 end
 
 function storm(pub)
@@ -55,9 +57,8 @@ function run(publisher, consumer)
     enable_ack(sub)
 
     sleep(0.1)
-    reactive(sub)
-
     subscribe(sub, test_topic, consume, true)
+    reactive(sub)
 
     @async storm(pub)
 
@@ -85,7 +86,3 @@ function run(publisher, consumer)
     @info "end"
     @test ctx.ordered
 end
-
-## # for jit
-## comp = connect("compile_component")
-## close(comp)

@@ -32,7 +32,6 @@ function run()
     # restart caronte
     Rembus.caronte(wait=false, exit_when_done=false)
     sleep(2)
-
     close(component1)
 end
 

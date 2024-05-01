@@ -42,6 +42,7 @@ mutable struct Twin
     qos::QoS
     pager::Union{Nothing,Pager}
     reactive::Bool
+    ack_cond::Dict{UInt128,Threads.Condition}
     process::Visor.Process
 
     Twin(router, id, out_channel) = new(
@@ -58,6 +59,7 @@ mutable struct Twin
         fast,
         nothing,
         false,
+        Dict()
     )
 end
 
@@ -211,17 +213,9 @@ function offline!(twin)
     return nothing
 end
 
-#=
-    destroy_twin(twin, router)
-
-Remove the twin from the system.
-
-Shutdown the process and remove the twin from the router.
-=#
-function destroy_twin(twin, router)
-    if isdefined(twin, :process)
-        Visor.shutdown(twin.process)
-    end
+function cleanup(twin, router::Router)
+    # save the cache
+    save_page(twin)
 
     # Remove from address2twin
     filter!(((k, v),) -> twin != v, router.address2twin)
@@ -244,6 +238,25 @@ function destroy_twin(twin, router)
 
     delete!(router.id_twin, twin.id)
     return nothing
+end
+
+function cleanup(twin, router::Embedded)
+    delete!(router.id_twin, twin.id)
+    return nothing
+end
+
+#=
+    destroy_twin(twin, router)
+
+Remove the twin from the system.
+
+Shutdown the process and remove the twin from the router.
+=#
+function destroy_twin(twin, router)
+    if isdefined(twin, :process)
+        Visor.shutdown(twin.process)
+    end
+    return cleanup(twin, router)
 end
 
 function destroy_twin(twin, router::Embedded)
@@ -543,6 +556,9 @@ function ack_msg(twin, msg)
         if haskey(twin.acktimer, msgid)
             close(twin.acktimer[msgid])
             delete!(twin.acktimer, msgid)
+            lock(twin.ack_cond[msgid]) do
+                notify(twin.ack_cond[msgid])
+            end
         end
     end
 
@@ -834,12 +850,13 @@ function twin_task(self, twin)
         end
     catch e
         @error "twin_task: $e" exception = (e, catch_backtrace())
-        rethrow()
+        #### rethrow()
+    finally
+        cleanup(twin, twin.router)
     end
     @debug "[$twin] task done"
 end
 
-acklock = ReentrantLock()
 
 #=
     handle_ack_timeout(tim, twin, msg, msgid)
@@ -847,15 +864,19 @@ acklock = ReentrantLock()
 Persist a PubSub message in case the acknowledge message is not received.
 =#
 function handle_ack_timeout(tim, twin, msg, msgid)
-    lock(acklock) do
-        if haskey(twin.acktimer, msgid)
-            try
-                twin.router.park(CONFIG.broker_ctx, twin, msg)
-            catch e
-                @error "[$twin] ack_timeout: $e"
-            end
+    if haskey(twin.acktimer, msgid)
+        try
+            twin.router.park(CONFIG.broker_ctx, twin, msg)
+        catch e
+            @error "[$twin] ack_timeout: $e"
         end
-        delete!(twin.acktimer, msgid)
+    end
+    delete!(twin.acktimer, msgid)
+
+    if haskey(twin.ack_cond, msgid)
+        lock(twin.ack_cond[msgid]) do
+            notify(twin.ack_cond[msgid])
+        end
     end
 end
 
@@ -986,6 +1007,15 @@ function command_line()
         "--secure", "-s"
         help = "accept wss and tls connections on BROKER_WS_PORT and BROKER_TCP_PORT"
         action = :store_true
+        "--ws", "-w"
+        help = "accept WebSocket connnections on BROKER_WS_PORT"
+        action = :store_true
+        "--tcp", "-t"
+        help = "accept tcp connnections on BROKER_TCP_PORT"
+        action = :store_true
+        "--zmq", "-z"
+        help = "accept zmq connnections on BROKER_ZMQ_PORT"
+        action = :store_true
         "--debug", "-d"
         help = "enable debug logs"
         action = :store_true
@@ -1027,13 +1057,39 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
     setup(CONFIG)
     router = Router()
 
-    tasks = [
-        supervisor("twins", terminateif=:shutdown),
-        process(broker, args=(router,)),
-        process(serve_tcp, args=(router, issecure), restart=:transient),
-        process(serve_ws, args=(router, issecure), restart=:transient, stop_waiting_after=2.0),
-        process(serve_zeromq, args=(router,), restart=:transient, debounce_time=2)
-    ]
+    tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
+
+    if get(args, "tcp", false)
+        push!(
+            tasks,
+            process(
+                serve_tcp,
+                args=(router, issecure),
+                restart=:transient
+            )
+        )
+    end
+    if get(args, "zmq", false)
+        push!(
+            tasks,
+            process(
+                serve_zeromq,
+                args=(router,),
+                restart=:transient,
+                debounce_time=2)
+        )
+    end
+    if get(args, "ws", false) || (!get(args, "zmq", false) && !get(args, "tcp", false))
+        push!(
+            tasks,
+            process(
+                serve_ws,
+                args=(router, issecure),
+                restart=:transient,
+                stop_waiting_after=2.0)
+        )
+    end
+
     sv = supervise(
         [supervisor("caronte", tasks, strategy=:one_for_all, intensity=0)],
         wait=wait
@@ -1325,8 +1381,9 @@ function serve_tcp(pd, router, issecure=false)
     end
 end
 
-function islistening(wait=5)
-    procs = ["caronte.serve_ws", "caronte.serve_tcp", "caronte.serve_zeromq"]
+function islistening(
+    wait=5; procs=["caronte.serve_ws", "caronte.serve_tcp", "caronte.serve_zeromq"]
+)
     tcount = 0
     while tcount < wait
         if all(p -> getphase(p) === :listen, from.(procs))
@@ -1359,13 +1416,14 @@ function round_robin(router, topic, implementors)
         @debug "[$topic]: $len implementors"
         current_index = get(router.last_invoked, topic, 0)
         if current_index === 0
-            for impl in implementors
+            while (target === nothing) && (current_index < len)
                 current_index += 1
+                impl = implementors[current_index]
                 !isconnected(impl) && continue
                 target = impl
                 router.last_invoked[topic] = current_index
-                break
             end
+            @info "[$topic]: no exposers available"
         else
             cursor = 1
             current_index = current_index >= len ? 1 : current_index + 1

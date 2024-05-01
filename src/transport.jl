@@ -400,6 +400,15 @@ function data2payload(data::ZMQ.Message)
 end
 
 function transport_file_io(msg::PubSubMsg)
+    payload = encode([msg.topic, message2data(msg.data)])
+    len::UInt32 = length(payload)
+    io = IOBuffer(maxsize=4 + len)
+    write(io, len)
+    write(io, payload)
+    return io
+end
+
+function transport_file_io(msg::PubSubMsg{IOBuffer})
     mark(msg.data)
     seek(msg.data, 2)
     payload = read(msg.data)
@@ -478,18 +487,28 @@ end
 # needed by multiple broadcast invocations (reqdata field).
 data2message(data::ZMQ.Message) = Vector{UInt8}(data)
 
-function transport_send(twin::Twin, ws, msg::PubSubMsg)
+transport_send(twin::Twin, ::Nothing, msg) = error("$twin connection closed")
+
+function transport_send(twin::Twin, ws::Union{WebSockets.WebSocket,TCPSocket}, msg::PubSubMsg)
     if twin.qos === with_ack
+
         msg.flags |= ACK_FLAG
         msgid = id()
+        ack_cond = Threads.Condition()
+        twin.ack_cond[msgid] = ack_cond
         twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msgid
             ), ACK_WAIT_TIME)
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
+        broker_transport_write(ws, pkt)
+        lock(ack_cond) do
+            wait(ack_cond)
+        end
+        delete!(twin.ack_cond, msgid)
     else
         pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
+        broker_transport_write(ws, pkt)
     end
-    broker_transport_write(ws, pkt)
 
 end
 
@@ -513,21 +532,39 @@ function transport_send(twin::Twin, socket::ZMQ.Socket, msg::PubSubMsg)
     if twin.qos === with_ack
         msg.flags |= ACK_FLAG
         msgid = id()
+
+        ack_cond = Threads.Condition()
+        twin.ack_cond[msgid] = ack_cond
+
         twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msgid
             ), ACK_WAIT_TIME)
         header = encode([TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic])
+        lock(zmqsocketlock) do
+            send(socket, address, more=true)
+            send(socket, Message(), more=true)
+            send(socket, header, more=true)
+            send(socket, data, more=true)
+            send(socket, MESSAGE_END, more=false)
+        end
+
+        lock(ack_cond) do
+            wait(ack_cond)
+        end
+        delete!(twin.ack_cond, msgid)
+
     else
         header = encode([TYPE_PUB | msg.flags, msg.topic])
+        lock(zmqsocketlock) do
+            send(socket, address, more=true)
+            send(socket, Message(), more=true)
+            send(socket, header, more=true)
+            send(socket, data, more=true)
+            send(socket, MESSAGE_END, more=false)
+        end
+
     end
 
-    lock(zmqsocketlock) do
-        send(socket, address, more=true)
-        send(socket, Message(), more=true)
-        send(socket, header, more=true)
-        send(socket, data, more=true)
-        send(socket, MESSAGE_END, more=false)
-    end
 end
 
 function transport_send(::Twin, ws, msg::RpcReqMsg)

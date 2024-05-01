@@ -42,16 +42,21 @@ function execute_caronte_process(fn, testname; setup=nothing)
         fn()
     finally
         shutdown()
-        sleep(3)
-        if !running
-            Base.kill(p, Base.SIGINT)
-        end
-        sleep(3)
+        sleep(2)
     end
+    if !running
+        Base.kill(p, Base.SIGINT)
+    end
+    sleep(2)
     @info "[$testname] stop"
 end
 
-function execute(fn, testname; setup=nothing, args=Dict())
+function execute(
+    fn,
+    testname;
+    setup=nothing,
+    args=Dict("ws" => true, "zmq" => true, "tcp" => true)
+)
     Rembus.setup(Rembus.CONFIG)
     @start_caronte setup args
     sleep(0.5)

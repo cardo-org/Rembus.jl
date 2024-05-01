@@ -66,7 +66,7 @@ const TYPE_CLOSE::UInt8 = 15
 const REACTIVE_DISABLE::Bool = false
 const REACTIVE_ENABLE::Bool = true
 
-const ACK_WAIT_TIME = 6
+const ACK_WAIT_TIME = 0.5
 
 const STS_SUCCESS::UInt8 = 0
 const STS_GENERIC_ERROR::UInt8 = 10

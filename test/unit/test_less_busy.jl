@@ -5,13 +5,15 @@ ts = 10000;
 msgid = 1
 topic = "mytopic"
 
-struct FakeSocket
+mutable struct FakeSocket
+    connected::Bool
+    FakeSocket() = new(true)
 end
 
 sentdata(t) = Rembus.SentData(
     ts, Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg(topic), t))
 
-Base.isopen(socket::FakeSocket) = true
+Base.isopen(socket::FakeSocket) = socket.connected
 
 router = Rembus.Router()
 
@@ -42,3 +44,8 @@ target = Rembus.less_busy(router, topic, implementors)
 
 @info "target: $target"
 @test target === twin1
+
+twin1.sock.connected = false
+twin2.sock.connected = false
+target = Rembus.less_busy(router, topic, implementors)
+@test target === nothing

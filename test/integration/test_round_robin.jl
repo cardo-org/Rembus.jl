@@ -61,6 +61,9 @@ function run(client_url, server1_url, server2_url, server3_url)
         @info "[round_robin]: $e"
     end
 
+    # no connected exposers
+    @test_throws RpcMethodUnavailable rpc(client, rpc_topic, request_arg)
+
     server1 = connect(server1_url)
     expose(server1, rpc_topic, rpc_server1)
 

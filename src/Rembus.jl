@@ -2205,8 +2205,13 @@ end
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     @compile_workload begin
-        sv = Rembus.caronte(wait=false, exit_when_done=false)
-        Rembus.islistening(10)
+        sv = Rembus.caronte(
+            wait=false,
+            exit_when_done=false,
+            args=Dict("ws" => true, "zmq" => true, "tcp" => true)
+        )
+        yield()
+        Rembus.islistening(20)
         include("precompile.jl")
         shutdown()
     end

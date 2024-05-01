@@ -130,14 +130,14 @@ end
 struct Remove <: RembusMsg
 end
 
-#id() = uuid4().value  # unique message identifier
+id() = uuid4().value  # unique message identifier
 
-counter = UInt128(0)
-function id()
-    global counter
-    counter += 1
-    return counter
-end
+#counter = UInt128(0)
+#function id()
+#    global counter
+#    counter += 1
+#    return counter
+#end
 
 isresponse(msg::RembusMsg) = false
 isresponse(msg::ResMsg) = true

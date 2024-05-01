@@ -3,6 +3,8 @@ using Coverage
 
 try
     Pkg.test("Rembus", coverage=true)
+catch e
+    @error "coverage: $e"
 finally
     coverage = process_folder()
     LCOV.writefile("lcov.info", coverage)

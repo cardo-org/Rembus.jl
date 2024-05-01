@@ -2,7 +2,7 @@ include("ack_common.jl")
 
 publisher = "zmq://:8002/test_ack_pub"
 consumer = "zmq://:8002/test_ack_sub"
-num_msg = 1000
+num_msg = 10000
 
 count = 0
 

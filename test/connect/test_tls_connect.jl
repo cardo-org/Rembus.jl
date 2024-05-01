@@ -26,7 +26,7 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, Rembus.REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        args = Dict("secure" => true)
+        args = Dict("secure" => true, "tcp" => true, "ws" => true)
         execute(run, "test_tls_connect", args=args)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
