@@ -61,6 +61,11 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
                 include("connect/test_connect.jl")
             end
         end
+        if GROUP == "all" || GROUP == "rbpool"
+            @time @safetestset "rbpool" begin
+                include("rbpool/test_rbpool.jl")
+            end
+        end
         if GROUP == "all" || GROUP == "integration"
             @time @safetestset "retroactive" begin
                 include("integration/test_retroactive.jl")
@@ -73,6 +78,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
             @time @safetestset "round_robin" begin
                 include("integration/test_round_robin.jl")
+            end
+            @time @safetestset "less_busy" begin
+                include("integration/test_less_busy.jl")
             end
             @time @safetestset "wrong_balancer" begin
                 include("integration/test_wrong_balancer.jl")
@@ -88,6 +96,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
             @time @safetestset "wrong_admin_command" begin
                 include("integration/test_wrong_admin_command.jl")
+            end
+            @time @safetestset "forever" begin
+                include("integration/test_forever.jl")
             end
         end
         if GROUP == "all" || GROUP == "api"
@@ -111,6 +122,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
             @time @safetestset "mixed" begin
                 include("api/test_mixed.jl")
+            end
+            @time @safetestset "subscribe_glob" begin
+                include("api/test_subscribe_glob.jl")
             end
         end
         if GROUP == "all" || GROUP == "auth"

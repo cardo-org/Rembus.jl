@@ -1,4 +1,4 @@
-using JSON3
+#using JSON3
 
 include("../utils.jl")
 
@@ -13,18 +13,6 @@ end
 
 function private_service(bag, n)
     return n + 1
-end
-
-function setup(name)
-    if !isdir(Rembus.root_dir())
-        mkdir(Rembus.root_dir())
-    end
-
-    # add admin privilege to client with name equals to test_private
-    fn = joinpath(Rembus.root_dir(), "admins.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(Set([name])))
-    end
 end
 
 function run(authorized_component)
@@ -126,7 +114,7 @@ end
 
 authorized_component = "test_private"
 
-setup() = setup(authorized_component)
+setup() = set_admin(authorized_component)
 
 execute(() -> run(authorized_component), "test_private_topic", setup=setup)
 

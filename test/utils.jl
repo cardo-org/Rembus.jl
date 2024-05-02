@@ -1,3 +1,4 @@
+using JSON3
 using HTTP
 using Logging
 using Rembus
@@ -55,7 +56,7 @@ function execute(
     fn,
     testname;
     setup=nothing,
-    args=Dict("ws" => true, "zmq" => true, "tcp" => true)
+    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
 )
     Rembus.setup(Rembus.CONFIG)
     @start_caronte setup args
@@ -96,6 +97,19 @@ function tryconnect(id)
             count += 1
         end
         sleep(1)
+    end
+end
+
+# name become an admin
+function set_admin(name)
+    if !isdir(Rembus.root_dir())
+        mkdir(Rembus.root_dir())
+    end
+
+    # add admin privilege to client with name equals to test_private
+    fn = joinpath(Rembus.root_dir(), "admins.json")
+    open(fn, "w") do io
+        write(io, JSON3.write(Set([name])))
     end
 end
 

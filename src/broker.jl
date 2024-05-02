@@ -180,7 +180,7 @@ function create_twin(id, router::Embedded, queue=Queue{PubSubMsg}())
     else
         twin = Twin(router, id, Channel())
         spec = process(id, twin_task, args=(twin,))
-        startup(from("caronte.twins"), spec)
+        startup(from("embedded.twins"), spec)
         router.id_twin[id] = twin
         return twin
     end
@@ -1005,17 +1005,20 @@ function command_line()
         help = "factory reset, clean up broker configuration"
         action = :store_true
         "--secure", "-s"
-        help = "accept wss and tls connections on BROKER_WS_PORT and BROKER_TCP_PORT"
+        help = "accept wss and tls connections"
         action = :store_true
         "--ws", "-w"
-        help = "accept WebSocket connnections on BROKER_WS_PORT"
-        action = :store_true
+        help = "accept WebSocket connections"
+        arg_type = Int
+        default = -1
         "--tcp", "-t"
-        help = "accept tcp connnections on BROKER_TCP_PORT"
-        action = :store_true
+        help = "accept tcp connections"
+        arg_type = Int
+        default = -1
         "--zmq", "-z"
-        help = "accept zmq connnections on BROKER_ZMQ_PORT"
-        action = :store_true
+        help = "accept zmq connections"
+        arg_type = Int
+        default = -1
         "--debug", "-d"
         help = "enable debug logs"
         action = :store_true
@@ -1059,32 +1062,37 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
 
     tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
 
-    if get(args, "tcp", false)
+    if get(args, "tcp", -1) !== -1
         push!(
             tasks,
             process(
                 serve_tcp,
-                args=(router, issecure),
+                args=(router, args["tcp"], issecure),
                 restart=:transient
             )
         )
     end
-    if get(args, "zmq", false)
+    if get(args, "zmq", -1) !== -1
         push!(
             tasks,
             process(
                 serve_zeromq,
-                args=(router,),
+                args=(router, args["zmq"]),
                 restart=:transient,
                 debounce_time=2)
         )
     end
-    if get(args, "ws", false) || (!get(args, "zmq", false) && !get(args, "tcp", false))
+    if get(args, "ws", -1) !== -1 ||
+       (get(args, "zmq", -1) == -1 && get(args, "tcp", -1) == -1)
+        wsport = get(args, "ws", -1)
+        if wsport == -1
+            wsport = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+        end
         push!(
             tasks,
             process(
                 serve_ws,
-                args=(router, issecure),
+                args=(router, wsport, issecure),
                 restart=:transient,
                 stop_waiting_after=2.0)
         )
@@ -1111,29 +1119,45 @@ end
 
 Start an embedded server and accept connections.
 """
-function serve(embedded::Embedded; wait=true, exit_when_done=true, secure=false)
-    setup(CONFIG)
-    init_log()
-
-    tasks = [
-        supervisor("twins", terminateif=:shutdown),
-        process(
+function serve(
+    embedded::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
+    ; wait=true, exit_when_done=true, secure=false
+)
+    embedded_sv = from("embedded")
+    if embedded_sv === nothing
+        # first embedded process
+        setup(CONFIG)
+        init_log()
+        tasks = [
+            supervisor("twins", terminateif=:shutdown),
+            process(
+                "serve:$port",
+                serve_ws,
+                args=(embedded, port, secure),
+                restart=:transient,
+                stop_waiting_after=2.0
+            ),
+        ]
+        sv = supervise(
+            [supervisor("embedded", tasks, strategy=:one_for_one)],
+            intensity=5,
+            wait=wait
+        )
+        if exit_when_done
+            exit(0)
+        end
+    else
+        p = process(
+            "serve:$port",
             serve_ws,
-            args=(embedded, secure),
+            args=(embedded, port, secure),
             restart=:transient,
             stop_waiting_after=2.0
-        ),
-    ]
-    sv = supervise(
-        [supervisor("caronte", tasks, strategy=:one_for_one)],
-        intensity=5,
-        wait=wait
-    )
-    if exit_when_done
-        exit(0)
+        )
+        Visor.add_node(embedded_sv, p)
+        Visor.start(p)
     end
-
-    return sv
+    return nothing
 end
 
 function router_configuration(router)
@@ -1225,9 +1249,12 @@ function client_receiver(router::Embedded, ws)
             elseif isa(msg, PubSubMsg)
                 pubsub_msg(router, twin, msg)
             elseif isa(msg, IdentityMsg)
-                identity_check(router, twin, msg, paging=false)
+                auth_twin = identity_check(router, twin, msg, paging=false)
+                if auth_twin !== nothing
+                    twin = auth_twin
+                end
             elseif isa(msg, Attestation)
-                attestation(router, twin, msg)
+                twin = attestation(router, twin, msg)
             elseif isa(msg, AckMsg)
                 ack_msg(twin, msg)
             end
@@ -1264,10 +1291,8 @@ function secure_config()
     return sslconfig
 end
 
-function listener(proc, router, sslconfig)
+function listener(proc, caronte_port, router, sslconfig)
     IP = "0.0.0.0"
-    caronte_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
-
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
     router.ws_server = server
     proto = (sslconfig === nothing) ? "ws" : "wss"
@@ -1280,15 +1305,14 @@ function listener(proc, router, sslconfig)
     end
 end
 
-function serve_ws(td, router, issecure=false)
+function serve_ws(td, router, port, issecure=false)
     sslconfig = nothing
-
     try
         if issecure
             sslconfig = secure_config()
         end
 
-        listener(td, router, sslconfig)
+        listener(td, port, router, sslconfig)
     catch e
         if !isa(e, Visor.ProcessInterrupt)
             @error "ws server: $e"
@@ -1302,9 +1326,8 @@ function serve_ws(td, router, issecure=false)
     end
 end
 
-function serve_zeromq(pd, router)
+function serve_zeromq(pd, router, port)
     @debug "starting serve_zeromq [$(pd.id)]"
-    port = parse(UInt16, get(ENV, "BROKER_ZMQ_PORT", "8002"))
     context = ZMQ.Context()
     router.zmqsocket = Socket(context, ROUTER)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
@@ -1327,12 +1350,11 @@ function serve_zeromq(pd, router)
     end
 end
 
-function serve_tcp(pd, router, issecure=false)
+function serve_tcp(pd, router, caronte_port, issecure=false)
     proto = "tcp"
     server = nothing
     try
         IP = "0.0.0.0"
-        caronte_port = parse(UInt16, get(ENV, "BROKER_TCP_PORT", "8001"))
         setphase(pd, :listen)
 
         if issecure

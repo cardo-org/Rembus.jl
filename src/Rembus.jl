@@ -938,9 +938,12 @@ struct EnableAck
     status::Bool
 end
 
-function provide(server::Embedded, func::Function)
-    server.topic_function[string(func)] = func
+function provide(server::Embedded, name::AbstractString, func::Function)
+    server.topic_function[name] = func
 end
+
+provide(server::Embedded, func::Function) = provide(server, string(func), func)
+
 
 """
     shared(rb::RBHandle, ctx)
@@ -1481,7 +1484,10 @@ function authenticate(rb)
         response = wait_response(rb, msg, request_timeout())
     end
 
-    if (response.status != STS_SUCCESS)
+    if isa(response, RembusTimeout)
+        close(rb.socket)
+        rembuserror(code=STS_TIMEOUT, cid=rb.client.id)
+    elseif (response.status != STS_SUCCESS)
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
     else
@@ -1682,7 +1688,7 @@ function connect(rb::RBPool)
             if isa(e, RembusError)
                 @warn "error: $e"
             else
-                @warn "connection failed: $(e.url)"
+                @warn "[$(c.client.id)] connection failed: $e"
             end
         end
     end
@@ -1708,7 +1714,13 @@ function login(rb::RBHandle, cid::AbstractString, secret::AbstractString)
     return nothing
 end
 
-function Base.close(rb::RBHandle)
+function Base.close(rb::RBPool)
+    for c in rb.connections
+        close(c)
+    end
+end
+
+function Base.close(rb::RBConnection)
     try
         if rb.socket !== nothing
             if isa(rb.socket, ZMQ.Socket)
@@ -2165,11 +2177,9 @@ function broker_shutdown(admin::RBConnection)
 end
 
 function waiter(pd)
-    for msg in pd.inbox
-        if isshutdown(pd)
-            break
-        end
-    end
+    # the only message may be a shutdown request
+    take!(pd.inbox)
+    @info "forever done"
 end
 
 """
@@ -2208,7 +2218,7 @@ end
         sv = Rembus.caronte(
             wait=false,
             exit_when_done=false,
-            args=Dict("ws" => true, "zmq" => true, "tcp" => true)
+            args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
         )
         yield()
         Rembus.islistening(20)
