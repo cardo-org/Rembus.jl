@@ -35,7 +35,7 @@ end
 
 function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     waittime = 0.3
-    my_topic = "my_topic"
+    my_topic = "consume"
     noarg_topic = "noarg_topic"
 
     testbag = TestBag(false, 0)
@@ -73,7 +73,8 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     end
 
     sleep(waittime)
-    unsubscribe(sub1, my_topic)
+    unsubscribe(sub1, my_topic) # by name
+    unsubscribe(sub2, consume) # by function object
 
     # removing a not registerd interest throws an error
     try

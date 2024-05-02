@@ -46,6 +46,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
         end
         if GROUP == "all" || GROUP == "ack"
+            @time @safetestset "simple_ack" begin
+                include("ack/test_simple_ack.jl")
+            end
             @time @safetestset "ws_ack" begin
                 include("ack/test_ws_ack.jl")
             end

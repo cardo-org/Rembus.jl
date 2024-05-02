@@ -134,7 +134,7 @@ function run(request_url, subscriber_url, exposer_url)
     @test bag.rpc_method_invoked === true
 
     implementor = tryconnect(exposer_url)
-    unexpose(implementor, rpc_topic)
+    unexpose(implementor, rpc_method)
 
     for cli in [implementor, client, subscriber]
         close(cli)
