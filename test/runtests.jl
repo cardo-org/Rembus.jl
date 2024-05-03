@@ -70,6 +70,12 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
         end
         if GROUP == "all" || GROUP == "integration"
+            @time @safetestset "rawlog" begin
+                include("integration/test_rawlog.jl")
+            end
+            @time @safetestset "rembus_task" begin
+                include("integration/test_rembus_task.jl")
+            end
             @time @safetestset "retroactive" begin
                 include("integration/test_retroactive.jl")
             end
@@ -139,6 +145,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
         end
         if GROUP == "all" || GROUP == "park"
+            @time @safetestset "page_file" begin
+                include("park/test_page_file.jl")
+            end
             @time @safetestset "park" begin
                 include("park/test_park.jl")
             end
@@ -159,6 +168,11 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         if GROUP == "all" || GROUP == "broker"
             @time @safetestset "broker_plugin" begin
                 include("broker_plugin/test_plugin.jl")
+            end
+        end
+        if GROUP == "all" || GROUP == "repl"
+            @time @safetestset "repl" begin
+                include("repl/test_repl.jl")
             end
         end
     end

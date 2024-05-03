@@ -7,20 +7,29 @@ mutable struct TestCtx
 end
 
 
-function admin_consume_all(ctx, topic, n)
-    @info "[admin_consume_all] topic:$topic, value:$n"
+function admin_consume_all(ctx, topic, n, m=1)
+    @info "[admin_consume_all] topic:$topic, n=$n, m=$m"
     ctx.admin_count += 1
 end
 
-function consume_all(ctx, topic, n)
-    @info "[consume_all] topic:$topic, value:$n"
+function consume_all(ctx, topic, n, m=1)
+    @info "[consume_all] topic:$topic, n=$n, m=$m"
     ctx.user_count += 1
 end
 
+function another_consume(topic, x)
+    @info "[another_consume] $topic: x=$x"
+end
+
+function another_consume(topic, x, y)
+    @info "[another_consume] $topic: x=$x, y=$y"
+end
 
 function run(admin_component)
     ctx = TestCtx()
     sub = "mysub"
+    sub_noshared = "another_sub"
+
     producer = "myproducer"
     my_private_topic = "my_private_topic"
 
@@ -28,6 +37,10 @@ function run(admin_component)
     shared(user_sub, ctx)
     subscribe(user_sub, "*", consume_all)
     reactive(user_sub)
+
+    another_sub = connect(sub_noshared)
+    subscribe(another_sub, "*", another_consume)
+    reactive(another_sub)
 
     admin_sub = connect(admin_component)
     shared(admin_sub, ctx)
@@ -42,13 +55,17 @@ function run(admin_component)
     cli = connect(producer)
     publish(cli, "foo", 1)
     publish(cli, "bar", 2)
+    publish(cli, "bar", [1, 2])
     publish(cli, my_private_topic, 3)
+
+    # generate a broker error log
+    publish(cli, "bar", [1, 2, 3])
 
     sleep(0.5)
     close(cli)
     close(admin_sub)
-    @test ctx.admin_count == 3
-    @test ctx.user_count == 3
+    @test ctx.admin_count == 4
+    @test ctx.user_count == 4
 end
 
 admin_component = "test_admin"

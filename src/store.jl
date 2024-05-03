@@ -14,6 +14,7 @@ function load_pages(twin_id::AbstractString)
         end
         # Load the latest page if any
         pages = readdir(tdir, join=true, sort=true)
+        @debug "[$tdir] files pages: $pages"
     catch e
         @error "[$twin_id] load_pages error: $e"
     end
@@ -245,28 +246,28 @@ function load_twins(router)
         router.topic_interests[topic] = twins
     end
 
-    twins_dir = joinpath(CONFIG.db, "twins")
-    if isdir(twins_dir)
-        # each twin has a file with status and setting data
-        files = readdir(twins_dir, join=true)
-        for twin_id in files
-            try
-                @debug "loading twin [$twin_id]"
-                if isfile(twin_id)
-                    tid = basename(twin_id)
-
-                    # delete the unknown twin
-                    if !haskey(router.id_twin, tid)
-                        @info "deleting [$twin_id]: unknown twin [$tid]"
-                        rm(twin_id)
-                        continue
-                    end
-                end
-            catch e
-                @error "[$twin_id] load failed: $e"
-            end
-        end
-    end
+    #    twins_dir = joinpath(CONFIG.db, "twins")
+    #    if isdir(twins_dir)
+    #        # each twin has a file with status and setting data
+    #        twin_dirs = readdir(twins_dir, join=true)
+    #        for twin_dir in twin_dirs
+    #            try
+    #                @debug "loading twin [$twin_dir]"
+    #                if isdir(twin_dir)
+    #                    tid = basename(twin_dir)
+    #
+    #                    # delete the unknown twin
+    #                    if !haskey(router.id_twin, tid)
+    #                        @info "deleting [$twin_dir]: unknown twin [$tid]"
+    #                        rm(twin_dir, recursive=true)
+    #                        continue
+    #                    end
+    #                end
+    #            catch e
+    #                @error "[$twin_dir] load failed: $e"
+    #            end
+    #        end
+    #    end
 
 end
 
@@ -344,22 +345,6 @@ function park(ctx::Any, twin::Twin, msg::RembusMsg)
     end
 end
 
-function test_file(file::String)
-    count = 0
-    tdir = twins_dir()
-    fn = joinpath(tdir, file)
-    if isfile(fn)
-        open(fn, "r") do f
-            while !eof(f)
-                msg = getmsg(f)
-                count += 1
-            end
-        end
-    end
-    @info "messages: $count"
-end
-
-
 function getmsg(f)
     mark(f)
     lens = read(f, 4)
@@ -389,13 +374,6 @@ function unpark_file(twin::Twin, fn::AbstractString)
         end
         rethrow()
     end
-end
-
-function debug_unpark_file(twin::Twin, fn::AbstractString)
-    @debug "unparking $fn"
-    content = read(fn)
-    io = IOBuffer(content)
-    debug_cached(twin, io)
 end
 
 function unpark_page(twin::Twin)
@@ -432,17 +410,6 @@ function send_cached(twin, io)
     end
 end
 
-function debug_cached(twin, io)
-    count = 0
-    seekstart(io)
-    while !eof(io)
-        msg = getmsg(io)
-        count += 1
-        @info "[$twin]: $msg: $(msg.data)"
-    end
-    @info "tot messages: $count"
-end
-
 function unpark(ctx::Any, twin::Twin)
     if twin.hasname
         @debug "[$twin]: unparking"
@@ -454,16 +421,6 @@ function unpark(ctx::Any, twin::Twin)
         # send the in-memory paged messages
         unpark_page(twin)
         twin.pager.io = nothing
-    end
-end
-
-function debug_unpark(ctx::Any, twin::Twin)
-    if twin.hasname
-        @debug "[$twin]: unparking"
-        files = load_pages(twin.id)
-        for fn in files
-            debug_unpark_file(twin, fn)
-        end
     end
 end
 
@@ -494,3 +451,48 @@ function load_configuration(router)
         router.component_owner = load_token_app()
     end
 end
+
+#=
+function test_file(file::String)
+    count = 0
+    tdir = twins_dir()
+    fn = joinpath(tdir, file)
+    if isfile(fn)
+        open(fn, "r") do f
+            while !eof(f)
+                msg = getmsg(f)
+                count += 1
+            end
+        end
+    end
+    @info "messages: $count"
+end
+
+function debug_unpark(ctx::Any, twin::Twin)
+    if twin.hasname
+        @debug "[$twin]: unparking"
+        files = load_pages(twin.id)
+        for fn in files
+            debug_unpark_file(twin, fn)
+        end
+    end
+end
+
+function debug_cached(twin, io)
+    count = 0
+    seekstart(io)
+    while !eof(io)
+        msg = getmsg(io)
+        count += 1
+        @info "[$twin]: $msg: $(msg.data)"
+    end
+    @info "tot messages: $count"
+end
+
+function debug_unpark_file(twin::Twin, fn::AbstractString)
+    @debug "unparking $fn"
+    content = read(fn)
+    io = IOBuffer(content)
+    debug_cached(twin, io)
+end
+=#

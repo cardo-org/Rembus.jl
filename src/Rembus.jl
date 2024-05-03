@@ -92,10 +92,12 @@ include("register.jl")
 function __init__()
     Visor.setroot(intensity=3)
     atexit(shutdown)
-    if isinteractive()
-        repl_log()
-    end
+    ###    if isinteractive()
+    ###        repl_log()
+    ###    end
 end
+
+struct CloseConnection end
 
 struct ConnectionClosed <: Exception
 end
@@ -306,6 +308,7 @@ abstract type RBHandle end
 mutable struct RBConnection <: RBHandle
     shared::Any
     socket::Any
+    msgch::Channel
     reactive::Bool
     client::Component
     receiver::Dict{String,Function}
@@ -313,10 +316,26 @@ mutable struct RBConnection <: RBHandle
     out::Dict{UInt128,Condition}
     context::Union{Nothing,ZMQ.Context}
     RBConnection(name::String) = new(
-        missing, nothing, false, Component(name), Dict(), Dict(), Dict(), nothing
+        missing,
+        nothing,
+        Channel(MESSAGE_CHANNEL_SZ),
+        false,
+        Component(name),
+        Dict(),
+        Dict(),
+        Dict(),
+        nothing
     )
     RBConnection(client=getcomponent()) = new(
-        missing, nothing, false, client, Dict(), Dict(), Dict(), nothing
+        missing,
+        nothing,
+        Channel(MESSAGE_CHANNEL_SZ),
+        false,
+        client,
+        Dict(),
+        Dict(),
+        Dict(),
+        nothing
     )
 end
 
@@ -1000,7 +1019,7 @@ function rembus_task(pd, rb, protocol=:ws)
 
         connect(pd, rb)
         if last_error.msg !== nothing
-            @info "[$pd] connected"
+            @info "[$pd] reconnected"
             last_error.msg = nothing
         end
 
@@ -1171,9 +1190,10 @@ function rembus_handler(rb, msg, receiver)
     elseif haskey(rb.receiver, "*")
         try
             invoke_glob(rb, msg)
-            return STS_SUCCESS, nothing
         catch e
-            rethrow()
+            @error "glob subscriber: $e"
+        finally
+            return STS_SUCCESS, nothing
         end
     else
         return STS_METHOD_NOT_FOUND, "method $fn not found"
@@ -1227,14 +1247,6 @@ function handle_input(rb, msg)
     return nothing
 end
 
-function trim_msg(msg)
-    if length(msg) > 500
-        return "$(first(msg, 500)) ..."
-    else
-        return msg
-    end
-end
-
 #=
     parse_msg(rb, response)
 
@@ -1269,9 +1281,6 @@ function keep_alive(socket::WebSockets.WebSocket)
     end
 end
 
-isok(sock::HTTP.WebSockets.WebSocket, e) = HTTP.WebSockets.isok(e)
-isok(sock, e) = false
-
 processput!(process::NullProcess, e) = nothing
 processput!(process::Visor.Process, e) = put!(process.inbox, e)
 
@@ -1301,6 +1310,34 @@ function read_socket(socket, process, rb, isconnected::Condition)
             processput!(process, e)
         end
     end
+end
+
+function write_task(rb::RBConnection)
+    # manage reconnections events
+    if !isopen(rb.msgch)
+        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
+    end
+
+    for msg in rb.msgch
+        if isa(msg, CloseConnection)
+            try
+                if rb.socket !== nothing
+                    if isa(rb.socket, ZMQ.Socket)
+                        transport_send(rb.socket, Close())
+                        close(rb.context)
+                    else
+                        close(rb.socket)
+                    end
+                end
+            catch e
+                @warn "[$(rb.client.id)] close: $e"
+            end
+            close(rb.msgch)
+        else
+            rembus_write(rb, msg)
+        end
+    end
+    @debug "[$(rb.client.id)] write_task done"
 end
 
 function ws_connect(rb, process, isconnected::Condition)
@@ -1433,7 +1470,7 @@ end
 function resend_attestate(rb, response)
     try
         msg = attestate(rb, response)
-        rembus_write(rb, msg)
+        put!(rb.msgch, msg)
     catch e
         @error "resend_attestate: $e"
         @showerror e
@@ -1524,6 +1561,7 @@ function _connect(rb, process)
         ))
     end
 
+    @async write_task(rb)
     return rb
 end
 
@@ -1721,19 +1759,13 @@ function Base.close(rb::RBPool)
 end
 
 function Base.close(rb::RBConnection)
-    try
-        if rb.socket !== nothing
-            if isa(rb.socket, ZMQ.Socket)
-                transport_send(rb.socket, Close())
-                close(rb.context)
-            else
-                close(rb.socket)
-            end
+    if rb.socket !== nothing
+        # connection is established
+        put!(rb.msgch, CloseConnection())
+        while (isopen(rb.msgch))
+            sleep(0.05)
         end
-    catch e
-        @warn "[$(rb.client.id)] close: $e"
     end
-
     return nothing
 end
 
@@ -2036,7 +2068,8 @@ languages then data has to be a DataFrame or a primitive type that is
 [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
 function publish(rb::RBHandle, topic::AbstractString, data=[])
-    return rembus_write(rb, PubSubMsg(topic, data))
+    put!(rb.msgch, PubSubMsg(topic, data))
+    return nothing
 end
 
 """
@@ -2111,7 +2144,7 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     rb.out[mid] = resp_cond
     t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
     # @async ensures that wait is always triggered before notify
-    rembus_write(rb, msg)
+    put!(rb.msgch, msg)
     try
         return wait(resp_cond)
     catch e

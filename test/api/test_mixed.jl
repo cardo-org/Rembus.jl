@@ -39,6 +39,8 @@ function run()
     @test result == df
     @test bag.request_arg == invalue
 
+    @unexpose "exposer" mymethod
+
     @terminate "client"
     @terminate "subscriber"
     @terminate "exposer"

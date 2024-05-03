@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function run()
-    component1 = connect(cid1)
+    component1 = tryconnect(cid1)
     anonymous = connect()
 
     v = rpc(component1, "version")

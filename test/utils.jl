@@ -7,11 +7,11 @@ using Test
 
 results = []
 
-macro start_caronte(init, args)
+macro start_caronte(init, args, reset)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
         if !running
-            Rembus.caronte_reset()
+            $(esc(reset)) && Rembus.caronte_reset()
             fn = $(esc(init))
             if fn !== nothing
                 fn()
@@ -55,11 +55,12 @@ end
 function execute(
     fn,
     testname;
+    reset=true,
     setup=nothing,
     args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
 )
     Rembus.setup(Rembus.CONFIG)
-    @start_caronte setup args
+    @start_caronte setup args reset
     sleep(0.5)
     Rembus.logging(debug=[:test])
     @info "[$testname] start"
@@ -91,7 +92,7 @@ function tryconnect(id)
             return connect(id)
         catch e
             if !isa(e, HTTP.Exceptions.ConnectError)
-                @warn "error: $e"
+                @warn "tryconnect: $e"
             end
             count === maxretries && rethrow(e)
             count += 1

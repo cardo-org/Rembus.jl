@@ -18,6 +18,8 @@ const PONG_STRING = "*_pong_*"
 
 const REMBUS_PAGE_SIZE = 1_000_000
 
+const MESSAGE_CHANNEL_SZ = 1000
+
 const BROKER_CONFIG = "__config__"
 const CID = "cid"
 const COMMAND = "cmd"

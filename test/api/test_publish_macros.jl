@@ -82,6 +82,8 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
     sleep(waittime / 2)
     testholder !== missing && @test testholder.msg_received === 9
 
+    @unreactive sub3
+
     for cli in [publisher, sub1, sub2, sub3]
         @terminate cli
     end

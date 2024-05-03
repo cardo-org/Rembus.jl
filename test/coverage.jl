@@ -13,6 +13,7 @@ end
 for dir in [
     "src",
     "test",
+    "test/ack",
     "test/api",
     "test/broker_plugin",
     "test/auth",
@@ -21,7 +22,11 @@ for dir in [
     "test/integration",
     "test/park",
     "test/private",
-    "test/unit"
+    "test/repl",
+    "test/unit",
+    "test/rbpool",
+    "test/tcp",
+    "test/zmq",
 ]
     foreach(rm, filter(endswith(".cov"), readdir(dir, join=true)))
 end

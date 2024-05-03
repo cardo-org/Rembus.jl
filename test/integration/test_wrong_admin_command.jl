@@ -8,6 +8,7 @@ function run()
     @info "sending"
     Rembus.transport_send(rb.socket, msg)
     @info "done"
+    sleep(0.1)
     close(rb)
     @info "closed"
 end
