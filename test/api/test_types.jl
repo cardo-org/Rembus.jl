@@ -81,7 +81,7 @@ function run()
         @publish requestor bar(msg)
     end
 
-    sleep(1)
+    sleep(1.5)
     @test bag.handler_called == length(bag.valuemap)
 end
 

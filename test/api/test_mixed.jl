@@ -31,6 +31,7 @@ function run()
 
     @subscribe "subscriber" mymethod
     @shared "subscriber" bag
+    @enable_ack "subscriber"
     @reactive "subscriber"
 
     invalue = "pippo"
@@ -40,6 +41,7 @@ function run()
     @test bag.request_arg == invalue
 
     @unexpose "exposer" mymethod
+    @disable_ack "subscriber"
 
     @terminate "client"
     @terminate "subscriber"

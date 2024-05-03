@@ -439,7 +439,7 @@ function holder_expr(shared, cid=getcomponent())
     ))
     ex.args[3].args[2] = shared
     ex.args[2].args[2] = cid
-    ex
+    return ex
 end
 
 """
@@ -497,7 +497,7 @@ function publish_expr(topic, cid=getcomponent())
 
     args = topic.args[2:end]
     ext.args[3].args[3].args = args
-    ext
+    return ext
 end
 
 """
@@ -551,7 +551,7 @@ function rpc_expr(topic, cid=getcomponent())
 
     args = topic.args[2:end]
     ext.args[3].args[3].args = args
-    ext
+    return ext
 end
 
 """
@@ -619,7 +619,7 @@ function expose_expr(fn, cid=getcomponent())
     ))
     ex.args[3].args[2] = fnname(fn)
     ex.args[2].args[2] = cid
-    ex
+    return ex
 end
 
 function subscribe_expr(fn, mode::Symbol, cid=getcomponent())
@@ -639,7 +639,7 @@ function subscribe_expr(fn, mode::Symbol, cid=getcomponent())
     ))
     ex.args[3].args[2] = fnname(fn)
     ex.args[2].args[2] = cid
-    ex
+    return ex
 end
 
 """
@@ -851,7 +851,7 @@ function reactive_expr(reactive, cid=nothing)
         timeout=Rembus.request_timeout()
     ))
     ex.args[2].args[2] = id
-    ex
+    return ex
 end
 
 function enable_ack_expr(enable, cid=nothing)
@@ -866,7 +866,7 @@ function enable_ack_expr(enable, cid=nothing)
         timeout=Rembus.request_timeout()
     ))
     ex.args[2].args[2] = id
-    ex
+    return ex
 end
 
 """
@@ -922,7 +922,7 @@ This feature assure that messages get delivered at least one to the
 subscribed component.
 =#
 macro disable_ack(cid=nothing)
-    ex = disable_ack_expr(false, cid)
+    ex = enable_ack_expr(false, cid)
     quote
         $(esc(ex))
         nothing
@@ -1054,6 +1054,12 @@ function rembus_task(pd, rb, protocol=:ws)
                     )
                 elseif isa(req, RemoveInterest)
                     result = unsubscribe(rb, string(msg.request.fn), exceptionerror=false)
+                elseif isa(req, EnableAck)
+                    if req.status
+                        result = enable_ack(rb, exceptionerror=false)
+                    else
+                        result = disable_ack(rb, exceptionerror=false)
+                    end
                 elseif isa(req, Reactive)
                     if req.status
                         result = reactive(rb, exceptionerror=false)
@@ -1588,6 +1594,7 @@ function rembus_block_write(rb::RBHandle, msg, cond)
     return nothing
 end
 
+#=
 function configure(rb::RBHandle, retroactives=Dict(), interests=Dict(), impls=Dict())
     for (topic, fn) in retroactives
         subscribe(rb, topic, fn, true)
@@ -1601,6 +1608,7 @@ function configure(rb::RBHandle, retroactives=Dict(), interests=Dict(), impls=Di
 
     return rb
 end
+=#
 
 function isconnected(rb::RBConnection)
     if rb.socket === nothing
@@ -1739,6 +1747,7 @@ function connect(urls::Vector)
     return connect(pool)
 end
 
+#=
 function login(rb::RBHandle, cid::AbstractString, secret::AbstractString)
     try
         challenge = rpc(rb, "challenge")
@@ -1751,6 +1760,7 @@ function login(rb::RBHandle, cid::AbstractString, secret::AbstractString)
 
     return nothing
 end
+=#
 
 function Base.close(rb::RBPool)
     for c in rb.connections
@@ -1769,11 +1779,13 @@ function Base.close(rb::RBConnection)
     return nothing
 end
 
+#=
 function assert_rembus(process::Visor.Process)
     if length(process.args) == 0 || !isa(process.args[1], RBHandle)
         throw(ErrorException("invalid $process process: not a rembus process"))
     end
 end
+=#
 
 function enable_debug(rb::RBHandle; exceptionerror=true)
     return rpcreq(
@@ -1831,7 +1843,7 @@ function disable_ack(rb::RBHandle; exceptionerror=true)
     )
 end
 
-function enable_ack(rb::RBHandle, timeout=5; exceptionerror=true)
+function enable_ack(rb::RBHandle; exceptionerror=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_ACK_CMD)),
