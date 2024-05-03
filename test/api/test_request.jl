@@ -139,7 +139,6 @@ function run(request_url, subscriber_url, exposer_url)
     for cli in [implementor, client, subscriber]
         close(cli)
     end
-    sleep(0.000001)
 end
 
 Rembus.CONFIG.zmq_ping_interval = 0

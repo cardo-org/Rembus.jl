@@ -58,7 +58,6 @@ function run(client_url, server1_url, server2_url, server3_url)
     for cli in [client, server1, server2, server3]
         close(cli)
     end
-    sleep(0.000001)
 end
 
 ENV["BROKER_BALANCER"] = "less_busy"
