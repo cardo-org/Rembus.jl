@@ -10,7 +10,7 @@ function run()
     close(anonymous)
 end
 
-ENV["REMBUS_BASE_URL"] = "tcp://localhost:8001"
+ENV["REMBUS_BASE_URL"] = "tcp://127.0.0.1:8001"
 
 cid1 = "component2"
 execute(run, "test_tcp")

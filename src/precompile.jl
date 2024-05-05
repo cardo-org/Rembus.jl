@@ -194,6 +194,7 @@ catch e
 end
 
 try
+    request_api("requestor", "exposer")
     waittime = 0.5
     for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
         for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]

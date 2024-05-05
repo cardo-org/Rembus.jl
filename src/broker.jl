@@ -1490,7 +1490,7 @@ Return an online implementor ready to execute the method associated to the topic
 =#
 function select_twin(router, topic, implementors)
     target = nothing
-    @info "[$topic] balancer: $(CONFIG.balancer)"
+    @debug "[$topic] balancer: $(CONFIG.balancer)"
     if CONFIG.balancer === "first_up"
         target = first_up(router, topic, implementors)
     elseif CONFIG.balancer === "round_robin"
@@ -1778,7 +1778,7 @@ Setup the router.
 =#
 function boot(router)
     if !isdir(CONFIG.db)
-        mkdir(CONFIG.db)
+        mkpath(CONFIG.db)
     end
 
     appdir = keys_dir()

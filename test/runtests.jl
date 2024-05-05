@@ -111,6 +111,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
         end
         if GROUP == "all" || GROUP == "api"
+            @time @safetestset "component" begin
+                include("api/test_component.jl")
+            end
             @time @safetestset "publish_api" begin
                 include("api/test_publish.jl")
             end

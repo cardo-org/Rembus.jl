@@ -366,6 +366,9 @@ function name2proc(name::AbstractString, startproc=false, setanonymous=false)
 end
 
 function name2proc(cmp::Component, startproc=false, setanonymous=false)
+    if cmp.id == "rembus"
+        cmp = getcomponent()
+    end
     proc = from(cmp.id)
     if proc === nothing
         if setanonymous && CONFIG.cid == "rembus"
@@ -633,7 +636,7 @@ function subscribe_expr(fn, mode::Symbol, cid=getcomponent())
         ))
     end
     ex = :(call(
-        Rembus.name2proc(Rembus.getcomponent(), true, true),
+        Rembus.name2proc(cid, true, true),
         Rembus.AddInterest(aaa, $sts),
         timeout=Rembus.request_timeout()
     ))
@@ -752,9 +755,8 @@ supervise()
 ```
 """
 macro subscribe(fn::Symbol, mode::Symbol=:from_now)
-    ex = subscribe_expr(fn, mode)
     quote
-        $(esc(ex))
+        $(esc(subscribe_expr(fn, mode)))
         nothing
     end
 end
@@ -984,19 +986,6 @@ function rembus(cid=nothing)
     end
 
     cmp = Component(id)
-
-    if haskey(cmp.props, "server")
-        caronte(wait=false, exit_when_done=false)
-
-        while true
-            proc = from("caronte.serve_zeromq")
-            sleep(0.2)
-            if proc !== nothing && proc.status === Visor.running
-                break
-            end
-        end
-    end
-
     rb = RBConnection(cmp)
     process(
         cmp.id,
