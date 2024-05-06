@@ -1101,12 +1101,14 @@ add_receiver(ctx, method_name, impl) = ctx.receiver[method_name] = impl
 
 remove_receiver(ctx, method_name) = delete!(ctx.receiver, method_name)
 
+#=
 function when_connected(fn, rb)
     while !isconnected(rb)
         sleep(1)
     end
     fn()
 end
+=#
 
 #=
     invoke(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
@@ -1206,13 +1208,11 @@ function handle_input(rb, msg)
 
             while notify(rb.out[msg.id], msg) == 0
                 @info "$msg: notifying too early"
-                sleep(0.0001)
+                sleep(0.001)
             end
         else
             # it is a response without a waiting Condition
-            if msg.data === nothing
-                @async ping(rb)
-            elseif msg.status == STS_CHALLENGE
+            if msg.status == STS_CHALLENGE
                 @async resend_attestate(rb, msg)
             else
                 @warn "ignoring response: $msg"
@@ -1573,13 +1573,6 @@ end
 function rembus_write(rb::RBHandle, msg)
     @debug ">> [$(rb.client.id)] -> $msg"
     transport_send(rb.socket, msg)
-    return nothing
-end
-
-function rembus_block_write(rb::RBHandle, msg, cond)
-    @debug ">> [$(rb.client.id)] -> $msg"
-    transport_send(rb.socket, msg)
-    wait(cond)
     return nothing
 end
 
@@ -2011,7 +2004,7 @@ end
 #
 # Required by ZeroMQ socket.
 # """
-function ping(rb::RBHandle)
+function ping(rb::RBConnection)
     try
         if rb.client.protocol == :zmq
             if isconnected(rb)

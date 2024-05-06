@@ -369,8 +369,8 @@ function broker_parse(router::Router, pkt::ZMQPacket)
         @debug "ping from [$cid]"
         router.mid2address[mid] = id
         return PingMsg(mid, cid)
-    elseif ptype == TYPE_REMOVE
-        return Remove()
+        #    elseif ptype == TYPE_REMOVE
+        #        return Remove()
     elseif ptype == TYPE_CLOSE
         return Close()
     end
@@ -385,6 +385,7 @@ function pong(socket, mid, identity)
     send(socket, MESSAGE_END, more=false)
 end
 
+#=
 data2payload(data) = data
 
 function data2payload(data::IOBuffer)
@@ -392,6 +393,7 @@ function data2payload(data::IOBuffer)
     decode(read(data))
     reset(data)
 end
+=#
 
 # Return data to be sent via ws or tcp from ZMQ
 function data2payload(data::ZMQ.Message)
@@ -427,7 +429,7 @@ function transport_file_io(msg::PubSubMsg{ZMQ.Message})
     io = IOBuffer(maxsize=4 + len)
     write(io, len)
     write(io, payload)
-    io
+    return io
 end
 
 function id2bytes(id::UInt128)
@@ -451,7 +453,7 @@ function transport_send(socket::ZMQ.Socket, msg::PingMsg)
     send(socket, MESSAGE_END, more=false)
 end
 
-transport_send(::Twin, ws, msg::IdentityMsg) = transport_send(ws, msg)
+#transport_send(::Twin, ws, msg::IdentityMsg) = transport_send(ws, msg)
 
 function transport_send(ws, msg::IdentityMsg)
     pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid]
@@ -660,7 +662,7 @@ function transport_send(ws, msg::ResMsg, ::Bool=false)
     transport_write(ws, pkt)
 end
 
-transport_send(::Twin, ws, msg::AdminReqMsg) = transport_send(ws, msg::AdminReqMsg)
+#transport_send(::Twin, ws, msg::AdminReqMsg) = transport_send(ws, msg::AdminReqMsg)
 
 function transport_send(ws, msg::AdminReqMsg)
     content = tagvalue_if_dataframe(msg.data)
@@ -694,7 +696,7 @@ function transport_send(socket::ZMQ.Socket, msg::AckMsg)
     send(socket, MESSAGE_END, more=false)
 end
 
-transport_send(::Twin, ws, msg::Attestation) = transport_send(ws, msg::Attestation)
+#transport_send(::Twin, ws, msg::Attestation) = transport_send(ws, msg::Attestation)
 
 function transport_send(ws, msg::Attestation)
     pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature]
@@ -708,7 +710,7 @@ function transport_send(socket::ZMQ.Socket, msg::Attestation)
     send(socket, MESSAGE_END, more=false)
 end
 
-transport_send(::Twin, ws, msg::Register) = transport_send(ws, msg::Register)
+#transport_send(::Twin, ws, msg::Register) = transport_send(ws, msg::Register)
 
 function transport_send(ws, msg::Register)
     pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid, msg.pubkey]
@@ -722,7 +724,7 @@ function transport_send(socket::ZMQ.Socket, msg::Register)
     send(socket, MESSAGE_END, more=false)
 end
 
-transport_send(::Twin, ws, msg::Unregister) = transport_send(ws, msg::Unregister)
+#transport_send(::Twin, ws, msg::Unregister) = transport_send(ws, msg::Unregister)
 
 function transport_send(ws, msg::Unregister)
     pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
@@ -743,12 +745,14 @@ function transport_send(socket::ZMQ.Socket, ::Close)
     send(socket, MESSAGE_END, more=false)
 end
 
+#=
 function transport_send(socket::ZMQ.Socket, ::Remove)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_REMOVE]), more=true)
     send(socket, DATA_EMPTY, more=true)
     send(socket, MESSAGE_END, more=false)
 end
+=#
 
 function tagvalue_if_dataframe(data)
     if isa(data, Vector)
@@ -852,55 +856,53 @@ function transport_write(sock, llmsg)
     tcp_write(sock, payload)
 end
 
-function transport_read(sock::MbedTLS.SSLContext)
-    while true
-        headers = read(sock, 1)
-        if isempty(headers)
-            MbedTLS.ssl_session_reset(sock)
-            throw(ConnectionClosed())
-        end
-        type = headers[1]
-        if type === HEADER_LEN1
-            len = read(sock, 1)[1]
-        elseif type === HEADER_LEN2
-            lb = read(sock, 2)
-            len = Int(lb[1]) << 8 + lb[2]
-        elseif type === HEADER_LEN4
-            lb = read(sock, 4)
-            len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
-        else
-            @error "tcp channel invalid header format"
-            throw(ConnectionClosed())
-        end
-        payload = read(sock, len)
-        @rawlog("in: $payload")
-        return payload
-    end
-end
+##function transport_read(sock::MbedTLS.SSLContext)
+##    while true
+##        headers = read(sock, 1)
+##        if isempty(headers)
+##            MbedTLS.ssl_session_reset(sock)
+##            throw(ConnectionClosed())
+##        end
+##        type = headers[1]
+##        if type === HEADER_LEN1
+##            len = read(sock, 1)[1]
+##        elseif type === HEADER_LEN2
+##            lb = read(sock, 2)
+##            len = Int(lb[1]) << 8 + lb[2]
+##        elseif type === HEADER_LEN4
+##            lb = read(sock, 4)
+##            len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
+##        else
+##            @error "tcp channel invalid header format"
+##            throw(ConnectionClosed())
+##        end
+##        payload = read(sock, len)
+##        @rawlog("in: $payload")
+##        return payload
+##    end
+##end
 
-function transport_read(sock::TCPSocket)
-    while true
-        headers = read(sock, 1)
-        if isempty(headers)
-            return headers # empty response
-        end
-        type = headers[1]
-        if type === HEADER_LEN1
-            len = read(sock, 1)[1]
-        elseif type === HEADER_LEN2
-            lb = read(sock, 2)
-            len = Int(lb[1]) << 8 + lb[2]
-        elseif type === HEADER_LEN4
-            lb = read(sock, 4)
-            len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
-        else
-            @error "tcp channel invalid header value [$type]"
-            throw(ConnectionClosed())
-        end
-        payload = read(sock, len)
-        @rawlog("in: $payload")
-        return payload
+function transport_read(sock)
+    headers = read(sock, 1)
+    if isempty(headers)
+        return headers # connection closed
     end
+    type = headers[1]
+    if type === HEADER_LEN1
+        len = read(sock, 1)[1]
+    elseif type === HEADER_LEN2
+        lb = read(sock, 2)
+        len = Int(lb[1]) << 8 + lb[2]
+    elseif type === HEADER_LEN4
+        lb = read(sock, 4)
+        len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
+    else
+        @error "tcp channel invalid header value [$type]"
+        throw(ConnectionClosed())
+    end
+    payload = read(sock, len)
+    @rawlog("in: $payload")
+    return payload
 end
 
 function transport_read(socket::WebSockets.WebSocket)

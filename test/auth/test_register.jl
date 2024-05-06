@@ -10,7 +10,7 @@ function init(uid, pin)
     Rembus.save_owners(df)
 end
 
-function run()
+function run(url)
     cmp = Rembus.Component(url)
 
     Rembus.register(url, uid, pin)
@@ -70,7 +70,7 @@ function run_embedded()
 
 end
 
-function unregister()
+function unregister(url)
     client = tryconnect(url)
 
     try
@@ -114,21 +114,21 @@ function unregister()
 
 end
 
-
-
 uid = "rembus_user"
 cid = "regcomp"
-url = "zmq://:8002/$cid"
 pin = "11223344"
 
 setup() = init(uid, pin)
 try
-    execute(run, "test_register", setup=setup)
-
+    url = "zmq://:8002/$cid"
+    execute(() -> run(url), "test_register", setup=setup)
     @info "[test_authenticated_embedded] start"
     run_embedded()
+    execute(() -> unregister(url), "test_unregister", setup=setup)
 
-    execute(unregister, "test_unregister", setup=setup)
+    url = cid
+    execute(() -> run(cid), "test_register", setup=setup)
+
 catch e
     @error "[test_register]: $e"
     @test false

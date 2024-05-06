@@ -162,6 +162,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             @time @safetestset "zmq" begin
                 include("zmq/test_zmq.jl")
             end
+            @time @safetestset "zmq_nodealer" begin
+                include("zmq/test_zmq_nodealer.jl")
+            end
         end
         if GROUP == "all" || GROUP == "tcp"
             @time @safetestset "zmq" begin

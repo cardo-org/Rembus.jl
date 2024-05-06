@@ -767,8 +767,8 @@ function zeromq_receiver(router::Router)
                 ack_msg(twin, msg)
             elseif isa(msg, Close)
                 offline!(twin)
-            elseif isa(msg, Remove)
-                destroy_twin(twin, router)
+                #            elseif isa(msg, Remove)
+                #                destroy_twin(twin, router)
             end
         catch e
             if isa(e, Visor.ProcessInterrupt) || isa(e, ZMQ.StateError)

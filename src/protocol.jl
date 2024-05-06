@@ -125,10 +125,10 @@ end
 struct Close <: RembusMsg
 end
 
-# Remove the twin of a component from the broker.
-# Apply to ZeroMQ protocol.
-struct Remove <: RembusMsg
-end
+## Remove the twin of a component from the broker.
+## Apply to ZeroMQ protocol.
+#struct Remove <: RembusMsg
+#end
 
 id() = uuid4().value  # unique message identifier
 

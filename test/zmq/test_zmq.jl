@@ -30,13 +30,12 @@ function run()
     sleep(2)
 
     # restart caronte
-    Rembus.caronte(wait=false, exit_when_done=false)
+    Rembus.caronte(wait=false, exit_when_done=false, args=Dict("zmq" => 8002))
     sleep(2)
-    close(component1)
 end
 
 ENV["REMBUS_BASE_URL"] = "zmq://localhost:8002"
-ENV["REMBUS_ZMQ_PING_INTERVAL"] = 0.1
+ENV["REMBUS_ZMQ_PING_INTERVAL"] = 0.5
 
 cid1 = "component1"
 setup() = init(cid1)
