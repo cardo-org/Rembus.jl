@@ -1,8 +1,5 @@
-using Distributed
-addprocs(2)
-
-@everywhere using Rembus
-@everywhere using Test
+using Rembus
+using Test
 using SafeTestsets
 using Visor
 
@@ -70,6 +67,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             end
         end
         if GROUP == "all" || GROUP == "integration"
+            @time @safetestset "wrong_packet" begin
+                include("integration/test_wrong_packet.jl")
+            end
             @time @safetestset "rawlog" begin
                 include("integration/test_rawlog.jl")
             end
@@ -113,6 +113,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         if GROUP == "all" || GROUP == "api"
             @time @safetestset "component" begin
                 include("api/test_component.jl")
+            end
+            @time @safetestset "simple_publish" begin
+                include("api/test_simple_publish.jl")
             end
             @time @safetestset "publish_api" begin
                 include("api/test_publish.jl")

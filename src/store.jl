@@ -402,7 +402,7 @@ function send_cached(twin, io)
         count += 1
         retro = get(twin.retroactive, msg.topic, true)
         if retro
-            @mlog("[$(twin.id)] <- $(prettystr(msg))")
+            #@mlog("[$(twin.id)] <- $(prettystr(msg))")
             transport_send(twin, twin.sock, msg)
         else
             @debug "[$twin] retroactive=$(retro): skipping msg $msg"

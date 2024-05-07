@@ -33,7 +33,8 @@ function execute_caronte_process(fn, testname; setup=nothing)
     running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
 
     if !running
-        p = Base.run(Cmd(`$(@__DIR__)/../bin/caronte`, detach=true), wait=false)
+        pth = joinpath(@__DIR__, "..", "..", "bin", "caronte")
+        p = Base.run(Cmd(`$pth`, detach=true), wait=false)
     end
     sleep(10)
 

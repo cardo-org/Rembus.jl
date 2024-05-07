@@ -148,6 +148,7 @@ function Base.show(io::IO, msg::Msg)
     end
 end
 
+#=
 macro mlog(str)
     quote
         if CONFIG.metering
@@ -155,6 +156,7 @@ macro mlog(str)
         end
     end
 end
+=#
 
 macro rawlog(msg)
     quote
@@ -195,6 +197,7 @@ function create_twin(id, router)
         twin = Twin(router, id, router.process.inbox)
         spec = process(id, twin_task, args=(twin,))
         startup(from("caronte.twins"), spec)
+        yield()
         router.id_twin[id] = twin
         twin_initialize(CONFIG.broker_ctx, twin)
         return twin
@@ -354,9 +357,8 @@ function attestation(router, twin, msg, authenticate=true)
     end
 
     response = ResMsg(msg.id, sts, reason)
-    @mlog("[$twin] -> $response")
+    #@mlog("[$twin] -> $response")
     transport_send(twin, twin.sock, response)
-
     if sts !== STS_SUCCESS
         detach(twin)
     end
@@ -380,9 +382,9 @@ function attestation(router::Embedded, twin, msg)
     end
 
     response = ResMsg(msg.id, sts, reason)
-    @mlog("[$twin] -> $response")
-    transport_send(twin, twin.sock, response)
-
+    #@mlog("[$twin] -> $response")
+    #transport_send(twin, twin.sock, response)
+    put!(twin.process.inbox, response)
     if sts !== STS_SUCCESS
         detach(twin)
     end
@@ -427,8 +429,9 @@ function register(router, twin, msg)
         save_token_app(router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
-    @mlog("[$twin] -> $response")
-    transport_send(twin, twin.sock, response)
+    #@mlog("[$twin] -> $response")
+    #transport_send(twin, twin.sock, response)
+    put!(twin.process.inbox, response)
 end
 
 #=
@@ -453,8 +456,9 @@ function unregister(router, twin, msg)
         save_token_app(router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
-    @mlog("[$twin] -> $response")
-    transport_send(twin, twin.sock, response)
+    #@mlog("[$twin] -> $response")
+    #transport_send(twin, twin.sock, response)
+    put!(twin.process.inbox, response)
 end
 
 function rpc_response(router, twin, msg)
@@ -464,9 +468,9 @@ function rpc_response(router, twin, msg)
         put!(router.process.inbox, Msg(TYPE_RESPONSE, msg, twinput, reqdata))
 
         elapsed = time() - twin.sent[msg.id].sending_ts
-        if CONFIG.metering
-            @debug "[$(twin.id)][$(reqdata.topic)] exec elapsed time: $elapsed secs"
-        end
+        #if CONFIG.metering
+        #    @debug "[$(twin.id)][$(reqdata.topic)] exec elapsed time: $elapsed secs"
+        #end
 
         delete!(twin.sent, msg.id)
     else
@@ -607,7 +611,7 @@ function twin_receiver(router, twin)
                 break
             end
             msg::RembusMsg = broker_parse(payload)
-            @mlog("[$(twin.id)] <- $(prettystr(msg))")
+            #@mlog("[$(twin.id)] <- $(prettystr(msg))")
 
             if isa(msg, Unregister)
                 unregister(router, twin, msg)
@@ -662,7 +666,7 @@ function anonymous_twin_receiver(router, twin)
                 break
             end
             msg::RembusMsg = broker_parse(payload)
-            @mlog("[$(twin.id)] <- $(prettystr(msg))")
+            #@mlog("[$(twin.id)] <- $(prettystr(msg))")
             if isa(msg, IdentityMsg)
                 auth_twin = identity_check(router, twin, msg, paging=true)
                 if auth_twin !== nothing
@@ -711,7 +715,7 @@ function zeromq_receiver(router::Router)
             end
 
             msg::RembusMsg = broker_parse(router, pkt)
-            @mlog("[ZMQ][$twin] <- $(prettystr(msg))")
+            #@mlog("[ZMQ][$twin] <- $(prettystr(msg))")
 
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
@@ -724,7 +728,7 @@ function zeromq_receiver(router::Router)
                     identity_upgrade(router, twin, msg, id, authenticate=false)
                     continue
                 end
-                @mlog("[ZMQ][$twin] -> $response")
+                #@mlog("[ZMQ][$twin] -> $response")
                 transport_send(twin, router.zmqsocket, response)
             elseif isa(msg, PingMsg)
                 if (twin.id != msg.cid)
@@ -838,10 +842,10 @@ function twin_task(self, twin)
             if isshutdown(msg)
                 break
             elseif isa(msg, ResMsg)
-                @mlog("[$(twin.id)] -> $msg")
+                #@mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.sock, msg, true)
             elseif isa(msg, EnableReactiveMsg)
-                @mlog("[$(twin.id)] -> $msg")
+                #@mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.sock, ResMsg(msg.id, STS_SUCCESS, nothing), true)
                 twin.router.unpark(CONFIG.broker_ctx, twin)
             else
@@ -909,7 +913,7 @@ function signal!(twin, msg)
     end
 
     pkt = msg.content
-    @mlog "[$twin] -> $pkt"
+    #@mlog "[$twin] -> $pkt"
     try
         transport_send(twin, twin.sock, pkt)
     catch e
@@ -1242,7 +1246,7 @@ function client_receiver(router::Embedded, ws)
                 break
             end
             msg::RembusMsg = broker_parse(payload)
-            @mlog("[$twin] <- $(prettystr(msg))")
+            #@mlog("[$twin] <- $(prettystr(msg))")
 
             if isa(msg, RpcReqMsg)
                 rpc_request(router, twin, msg)

@@ -2,7 +2,6 @@ include("../utils.jl")
 
 function run()
     Rembus.CONFIG.rawdump = true
-    Rembus.CONFIG.metering = true
 
     rb = tryconnect("test_rawlog")
     v = rpc(rb, "version")

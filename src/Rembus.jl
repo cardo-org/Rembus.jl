@@ -32,7 +32,6 @@ using UUIDs
 @reexport using Visor
 using ZMQ
 
-
 export @component
 export @enable_ack, @disable_ack
 export @expose, @unexpose
@@ -365,10 +364,11 @@ function name2proc(name::AbstractString, startproc=false, setanonymous=false)
     return name2proc(Component(name), startproc, setanonymous)
 end
 
+function name2proc(::Nothing, startproc=false, setanonymous=false)
+    return name2proc(getcomponent(), startproc, setanonymous)
+end
+
 function name2proc(cmp::Component, startproc=false, setanonymous=false)
-    if cmp.id == "rembus"
-        cmp = getcomponent()
-    end
     proc = from(cmp.id)
     if proc === nothing
         if setanonymous && CONFIG.cid == "rembus"
@@ -377,7 +377,6 @@ function name2proc(cmp::Component, startproc=false, setanonymous=false)
             throw(Visor.UnknownProcess(cmp.id))
         end
     end
-
     if startproc && !isdefined(proc, :task)
         Visor.startchain(proc)
     end
@@ -409,7 +408,7 @@ end
 
 Close the connection and terminate the component.
 """
-macro terminate(name=getcomponent())
+macro terminate(name=nothing)
     quote
         shutdown(name2proc($(esc(name))))
         Rembus.CONFIG.cid = "rembus"
@@ -434,7 +433,7 @@ macro rembus(cid=nothing)
     end
 end
 
-function holder_expr(shared, cid=getcomponent())
+function holder_expr(shared, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid", false, false),
         Rembus.SetHolder(aaa),
@@ -491,13 +490,12 @@ macro shared(cid, container)
     end
 end
 
-function publish_expr(topic, cid=getcomponent())
+function publish_expr(topic, cid=nothing)
     ext = :(cast(Rembus.name2proc("cid", true, true), Rembus.CastCall(t, [])))
 
     fn = string(topic.args[1])
     ext.args[2].args[2] = cid
     ext.args[3].args[2] = fn
-
     args = topic.args[2:end]
     ext.args[3].args[3].args = args
     return ext
@@ -542,7 +540,7 @@ macro publish(cid, topic)
     end
 end
 
-function rpc_expr(topic, cid=getcomponent())
+function rpc_expr(topic, cid=nothing)
     ext = :(call(
         Rembus.name2proc("cid", true, true),
         Rembus.CastCall(t, []),
@@ -614,7 +612,7 @@ end
 fnname(fn::Expr) = fn.args[1].args[1]
 fnname(fn::Symbol) = fn
 
-function expose_expr(fn, cid=getcomponent())
+function expose_expr(fn, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid", true, true),
         Rembus.AddImpl(aaa),
@@ -625,7 +623,7 @@ function expose_expr(fn, cid=getcomponent())
     return ex
 end
 
-function subscribe_expr(fn, mode::Symbol, cid=getcomponent())
+function subscribe_expr(fn, mode::Symbol, cid=nothing)
     if mode == :from_now
         sts = false
     elseif mode == :before_now
@@ -842,32 +840,22 @@ macro unsubscribe(cid, fn)
 end
 
 function reactive_expr(reactive, cid=nothing)
-    if cid === nothing
-        id = getcomponent()
-    else
-        id = cid
-    end
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.Reactive($reactive),
         timeout=Rembus.request_timeout()
     ))
-    ex.args[2].args[2] = id
+    ex.args[2].args[2] = cid
     return ex
 end
 
 function enable_ack_expr(enable, cid=nothing)
-    if cid === nothing
-        id = getcomponent()
-    else
-        id = cid
-    end
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.EnableAck($enable),
         timeout=Rembus.request_timeout()
     ))
-    ex.args[2].args[2] = id
+    ex.args[2].args[2] = cid
     return ex
 end
 
@@ -1231,11 +1219,11 @@ function handle_input(rb, msg)
         if isa(msg, RpcReqMsg)
             response = ResMsg(msg.id, sts, result)
             @debug "response: $response"
-            transport_send(rb.socket, response)
+            put!(rb.msgch, response)
         elseif isa(msg, PubSubMsg) && (msg.flags & ACK_FLAG) == ACK_FLAG
             # check if ack is enabled
             # @debug "$msg sending Ack with hash=$(msg.hash)"
-            transport_send(rb.socket, AckMsg(msg.hash))
+            put!(rb.msgch, AckMsg(msg.hash))
         end
     end
 

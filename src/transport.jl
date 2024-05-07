@@ -912,7 +912,9 @@ function transport_read(socket::WebSockets.WebSocket)
 end
 
 function isconnectionerror(ws::WebSockets.WebSocket, e)
-    isa(e, EOFError) || isa(e, Base.IOError) || !WebSockets.isok(ws)
+    isa(e, EOFError) ||
+        isa(e, Base.IOError) ||
+        isa(e, WebSockets.WebSocketError)
 end
 
 function isconnectionerror(ws, e)
