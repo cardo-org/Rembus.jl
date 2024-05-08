@@ -35,3 +35,7 @@ e = encode(n)
 @test convert(SmallInteger, 1) == 1
 @test 1 == convert(SmallInteger, 1)
 @test convert(SmallInteger, 1) == convert(SmallInteger, SmallInteger(1))
+
+@test Rembus.Tag(1, 1) == Rembus.Tag(1, 1)
+@test Rembus.num2hex(10) == "000000000000000a"
+@test Rembus.hex2num(Rembus.num2hex(1.0)) == 1.0

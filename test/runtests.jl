@@ -69,17 +69,6 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
                 include("rbpool/test_rbpool.jl")
             end
         end
-        if GROUP == "all" || GROUP == "errors"
-            @time @safetestset "errors" begin
-                include("errors/test_rembus_errors.jl")
-            end
-            @time @safetestset "connection_error" begin
-                include("errors/test_connection_error.jl")
-            end
-            @time @safetestset "transport_send_error" begin
-                include("errors/test_transport_send_error.jl")
-            end
-        end
         if GROUP == "all" || GROUP == "integration"
             @time @safetestset "wrong_packet" begin
                 include("integration/test_wrong_packet.jl")
@@ -196,6 +185,17 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         if GROUP == "all" || GROUP == "repl"
             @time @safetestset "repl" begin
                 include("repl/test_repl.jl")
+            end
+        end
+        if GROUP == "all" || GROUP == "errors"
+            @time @safetestset "errors" begin
+                include("errors/test_rembus_errors.jl")
+            end
+            @time @safetestset "connection_error" begin
+                include("errors/test_connection_error.jl")
+            end
+            @time @safetestset "transport_send_error" begin
+                include("errors/test_transport_send_error.jl")
             end
         end
     end
