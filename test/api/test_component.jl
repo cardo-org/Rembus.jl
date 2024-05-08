@@ -9,15 +9,14 @@ function atopic(ctx, x)
     ctx.data = x
 end
 
-function aservice(ctx, x, y)
-    return x + y
-end
-
 function run()
     ctx = Ctx(nothing)
 
     @component "mycomponent"
     sleep(1)
+
+    @test_throws ErrorException @subscribe atopic invalid_mode
+
     @subscribe atopic
     @shared ctx
     @reactive
@@ -37,7 +36,7 @@ function run()
 
     @unsubscribe atopic
 
-    @expose aservice
+    @expose aservice(ctx, x, y) = x + y
 
     res = rpc(rb, "aservice", [1, 2])
     @test res == 3
@@ -46,6 +45,11 @@ function run()
     @test_throws RpcMethodUnavailable rpc(rb, "aservice", [1, 2])
 
     close(rb)
+
+    # test unknown process
+    #@test_throws Visor.UnknownProcess @publish "fabulous" foo()
+    @publish "fabulous" foo()
+
 end
 
 execute(run, "test_component")

@@ -4,6 +4,7 @@ test_name = "test_plugin"
 
 # set a mismatched shared secret
 function init(ok_cid, ko_cid)
+    mkpath(Rembus.keys_dir())
     # component side
     for cid in [ok_cid, ko_cid]
         pkfile = Rembus.pkfile(cid)
@@ -17,7 +18,6 @@ function init(ok_cid, ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end
-
     fn = Rembus.key_file(ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
@@ -31,6 +31,7 @@ using Rembus #needed for session()
 
 export add_interest
 export challenge
+export save_configuration
 export login
 export myfunction
 
@@ -65,6 +66,10 @@ function unpark(ctx, twin, msg)
     @info "[$twin] park: $msg"
 end
 
+function save_configuration(ctx, router)
+    @info "CarontePlugin::save_configuration"
+end
+
 #
 # Called when the twin startup.
 #
@@ -84,6 +89,9 @@ function test_plugin_topic()
 end
 
 function run(ok_cid, ko_cid)
+    # wait for secret files creation
+    sleep(1)
+
     # store test related info
     ctx = Dict()
 

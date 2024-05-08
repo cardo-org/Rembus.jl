@@ -361,6 +361,10 @@ request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "5"))
 getcomponent() = Component(Rembus.CONFIG.cid)
 
 function name2proc(name::AbstractString, startproc=false, setanonymous=false)
+    cmp = Component(name)
+    if from(cmp.id) === nothing
+        throw(ErrorException("unknown process $(cmp.id)"))
+    end
     return name2proc(Component(name), startproc, setanonymous)
 end
 
@@ -373,8 +377,6 @@ function name2proc(cmp::Component, startproc=false, setanonymous=false)
     if proc === nothing
         if setanonymous && CONFIG.cid == "rembus"
             proc = startup(rembus())
-        else
-            throw(Visor.UnknownProcess(cmp.id))
         end
     end
     if startproc && !isdefined(proc, :task)
@@ -402,6 +404,8 @@ macro component(name)
         Visor.startup(rembus())
     end
 end
+
+Visor.shutdown(nothing) = nothing
 
 """
     @terminate
@@ -1195,7 +1199,6 @@ function handle_input(rb, msg)
             yield()
 
             while notify(rb.out[msg.id], msg) == 0
-                @info "$msg: notifying too early"
                 sleep(0.001)
             end
         else
@@ -1240,7 +1243,7 @@ function parse_msg(rb, response)
         msg = connected_socket_load(response)
         handle_input(rb, msg)
     catch e
-        @error "parse_msg: $e\n"
+        @error "message decoding: $e"
         @showerror e
     end
 
@@ -1296,10 +1299,6 @@ function read_socket(socket, process, rb, isconnected::Condition)
 end
 
 function write_task(rb::RBConnection)
-    # manage reconnections events
-    if !isopen(rb.msgch)
-        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
-    end
 
     for msg in rb.msgch
         if isa(msg, CloseConnection)
@@ -1314,6 +1313,8 @@ function write_task(rb::RBConnection)
                 end
             catch e
                 @warn "[$(rb.client.id)] close: $e"
+            finally
+                rb.socket = nothing
             end
             close(rb.msgch)
         else
@@ -1361,7 +1362,7 @@ function zmq_receive(rb)
             if !isopen(rb.socket)
                 break
             else
-                @error "[zmq_receive] error: $e"
+                @error "zmq message decoding: $e"
                 @showerror e
             end
         end
@@ -1373,17 +1374,9 @@ function zmq_connect(rb)
     rb.context = ZMQ.Context()
     rb.socket = ZMQ.Socket(rb.context, DEALER)
     rb.socket.linger = 1
-    try
-        url = brokerurl(rb.client)
-        ZMQ.connect(rb.socket, url)
-        @async zmq_receive(rb)
-    catch e
-        @showerror e
-        close(rb.socket)
-        close(rb.context)
-        rethrow()
-    end
-
+    url = brokerurl(rb.client)
+    ZMQ.connect(rb.socket, url)
+    @async zmq_receive(rb)
     return nothing
 end
 
@@ -1438,16 +1431,6 @@ function pkfile(name)
     end
 
     return joinpath(cfgdir, name)
-end
-
-function loadkey(name::AbstractString)
-    file = pkfile(name)
-    @debug "keyfile: $file"
-    if isfile(file)
-        return MbedTLS.parse_keyfile(file)
-    end
-
-    return missing
 end
 
 function resend_attestate(rb, response)
@@ -1526,6 +1509,11 @@ function connect_timeout(rb, isconnected)
 end
 
 function _connect(rb, process)
+    # manage reconnections events
+    if !isopen(rb.msgch)
+        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
+    end
+
     if rb.client.protocol === :ws || rb.client.protocol === :wss
         isconnected = Condition()
         t = Timer((tim) -> connect_timeout(rb, isconnected), request_timeout())
@@ -1582,7 +1570,7 @@ end
 
 function isconnected(rb::RBConnection)
     if rb.socket === nothing
-        false
+        return false
     else
         if isa(rb.socket, WebSockets.WebSocket)
             return isopen(rb.socket.io)
@@ -1701,11 +1689,7 @@ function connect(rb::RBPool)
         try
             connect(c)
         catch e
-            if isa(e, RembusError)
-                @warn "error: $e"
-            else
-                @warn "[$(c.client.id)] connection failed: $e"
-            end
+            @warn "[$(c.client.id)] error: $e"
         end
     end
 

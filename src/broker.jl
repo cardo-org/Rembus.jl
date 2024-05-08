@@ -383,8 +383,7 @@ function attestation(router::Embedded, twin, msg)
 
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    #transport_send(twin, twin.sock, response)
-    put!(twin.process.inbox, response)
+    transport_send(twin, twin.sock, response)
     if sts !== STS_SUCCESS
         detach(twin)
     end
@@ -578,10 +577,8 @@ function receiver_exception(router, twin, e)
         end
     elseif isa(e, InterruptException)
         rethrow()
-    elseif isa(e, ArgumentError)
-        @error "[$twin] invalid message format: $e"
     else
-        @error "[$twin] internal error: $e"
+        @error "[$twin] receiver error: $e"
     end
 end
 
@@ -814,12 +811,8 @@ Disconnect the twin from the ws/tcp channel.
 =#
 function detach(twin)
     if twin.sock !== nothing
-        try
-            if !isa(twin.sock, ZMQ.Socket)
-                close(twin.sock)
-            end
-        catch e
-            @debug "error closing websocket: $e"
+        if !isa(twin.sock, ZMQ.Socket)
+            close(twin.sock)
         end
         twin.sock = nothing
     end
@@ -872,7 +865,7 @@ function handle_ack_timeout(tim, twin, msg, msgid)
         try
             twin.router.park(CONFIG.broker_ctx, twin, msg)
         catch e
-            @error "[$twin] ack_timeout: $e"
+            @error "[$twin] park (ack timeout): $e"
         end
     end
     delete!(twin.acktimer, msgid)

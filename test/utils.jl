@@ -90,7 +90,7 @@ function tryconnect(id)
     count = 0
     while true
         try
-            return connect(id)
+            return Rembus.connect(id)
         catch e
             if !isa(e, HTTP.Exceptions.ConnectError)
                 @warn "tryconnect: $e"

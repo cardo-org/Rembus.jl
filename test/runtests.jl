@@ -6,7 +6,7 @@ using Visor
 const GROUP = get(ENV, "GROUP", "all")
 
 Rembus.CONFIG = Rembus.Settings()
-Rembus.CONFIG.db = "/tmp/caronte_test"
+Rembus.CONFIG.db = joinpath("/", "tmp", "caronte_test")
 
 rm(Rembus.CONFIG.db, force=true, recursive=true)
 
@@ -60,10 +60,24 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             @time @safetestset "connect" begin
                 include("connect/test_connect.jl")
             end
+            @time @safetestset "reconnect" begin
+                include("connect/test_reconnect.jl")
+            end
         end
         if GROUP == "all" || GROUP == "rbpool"
             @time @safetestset "rbpool" begin
                 include("rbpool/test_rbpool.jl")
+            end
+        end
+        if GROUP == "all" || GROUP == "errors"
+            @time @safetestset "errors" begin
+                include("errors/test_rembus_errors.jl")
+            end
+            @time @safetestset "connection_error" begin
+                include("errors/test_connection_error.jl")
+            end
+            @time @safetestset "transport_send_error" begin
+                include("errors/test_transport_send_error.jl")
             end
         end
         if GROUP == "all" || GROUP == "integration"

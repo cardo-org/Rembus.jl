@@ -23,7 +23,6 @@ The decoding is performed at the client side.
 function zmq_load(socket::ZMQ.Socket)
 
     pkt = zmq_message(socket)
-
     header = pkt.header
     data::Vector{UInt8} = pkt.data
 
@@ -54,7 +53,10 @@ function zmq_load(socket::ZMQ.Socket)
         catch e
             return ResMsg(id, STS_GENERIC_ERROR, "$e", flags)
         end
+    else
+        throw(ErrorException("unknown packet type $ptype"))
     end
+
     msg
 end
 
@@ -491,7 +493,11 @@ data2message(data::ZMQ.Message) = Vector{UInt8}(data)
 
 transport_send(twin::Twin, ::Nothing, msg) = error("$twin connection closed")
 
-function transport_send(twin::Twin, ws::Union{WebSockets.WebSocket,TCPSocket}, msg::PubSubMsg)
+function transport_send(
+    twin::Twin,
+    ws::Union{WebSockets.WebSocket,TCPSocket},
+    msg::PubSubMsg
+)
     if twin.qos === with_ack
 
         msg.flags |= ACK_FLAG
@@ -855,32 +861,6 @@ function transport_write(sock, llmsg)
     payload = encode(llmsg)
     tcp_write(sock, payload)
 end
-
-##function transport_read(sock::MbedTLS.SSLContext)
-##    while true
-##        headers = read(sock, 1)
-##        if isempty(headers)
-##            MbedTLS.ssl_session_reset(sock)
-##            throw(ConnectionClosed())
-##        end
-##        type = headers[1]
-##        if type === HEADER_LEN1
-##            len = read(sock, 1)[1]
-##        elseif type === HEADER_LEN2
-##            lb = read(sock, 2)
-##            len = Int(lb[1]) << 8 + lb[2]
-##        elseif type === HEADER_LEN4
-##            lb = read(sock, 4)
-##            len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
-##        else
-##            @error "tcp channel invalid header format"
-##            throw(ConnectionClosed())
-##        end
-##        payload = read(sock, len)
-##        @rawlog("in: $payload")
-##        return payload
-##    end
-##end
 
 function transport_read(sock)
     headers = read(sock, 1)

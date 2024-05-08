@@ -56,6 +56,10 @@ function run()
 
     sleep(2)
     close(cli)
+
+    # test connection errors
+    cli = connect(["ws://localhost:9998/cmp1", "ws://localhost:9999/cmp2"])
+
     shutdown()
 end
 
