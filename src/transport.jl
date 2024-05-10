@@ -414,14 +414,21 @@ end
 
 function transport_file_io(msg::PubSubMsg{IOBuffer})
     mark(msg.data)
-    seek(msg.data, 2)
-    payload = read(msg.data)
-    len::UInt32 = length(payload) + 1
+    # optimization possible with a dedicated method
+    # for RpcResMessage broadcasting
+    # the commented lines works for PubSubMsg only
+    #seek(msg.data, 2)
+    #payload = read(msg.data)
+    data = read(msg.data)
+    payload = encode([msg.topic, decode(data)])
+    #len::UInt32 = length(payload) + 1
+    len::UInt32 = length(payload)
     io = IOBuffer(maxsize=4 + len)
     write(io, len)
-    write(io, 0x82)
+    #write(io, 0x82)
     write(io, payload)
     reset(msg.data)
+
     return io
 end
 

@@ -350,9 +350,9 @@ mutable struct RBPool <: RBHandle
     RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
 end
 
-rembus_dir() = get(ENV, "REMBUS_DIR", joinpath(get(ENV, "HOME", "."), ".config", "rembus"))
+rembus_dir() = joinpath(CONFIG.home, ".config", "rembus")
 
-broker_dir() = get(ENV, "BROKER_DIR", joinpath(get(ENV, "HOME", "."), ".config", "caronte"))
+broker_dir() = CONFIG.db
 
 keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(), "keystore"))
 

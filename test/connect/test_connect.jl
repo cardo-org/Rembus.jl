@@ -10,6 +10,10 @@ function run()
 
             close(rb)
             @test !isconnected(rb) === true
+
+            # if an exception is captured when component is closed
+            # then close_is_ok returns true
+            @test Rembus.close_is_ok(rb.socket, ErrorException("whatever"))
         end
     end
 end

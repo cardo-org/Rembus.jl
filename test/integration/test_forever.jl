@@ -6,6 +6,7 @@ end
 
 function run()
     topic = "mytopic"
+    @test Rembus.islistening(30)
 
     Timer(tmr -> shutdown(), 5)
 

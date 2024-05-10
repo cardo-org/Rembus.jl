@@ -1,0 +1,60 @@
+using Distributed
+addprocs(2)
+
+@everywhere using Rembus
+using Test
+
+mutable struct Ctx
+    data::Any
+end
+
+function foo(ctx, x)
+    @info "[test_simple_publish] foo=$x"
+    ctx.data = x
+end
+
+function bar(ctx, x)
+    @info "[test_reconnect] bar: $x"
+end
+
+function start_broker()
+    remotecall(caronte, 2, wait=false, exit_when_done=false)
+end
+
+function run()
+    try
+        #ctx = Ctx(nothing)
+        #value = "hello"
+        #rb = connect()
+        #shared(rb, ctx)
+        #subscribe(rb, foo)
+        #reactive(rb)
+
+        @component "myserver"
+        @subscribe foo
+        sleep(5)
+        remotecall(shutdown, 2)
+        sleep(20)
+        Visor.dump()
+        @info "restarting broker"
+        start_broker()
+        sleep(5)
+        @info "rpc ....."
+        res = @rpc version()
+        @info "version: $res"
+        #@test ctx.data == value
+        #@terminate
+    catch e
+        @error "[test_reconnect] error: $e"
+        @test false
+    end
+    @info "shutting down"
+    remotecall(shutdown, 2)
+    sleep(2)
+end
+
+@info "[test_reconnect] start"
+@async start_broker()
+sleep(15)
+run()
+@info "[test_reconnect] stop"

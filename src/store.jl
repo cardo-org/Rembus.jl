@@ -315,7 +315,7 @@ function save_page(twin)
     end
 end
 
-function park(ctx::Any, twin::Twin, msg::RembusMsg)
+function park(ctx::Any, twin::Twin, msg::PubSubMsg)
     if !twin.hasname
         # do not persist messages addressed to anonymous components
         return

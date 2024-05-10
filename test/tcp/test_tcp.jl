@@ -35,7 +35,7 @@ end
 cid1 = "component2"
 
 ENV["REMBUS_BASE_URL"] = "tcp://127.0.0.1:8001"
-execute(run, "test_tcp")
+execute(run, "test_tcp", args=Dict("tcp" => 8001, "reset" => true))
 
 #ENV["REMBUS_BASE_URL"] = "tls://127.0.0.1:8001"
 #execute(run, "test_tcp", args=Dict("secure" => true, "tcp" => 8001))

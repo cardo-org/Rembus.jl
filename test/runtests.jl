@@ -5,14 +5,31 @@ using Visor
 
 const GROUP = get(ENV, "GROUP", "all")
 
-Rembus.CONFIG = Rembus.Settings()
-Rembus.CONFIG.db = joinpath("/", "tmp", "caronte_test")
+if Sys.iswindows()
+    rootdir = joinpath(get(ENV, "LOCALAPPDATA", "."), "caronte_test")
+else
+    rootdir = joinpath(get(ENV, "HOME", "."), "caronte_test")
+end
+
+Rembus.CONFIG = Rembus.Settings(rootdir)
 
 rm(Rembus.CONFIG.db, force=true, recursive=true)
 
 @testset "Rembus" begin
     @testset "unit" begin
         if GROUP == "all" || GROUP == "unit"
+            @time @safetestset "caronte" begin
+                include("unit/test_caronte.jl")
+            end
+            @time @safetestset "caronted" begin
+                include("unit/test_caronted.jl")
+            end
+            @time @safetestset "embedded" begin
+                include("unit/test_embedded.jl")
+            end
+            @time @safetestset "messages" begin
+                include("unit/test_messages.jl")
+            end
             @time @safetestset "twin" begin
                 include("unit/test_twin.jl")
             end
@@ -69,6 +86,11 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
                 include("rbpool/test_rbpool.jl")
             end
         end
+        if GROUP == "all" || GROUP == "config"
+            @time @safetestset "config" begin
+                include("config/test_broker_config.jl")
+            end
+        end
         if GROUP == "all" || GROUP == "integration"
             @time @safetestset "wrong_packet" begin
                 include("integration/test_wrong_packet.jl")
@@ -120,6 +142,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             @time @safetestset "simple_publish" begin
                 include("api/test_simple_publish.jl")
             end
+            @time @safetestset "conditional_publish" begin
+                include("api/test_conditional_publish.jl")
+            end
             @time @safetestset "publish_api" begin
                 include("api/test_publish.jl")
             end
@@ -152,6 +177,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
             @time @safetestset "login_failure" begin
                 include("auth/test_login_failure.jl")
             end
+#            @time @safetestset "wrong_secret" begin
+#                include("auth/test_wrong_secret.jl")
+#            end
         end
         if GROUP == "all" || GROUP == "park"
             @time @safetestset "page_file" begin
@@ -190,6 +218,12 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         if GROUP == "all" || GROUP == "errors"
             @time @safetestset "errors" begin
                 include("errors/test_rembus_errors.jl")
+            end
+            @time @safetestset "serve_ws_error" begin
+                include("errors/test_serve_ws_error.jl")
+            end
+            @time @safetestset "serve_zmq_error" begin
+                include("errors/test_serve_zmq_error.jl")
             end
             @time @safetestset "connection_error" begin
                 include("errors/test_connection_error.jl")

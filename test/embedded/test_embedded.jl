@@ -85,6 +85,10 @@ function run()
         @test isconnected(rb)
         close(rb)
 
+        rb = connect()
+        publish(rb, "df_service", nothing)
+        sleep(0.5)
+        close(rb)
     catch e
         @error "[test_embedded] error: $e"
         @test false

@@ -575,8 +575,6 @@ function receiver_exception(router, twin, e)
         else
             @error "[$twin] connection closed: $e"
         end
-    elseif isa(e, InterruptException)
-        rethrow()
     else
         @error "[$twin] receiver error: $e"
     end
@@ -1100,7 +1098,7 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
         wait=wait
     )
     if exit_when_done
-        exit(0)
+        ###exit(0)
     end
 
     return sv
@@ -1141,7 +1139,7 @@ function serve(
             wait=wait
         )
         if exit_when_done
-            exit(0)
+            ### exit(0)
         end
     else
         p = process(
@@ -1203,7 +1201,8 @@ end
 function identity_check(router, twin, msg; paging=true)
     @debug "[$twin] auth identity: $(msg.cid)"
     if isempty(msg.cid)
-        respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid", twin))
+        respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid"), twin)
+        return nothing
     end
     named = named_twin(msg.cid, router)
     if named !== nothing && !offline(named)
@@ -1234,10 +1233,13 @@ function client_receiver(router::Embedded, ws)
     while isopen(ws)
         try
             payload = transport_read(ws)
+            #=
+            # eventually needed for tcp sockets
             if isempty(payload)
                 @debug "[$twin]: connection close"
                 break
             end
+            =#
             msg::RembusMsg = broker_parse(payload)
             #@mlog("[$twin] <- $(prettystr(msg))")
 
@@ -1252,11 +1254,9 @@ function client_receiver(router::Embedded, ws)
                 end
             elseif isa(msg, Attestation)
                 twin = attestation(router, twin, msg)
-            elseif isa(msg, AckMsg)
-                ack_msg(twin, msg)
             end
         catch e
-            @debug "[embedded] error: $e"
+            receiver_exception(router, twin, e)
             if isa(e, EOFError)
                 break
             end
@@ -1357,41 +1357,29 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
         if issecure
             proto = "tls"
             sslconfig = secure_config()
+        end
 
-            server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
-            router.server = server
-            @info "caronte up and running at port $proto:$caronte_port"
-            while true
-                try
-                    sock = accept(server)
+        server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
+        router.server = server
+        @info "caronte up and running at port $proto:$caronte_port"
+        while true
+            try
+                sock = accept(server)
+                if issecure
                     ctx = MbedTLS.SSLContext()
                     MbedTLS.setup!(ctx, sslconfig)
                     MbedTLS.associate!(ctx, sock)
                     MbedTLS.handshake(ctx)
                     @async client_receiver(router, ctx)
-                catch e
-                    if !isa(e, Visor.ProcessInterrupt)
-                        @error "tcp server: $e"
-                        @showerror e
-                    end
-                    rethrow()
-                end
-            end
-        else
-            server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
-            router.server = server
-            @info "caronte up and running at port $proto:$caronte_port"
-            while true
-                try
-                    sock = accept(server)
+                else
                     @async client_receiver(router, sock)
-                catch e
-                    if !isa(e, Visor.ProcessInterrupt)
-                        @error "tcp server: $e"
-                        @showerror e
-                    end
-                    rethrow()
                 end
+            catch e
+                if !isa(e, Visor.ProcessInterrupt)
+                    @error "tcp server: $e"
+                    @showerror e
+                end
+                rethrow()
             end
         end
     finally
@@ -1751,6 +1739,7 @@ function broker(self, router)
     @debug "[broker] done"
 end
 
+#=
 function caronte_context(fn, ctx)
     if ctx === nothing
         return data -> fn(data...)
@@ -1767,6 +1756,7 @@ function eval_optional(router, modname, fname)
         return nothing
     end
 end
+=#
 
 #=
     boot(router)

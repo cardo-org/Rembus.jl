@@ -56,14 +56,19 @@ end
 function add_interest(ctx, router, twin, msg)
     @info "[add_interest][$ctx]: $msg"
     ctx["add_interest"] = true
+
+    # an exception generate an error log
+    error("something wrong!")
 end
 
 function park(ctx, twin, msg)
     @info "[$twin] park: $msg"
+    # an exception generate an error log
+    error("parking error!")
 end
 
-function unpark(ctx, twin, msg)
-    @info "[$twin] park: $msg"
+function unpark(ctx, twin)
+    @info "[$twin] upark"
 end
 
 function save_configuration(ctx, router)
@@ -104,12 +109,13 @@ function run(ok_cid, ko_cid)
 
     #exposed = filter(sym -> sym !== Symbol(Rembus.CONFIG.broker_plugin), topics)
     exposed = filter(
-        sym -> isa(sym, Function), [getfield(Rembus.CONFIG.broker_plugin, t) for t in topics]
+        sym -> isa(sym, Function),
+        [getfield(Rembus.CONFIG.broker_plugin, t) for t in topics]
     )
 
-    @info "topics =  $topics"
-    @info "exposed =  $exposed"
-    @info "isdefined(CONFIG.broker_plugin, :park) = $(isdefined(Rembus.CONFIG.broker_plugin, :park))"
+    #@info "topics =  $topics"
+    #@info "exposed =  $exposed"
+    #@info "isdefined(park) = $(isdefined(Rembus.CONFIG.broker_plugin, :park))"
 
     caronte(wait=false, exit_when_done=false)
     sleep(2)
@@ -121,6 +127,16 @@ function run(ok_cid, ko_cid)
     # invoke myfunction defined by CarontePlugin module
     response = rpc(rb, "myfunction")
     @test response == "hello from caronte plugin"
+
+    okcid = from("caronte.twins.ok_cid")
+    twin = okcid.args[1]
+    tim = Timer(0)
+    msgid = 1
+    twin.acktimer[1] = tim
+
+    # triggers CarontePlugin.park
+    Rembus.handle_ack_timeout(tim, twin, "msg", msgid)
+
     close(rb)
 
     try

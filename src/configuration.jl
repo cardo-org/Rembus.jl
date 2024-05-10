@@ -31,6 +31,7 @@ mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
     balancer::String
+    home::String
     db::String
     log::String
     debug_modules::Vector{Module}
@@ -43,11 +44,21 @@ mutable struct Settings
     broker_plugin::Union{Nothing,Module}
     broker_ctx::Any
     page_size::UInt
-    Settings() = begin
+    Settings(rootdir=nothing) = begin
+        if rootdir === nothing
+            if Sys.iswindows()
+                home = get(ENV, "LOCALAPPDATA", ".")
+            else
+                home = get(ENV, "HOME", ".")
+            end
+        else
+            home = rootdir
+        end
+
         zmq_ping_interval = 0
         ws_ping_interval = 0
         balancer = "first_up"
-        db = joinpath(get(ENV, "HOME", "."), ".config", "caronte")
+        db = joinpath(home, ".config", "caronte")
         log = "stdout"
         overwrite_connection = true
         stacktrace = false
@@ -57,7 +68,7 @@ mutable struct Settings
         connection_retry_period = 2.0
         debug_modules = []
         page_size = get(ENV, "REMBUS_PAGE_SIZE", REMBUS_PAGE_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, db, log, debug_modules,
+        new(zmq_ping_interval, ws_ping_interval, balancer, home, db, log, debug_modules,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, nothing, page_size)
     end
@@ -76,12 +87,6 @@ function set_balancer(setting, policy)
 end
 
 function setup(setting)
-    if Sys.iswindows()
-        home = get(ENV, "LOCALAPPDATA", ".")
-    else
-        home = get(ENV, "HOME", ".")
-    end
-
     cfg = get(Base.get_preferences(), "Rembus", Dict())
 
     setting.zmq_ping_interval = get(cfg, "zmq_ping_interval",

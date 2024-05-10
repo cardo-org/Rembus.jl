@@ -17,6 +17,7 @@ for dir in [
     "test/api",
     "test/broker_plugin",
     "test/auth",
+    "test/config",
     "test/connect",
     "test/embedded",
     "test/errors",
