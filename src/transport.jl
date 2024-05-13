@@ -47,17 +47,13 @@ function zmq_load(socket::ZMQ.Socket)
         id = bytes2id(header[2])
         status = header[3]
         # NOTE: for very large dataframes decode is slow, needs investigation.
-        try
-            val = decode(data)
-            return ResMsg(id, status, dataframe_if_tagvalue(val), flags)
-        catch e
-            return ResMsg(id, STS_GENERIC_ERROR, "$e", flags)
-        end
+        val = decode(data)
+        msg = ResMsg(id, status, dataframe_if_tagvalue(val), flags)
     else
         throw(ErrorException("unknown packet type $ptype"))
     end
 
-    msg
+    return msg
 end
 
 #=
@@ -81,18 +77,13 @@ function connected_socket_load(packet)
             data = dataframe_if_tagvalue(payload[3])
             return PubSubMsg(payload[2], data, flags, ackid)
         end
-        #                  topic     data
     elseif ptype == TYPE_RPC
-        if length(payload) == 5
-            data = dataframe_if_tagvalue(payload[5])
-        else
-            data = dataframe_if_tagvalue(payload[4])
-        end
-        #                       id               topic     data
+        data = dataframe_if_tagvalue(payload[5])
+        #                       id               topic
         return RpcReqMsg(bytes2id(payload[2]), payload[3], data)
     elseif ptype == TYPE_RESPONSE
         data = dataframe_if_tagvalue(payload[4])
-        #                          id        status     data
+        #                          id        statuss
         return ResMsg(bytes2id(payload[2]), payload[3], data, flags)
     end
 end
@@ -119,12 +110,7 @@ function broker_parse(pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         @debug "<<message IDENTITY, cid: $cid)"
-
-        if isa(cid, AbstractString)
-            return IdentityMsg(bytes2id(id), cid)
-        else
-            error("undefined cid")
-        end
+        return IdentityMsg(bytes2id(id), cid)
     elseif ptype == TYPE_PUB
         # do not decode dataframe, just pass through the broker
         topic = decode_internal(io, Val(TYPE_3))
@@ -178,10 +164,17 @@ end
 
 const MESSAGE_END = UInt8[0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef]
 
+const WAIT_ID = UInt8(1)
+const WAIT_EMPTY = UInt8(2)
+const WAIT_HEADER = UInt8(3)
+const WAIT_DATA = UInt8(4)
+
 mutable struct ZMQPacket
+    status::UInt8
     identity::Vector{UInt8}
     header::Vector{Any}
     data::ZMQ.Message
+    ZMQPacket() = new(WAIT_ID, UInt8[], [], Message())
 end
 
 mutable struct ZMQDealerPacket
@@ -203,7 +196,7 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
         if expect_empty
             msg = ZMQ.recv(socket)
             if !isempty(msg)
-                @error "ZMQ channel: expected empty message"
+                @error "ZMQ: expected empty message"
                 continue
             end
         else
@@ -220,19 +213,27 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
                     # data may be the empty message part of the next message
                     expect_empty = false
                 end
-                @error "ZMQ channel: expected end of message"
+                @error "ZMQ: expected end of message"
                 continue
             end
-
             return ZMQDealerPacket(header, data)
 
         catch e
-            @error "wrong header $bval ($e)"
+            @error "ZMQ: wrong header $bval ($e)"
             if isempty(bval)
                 expect_empty = false
             end
         end
     end
+end
+
+function is_identity(msg)
+    if length(msg) != 5 || msg[1] != 0
+        @error "ZMQ: not identity msg, got: $msg"
+        return false
+    end
+
+    return true
 end
 
 #=
@@ -242,60 +243,74 @@ Receive a Multipart ZeroMQ message.
 
 Return the packet identity, header and data values extracted from a ROUTER socket.
 =#
-function zmq_message(router::Router)::ZMQPacket
-    expect_empty = true
-    cached_identity = nothing
-    while true
-        if cached_identity === nothing
-            identity = tobytes(router.zmqsocket)
-        else
-            identity = cached_identity
-            cached_identity = nothing
-        end
-
-        if length(identity) != 5 || identity[1] != 0
-            @error "expected identity, got: $identity"
-            continue
-        end
-
-        # empty frame
-        if expect_empty
-            msg = ZMQ.recv(router.zmqsocket)
+function zmq_message(router::Router, pkt::ZMQPacket)::Bool
+    pkt_is_valid = false
+    header::Vector{UInt8} = []
+    while !pkt_is_valid
+        msg = recv(router.zmqsocket)
+        if pkt.status == WAIT_ID
+            if length(msg) != 5 || msg[1] != 0
+                @error "ZMQ: expected identity, got: $msg"
+            else
+                pkt.status = WAIT_EMPTY
+                pkt.identity = msg
+            end
+        elseif pkt.status == WAIT_EMPTY
             if !isempty(msg)
-                @error "from [$identity]: expected empty message"
-                # msg may be the identity of the next message
-                cached_identity = Vector{UInt8}(msg)
-                continue
+                @error "ZMQ [$identity]: expected empty message"
+                if is_identity(msg)
+                    pkt.identity = msg
+                else
+                    pkt.identity = UInt8[]
+                    pkt.status = WAIT_ID
+                end
+            else
+                pkt.status = WAIT_HEADER
             end
-        else
-            expect_empty = true
-        end
-
-        bval = tobytes(router.zmqsocket)
-        try
-            header = decode(bval)
-            data = recv(router.zmqsocket)
-
-            msgend = tobytes(router.zmqsocket)
-            if isempty(msgend)
-                # data may be the identity of the next message
-                cached_identity = data
-                expect_empty = false
-            elseif msgend != MESSAGE_END
-                @error "from [$identity]: expected end of message"
-                # msgend may be the identity of the next message
-                cached_identity = msgend
-                continue
+        elseif pkt.status == WAIT_HEADER
+            header = msg
+            pkt.status = WAIT_DATA
+        elseif pkt.status == WAIT_DATA
+            data = msg
+            msgend = recv(router.zmqsocket)
+            if msgend != MESSAGE_END
+                # search for identity message in header, data or msgend
+                if is_identity(header)
+                    if (isempty(data))
+                        # detected another zmq message
+                        pkt.identity = header
+                        header = msgend
+                    else
+                        # unable to detect header message type
+                        # restart searching from identity
+                        pkt.status = WAIT_ID
+                    end
+                elseif is_identity(data)
+                    if (isempty(msgend))
+                        # detected another zmq message
+                        pkt.status = WAIT_HEADER
+                        pkt.identity = data
+                    else
+                        # unable to detect data message type
+                        # restart searching from identity
+                        pkt.status = WAIT_ID
+                    end
+                elseif is_identity(msgend)
+                    pkt.status = WAIT_EMPTY
+                else
+                    # unable to detect data message type
+                    # restart searching from identity
+                    pkt.status = WAIT_ID
+                end
+            else
+                pkt.status = WAIT_ID
+                pkt.header = decode(header)
+                pkt.data = data
+                pkt_is_valid = true
             end
-
-            return ZMQPacket(identity, header, data)
-
-        catch e
-            @error "from [$identity]: wrong header $bval ($e)"
-            # header may be the identity of the next message
-            cached_identity = bval
         end
     end
+    return pkt_is_valid
 end
 
 #=
@@ -675,8 +690,6 @@ function transport_send(ws, msg::ResMsg, ::Bool=false)
     transport_write(ws, pkt)
 end
 
-#transport_send(::Twin, ws, msg::AdminReqMsg) = transport_send(ws, msg::AdminReqMsg)
-
 function transport_send(ws, msg::AdminReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, content]
@@ -684,18 +697,19 @@ function transport_send(ws, msg::AdminReqMsg)
 end
 
 function transport_send(socket::ZMQ.Socket, msg::AdminReqMsg)
-    if isa(msg.data, DataFrame)
-        content = tagvalue_if_dataframe(msg.data)
-    else
-        content = msg.data
-    end
+    #    if isa(msg.data, DataFrame)
+    content = tagvalue_if_dataframe(msg.data)
+    #    else
+    #        content = msg.data
+    #    end
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
     send(socket, encode(content), more=true)
     send(socket, MESSAGE_END, more=false)
 end
 
-transport_send(::Twin, ws, msg::AckMsg) = transport_send(ws, msg::AckMsg)
+# TODO: Required for broker to publisher acknowldge
+#transport_send(::Twin, ws, msg::AckMsg) = transport_send(ws, msg::AckMsg)
 
 function transport_send(ws, msg::AckMsg)
     pkt = [TYPE_ACK, id2bytes(msg.hash)]
@@ -816,13 +830,7 @@ end
 
 function ws_write(ws::WebSockets.WebSocket, payload)
     @rawlog("out: $payload")
-    try
-        HTTP.WebSockets.send(ws, payload)
-    catch e
-        @error e
-        @showerror e
-        throw(RembusDisconnect())
-    end
+    HTTP.WebSockets.send(ws, payload)
 end
 
 function broker_transport_write(ws::WebSockets.WebSocket, pkt)
@@ -895,7 +903,7 @@ end
 function transport_read(socket::WebSockets.WebSocket)
     d = HTTP.WebSockets.receive(socket)
     @rawlog("in: $d ($(typeof(d)))")
-    d
+    return d
 end
 
 function isconnectionerror(ws::WebSockets.WebSocket, e)

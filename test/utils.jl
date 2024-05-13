@@ -69,7 +69,7 @@ function execute(
         fn()
     catch e
         @error e
-        showerror(stdout, e, catch_backtrace())
+        #showerror(stdout, e, catch_backtrace())
     finally
         shutdown()
     end

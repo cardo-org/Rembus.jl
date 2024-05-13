@@ -692,9 +692,10 @@ function anonymous_twin_receiver(router, twin)
 end
 
 function zeromq_receiver(router::Router)
+    pkt = ZMQPacket()
     while true
         try
-            pkt::ZMQPacket = zmq_message(router)
+            zmq_message(router, pkt)
             id = pkt.identity
 
             if haskey(router.address2twin, id)

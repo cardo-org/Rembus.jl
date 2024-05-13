@@ -18,6 +18,6 @@ function run()
     @test from("caronte.serve_zeromq") === nothing
 end
 
-@info "[test_serve_ws_error] start"
+@info "[test_serve_zmq_error] start"
 run()
-@info "[test_serve_ws_error] stop"
+@info "[test_serve_zmq_error] stop"

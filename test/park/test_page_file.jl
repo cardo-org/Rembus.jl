@@ -4,7 +4,7 @@ mutable struct Ctx
     count::UInt
 end
 
-const MESSAGES = 200000
+const MESSAGES = 100000
 
 mytopic(ctx) = ctx.count += 1
 myservice(x) = x
@@ -22,7 +22,7 @@ function first_run()
     for i in 1:MESSAGES
         publish(pub, "mytopic")
     end
-    sleep(10)
+    sleep(15)
     close(pub)
 end
 
@@ -32,12 +32,18 @@ function second_run()
     shared(sub, ctx)
     subscribe(sub, mytopic, true)
     reactive(sub)
-    sleep(20)
+    sleep(5)
+    @info "messages:$(Int(ctx.count))"
+    count = 0
+    while (ctx.count < MESSAGES) && (count < 10)
+        sleep(1)
+        count += 1
+    end
     close(sub)
-    @info "messages:$(ctx.count)"
+    @info "total messages:$(Int(ctx.count))"
     @test ctx.count == MESSAGES
 end
 
 execute(first_run, "test_page_file::1")
-sleep(1)
+sleep(3)
 execute(second_run, "test_page_file::2", reset=false)

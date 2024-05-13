@@ -6,12 +6,12 @@ using Sockets
 function Rembus.transport_send(
     twin::Rembus.Twin,
     ws::Union{WebSockets.WebSocket,TCPSocket},
-    msg::Rembus.PubSubMsg
+    msg::Rembus.PubSubMsg{Float64}
 )
     error("transport exception")
 end
 
-foo() = @info "foo called"
+foo(x::Float64) = @info "foo called"
 
 function run()
     rb = tryconnect("myc")
@@ -21,7 +21,7 @@ function run()
 
     @test isconnected(rb)
     @test isconnected(sub)
-    publish(rb, "foo")
+    publish(rb, "foo", 1.0)
     sleep(1)
 
     close(rb)

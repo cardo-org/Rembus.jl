@@ -71,7 +71,6 @@ export caronte, session, context
 
 export RembusError
 export RembusTimeout
-export RembusDisconnect
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
 
@@ -221,14 +220,6 @@ Thrown when a response it is not received.
 struct RembusTimeout <: RembusException
     msg::String
     RembusTimeout(msg) = new(msg)
-end
-
-"""
-    RembusDisconnect
-
-Thrown when a rembus connection get unexpectedly down.
-"""
-struct RembusDisconnect <: RembusException
 end
 
 function rembuserror(raise::Bool=true; code, cid=nothing, topic=nothing, reason=nothing)
@@ -1076,6 +1067,7 @@ function rembus_task(pd, rb, protocol=:ws)
         end
 
         @showerror e
+
         rethrow()
     finally
         @debug "[$pd]: terminating"

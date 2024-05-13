@@ -16,8 +16,8 @@ mutable struct TestBag
     msg_received::Int
 end
 
-function noarg()
-end
+#function noarg()
+#end
 
 function mytopic(bag::TestBag, data::Number)
     @debug "mytopic recv: $data"
@@ -84,20 +84,20 @@ function add_one(add_one_arg)
     add_one_arg + 1
 end
 
-function do_method_error(data)
-    reason = "this is an error"
-    error(reason)
-end
-
-function do_args_error(data)
-    args_error_msg = "expected a float32"
-    if !isa(data, Float32)
-        throw(ErrorException(args_error_msg))
-    end
-end
-
-function rpc_method(rpc_method_arg)
-end
+#function do_method_error()
+#    reason = "this is an error"
+#    error(reason)
+#end
+#
+#function do_args_error(data)
+#    args_error_msg = "expected a float32"
+#    if !isa(data, Float32)
+#        throw(ErrorException(args_error_msg))
+#    end
+#end
+#
+#function rpc_method(rpc_method_arg)
+#end
 
 function request_api(request_url, exposer_url)
     rpc_topic = "rpc_method"
@@ -115,11 +115,11 @@ function request_api(request_url, exposer_url)
 
     res = rpc(client, rpc_topic, request_arg)
 
-    expose(implementor, rpc_topic, do_method_error)
-    try
-        res = rpc(client, rpc_topic)
-    catch e
-    end
+    #    expose(implementor, rpc_topic, do_method_error)
+    #    try
+    #        res = rpc(client, rpc_topic)
+    #    catch e
+    #    end
 
     for cli in [implementor, client]
         close(cli)
@@ -186,23 +186,13 @@ end
 @rpc uptime()
 @terminate
 
-try
-    types()
-catch e
-    @error "precompile: $e"
-    showerror(stdout, e, catch_backtrace())
-end
+types()
 
-try
-    request_api("requestor", "exposer")
-    waittime = 0.5
-    for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
-        for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
-            publish_macroapi(publisher, sub1, waittime=waittime)
-            publish_api(publisher, sub1, waittime=waittime)
-        end
+request_api("requestor", "exposer")
+waittime = 0.5
+for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
+    for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
+        publish_macroapi(publisher, sub1, waittime=waittime)
+        publish_api(publisher, sub1, waittime=waittime)
     end
-catch e
-    @error "precompile: $e"
-    showerror(stdout, e, catch_backtrace())
 end

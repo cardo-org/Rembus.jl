@@ -26,7 +26,7 @@ function teardown(cid)
 end
 
 function run(cid)
-    connect("wss://:9000/cid")
+    @test_throws RembusError connect("wss://:9000/$cid")
 end
 
 if Base.Sys.iswindows()

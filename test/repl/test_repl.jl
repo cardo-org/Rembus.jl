@@ -3,7 +3,7 @@ include("../utils.jl")
 
 # NOTE: This test does not trace logs becaus in REPL mode logging is disabled
 Rembus.repl_log()
-@info "this is a info log"
+@info "this is an info log"
 
 Base.isinteractive() = true
 

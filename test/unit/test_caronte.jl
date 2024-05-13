@@ -7,3 +7,6 @@ shutdown()
 
 sleep(1)
 @test from("caronte") === nothing
+
+# do nothing
+@test Visor.shutdown(nothing) === nothing

@@ -26,6 +26,11 @@ msg = Rembus.Msg(Rembus.TYPE_PUB, rembusMessage, twin)
 msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", zeros(UInt8, 11)), twin)
 @info "build msg: $msg"
 
+@test_throws ErrorException Rembus.transport_send(twin, nothing, msg)
+
+# encode a wrong Rembus message type value
+@test_throws ErrorException Rembus.broker_parse(encode([50, "topic"]))
+
 twin.id = "mytwin"
 twin.hasname = true
 twin.pager = Rembus.Pager(IOBuffer(; write=true, read=true))
