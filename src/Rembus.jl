@@ -1267,6 +1267,9 @@ processput!(process::Visor.Process, e) = put!(process.inbox, e)
 function read_socket(socket, process, rb, isconnected::Condition)
     try
         rb.socket = socket
+        if rb.client.id == "repl_sub"
+            println("repl_sub CONNECTION OPEN")
+        end
         yield()
         # signal to the initiator function _connect that the connection is up.
         # notify(isconnected)
