@@ -213,6 +213,11 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
             include("broker_plugin/test_plugin.jl")
         end
     end
+    if GROUP == "all" || GROUP == "repl"
+        @time @safetestset "repl" begin
+            include("repl/test_repl.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "errors"
         @time @safetestset "authenticate_timeout" begin
             include("errors/test_authenticate_timeout.jl")
@@ -243,11 +248,6 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         end
         @time @safetestset "transport_send_error" begin
             include("errors/test_transport_send_error.jl")
-        end
-    end
-    if GROUP == "all" || GROUP == "repl"
-        @time @safetestset "repl" begin
-            include("repl/test_repl.jl")
         end
     end
 end
