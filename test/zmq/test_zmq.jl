@@ -32,6 +32,13 @@ function run()
     # restart caronte
     Rembus.caronte(wait=false, exit_when_done=false, args=Dict("zmq" => 8002))
     sleep(2)
+
+    shutdown()
+    sleep(2)
+    # restart caronte
+    Rembus.caronte(wait=false, exit_when_done=false, args=Dict("zmq" => 8002))
+    sleep(2)
+
 end
 
 ENV["REMBUS_BASE_URL"] = "zmq://localhost:8002"
@@ -39,7 +46,14 @@ ENV["REMBUS_ZMQ_PING_INTERVAL"] = 0.5
 
 cid1 = "component1"
 setup() = init(cid1)
-execute(run, "test_zmq", setup=setup)
+execute(run, "test_zmq::1", setup=setup)
+
+rembus_timeout = Rembus.request_timeout()
+ENV["REMBUS_TIMEOUT"] = 0.5
+execute(run, "test_zmq::2")
+ENV["REMBUS_TIMEOUT"] = rembus_timeout
+
 delete!(ENV, "REMBUS_BASE_URL")
 delete!(ENV, "REMBUS_ZMQ_PING_INTERVAL")
+
 remove_keys(cid1)

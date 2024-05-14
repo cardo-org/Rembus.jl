@@ -14,6 +14,7 @@ end
 Rembus.CONFIG = Rembus.Settings(rootdir)
 
 rm(Rembus.CONFIG.db, force=true, recursive=true)
+rm(Rembus.rembus_dir(), force=true, recursive=true)
 
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"
@@ -179,6 +180,9 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         @time @safetestset "wrong_secret" begin
             include("auth/test_wrong_secret.jl")
         end
+        @time @safetestset "no_http_ca_bundle" begin
+            include("auth/test_no_http_ca_bundle.jl")
+        end
     end
     if GROUP == "all" || GROUP == "park"
         @time @safetestset "page_file" begin
@@ -210,6 +214,12 @@ rm(Rembus.CONFIG.db, force=true, recursive=true)
         end
     end
     if GROUP == "all" || GROUP == "errors"
+        @time @safetestset "authenticate_timeout" begin
+            include("errors/test_authenticate_timeout.jl")
+        end
+        @time @safetestset "rpc_timeout" begin
+            include("errors/test_rpc_timeout.jl")
+        end
         @time @safetestset "router_zmq_message" begin
             include("errors/test_router_zmq_message.jl")
         end

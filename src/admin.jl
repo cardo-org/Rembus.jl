@@ -214,6 +214,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
     elseif cmd == SHUTDOWN_CMD
         if isadmin(router, twin, cmd)
             @async shutdown_caronte(router)
+            sts = STS_SHUTDOWN
         else
             sts = STS_GENERIC_ERROR
         end

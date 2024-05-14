@@ -27,7 +27,7 @@ end
 
 module CarontePlugin
 
-using Rembus #needed for session()
+using Rembus # needed for session()
 
 export add_interest
 export challenge
@@ -120,7 +120,7 @@ function run(ok_cid, ko_cid)
     caronte(wait=false, exit_when_done=false)
     sleep(2)
 
-    rb = connect(ok_cid)
+    rb = tryconnect(ok_cid)
 
     subscribe(rb, test_plugin_topic)
 

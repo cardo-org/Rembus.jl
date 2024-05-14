@@ -31,7 +31,6 @@ function run()
     # a ping to a closed socket logs an error
     Rembus.ping(rb.socket)
 
-    @info "SOCKET: $(rb.socket)"
     @test !Rembus.isconnected(rb)
 
     rb = Rembus.connect("zmq://:8002/cut")

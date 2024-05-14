@@ -27,7 +27,7 @@ end
 function run()
     ctx = TestCtx(0)
 
-    sub = tryconnect("mysub")
+    sub = tryconnect("repl_sub")
     expose(sub, myservice)
 
     cli = connect()

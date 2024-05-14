@@ -1,5 +1,7 @@
 abstract type RembusMsg end
 
+abstract type RembusTopicMsg <: RembusMsg end
+
 struct PingMsg <: RembusMsg
     id::UInt128
     cid::String
@@ -14,7 +16,7 @@ struct IdentityMsg <: RembusMsg
     IdentityMsg(msgid::UInt128, userid::AbstractString) = new(msgid, userid)
 end
 
-mutable struct PubSubMsg{T} <: RembusMsg
+mutable struct PubSubMsg{T} <: RembusTopicMsg
     topic::String
     data::T
     flags::UInt8
@@ -27,7 +29,7 @@ end
 
 Base.show(io::IO, message::PubSubMsg) = show(io, message.topic)
 
-struct RpcReqMsg{T} <: RembusMsg
+struct RpcReqMsg{T} <: RembusTopicMsg
     id::UInt128
     topic::String
     data::T
@@ -51,7 +53,7 @@ end
 
 Base.show(io::IO, message::RpcReqMsg) = show(io, message.topic)
 
-struct AdminReqMsg{T} <: RembusMsg
+struct AdminReqMsg{T} <: RembusTopicMsg
     id::UInt128
     topic::String
     data::T

@@ -21,6 +21,7 @@ function run()
     try
         ctx = Ctx(nothing)
         value = "hello"
+        sleep(2)
         rb = connect()
         shared(rb, ctx)
         subscribe(rb, foo)

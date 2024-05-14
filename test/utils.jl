@@ -86,7 +86,7 @@ function testsummary()
 end
 
 function tryconnect(id)
-    maxretries = 10
+    maxretries = 5
     count = 0
     while true
         try
@@ -94,11 +94,12 @@ function tryconnect(id)
         catch e
             if !isa(e, HTTP.Exceptions.ConnectError)
                 @warn "tryconnect: $e"
+                showerror(stdout, e, catch_backtrace())
             end
             count === maxretries && rethrow(e)
             count += 1
         end
-        sleep(1)
+        sleep(2)
     end
 end
 

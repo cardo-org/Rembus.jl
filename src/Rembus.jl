@@ -349,6 +349,8 @@ keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(), "keystore"))
 
 request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "5"))
 
+connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "10"))
+
 getcomponent() = Component(Rembus.CONFIG.cid)
 
 function name2proc(name::AbstractString, startproc=false, setanonymous=false)
@@ -1429,6 +1431,9 @@ function resend_attestate(rb, response)
     try
         msg = attestate(rb, response)
         put!(rb.msgch, msg)
+        if rb.client.protocol == :zmq
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+        end
     catch e
         @error "resend_attestate: $e"
         @showerror e
@@ -1508,7 +1513,7 @@ function _connect(rb, process)
 
     if rb.client.protocol === :ws || rb.client.protocol === :wss
         isconnected = Condition()
-        t = Timer((tim) -> connect_timeout(rb, isconnected), request_timeout())
+        t = Timer((tim) -> connect_timeout(rb, isconnected), connect_request_timeout())
         @async ws_connect(rb, process, isconnected)
         wait(isconnected)
         close(t)
@@ -2103,15 +2108,11 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
     # @async ensures that wait is always triggered before notify
     put!(rb.msgch, msg)
-    try
-        return wait(resp_cond)
-    catch e
-        @debug "[$msg]: response timeout ($e)"
-        rethrow()
-    finally
-        close(t)
-        delete!(rb.out, mid)
-    end
+
+    res = wait(resp_cond)
+    close(t)
+    delete!(rb.out, mid)
+    return res
 end
 
 # Send a RpcReqMsg message to rembus and return the response.
@@ -2144,9 +2145,8 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
     elseif (response.status == STS_SHUTDOWN)
         outcome = "shutting down"
     else
-        if isa(msg, PingMsg)
-            topic = nothing
-        else
+        topic = nothing
+        if isa(msg, RembusTopicMsg)
             topic = msg.topic
         end
         outcome = rembuserror(
@@ -2155,11 +2155,7 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
             cid=rb.client.id,
             topic=topic,
             reason=response.data)
-        if exceptionerror
-            throw(outcome)
-        end
     end
-
     return outcome
 end
 

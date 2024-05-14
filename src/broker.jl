@@ -728,13 +728,19 @@ function zeromq_receiver(router::Router)
                 transport_send(twin, router.zmqsocket, response)
             elseif isa(msg, PingMsg)
                 if (twin.id != msg.cid)
+
                     # broker restarted
                     # start the authentication flow if cid is registered
                     @debug "lost connection to broker: restarting $(msg.cid)"
                     rembus_login = isfile(key_file(msg.cid))
                     if rembus_login
-                        response = challenge(router, twin, msg)
-                        transport_send(twin, router.zmqsocket, response)
+                        if haskey(twin.session, "challenge")
+                            # challenge already sent
+                            @debug "[$(msg.cid)] challenge already sent"
+                        else
+                            response = challenge(router, twin, msg)
+                            transport_send(twin, router.zmqsocket, response)
+                        end
                     else
                         identity_upgrade(router, twin, msg, id, authenticate=false)
                     end
