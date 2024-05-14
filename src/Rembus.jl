@@ -1267,8 +1267,12 @@ processput!(process::Visor.Process, e) = put!(process.inbox, e)
 function read_socket(socket, process, rb, isconnected::Condition)
     try
         rb.socket = socket
+        yield()
         # signal to the initiator function _connect that the connection is up.
-        notify(isconnected)
+        # notify(isconnected)
+        while notify(isconnected) == 0
+            sleep(0.001)
+        end
 
         # enable connection alive watchdog
         @async keep_alive(rb.socket)
