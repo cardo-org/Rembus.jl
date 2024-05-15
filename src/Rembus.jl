@@ -1188,13 +1188,13 @@ function handle_input(rb, msg)
 
     if isresponse(msg)
         if haskey(rb.out, msg.id)
-            # prevent timeout because when jit compiling
+            # prevent requests timeouts because when jit compiling
             # notify() may be called before wait()
             yield()
-
-            while notify(rb.out[msg.id], msg) == 0
-                sleep(0.001)
-            end
+            notify(rb.out[msg.id], msg)
+            #while notify(rb.out[msg.id], msg) == 0
+            #    sleep(0.001)
+            #end
         else
             # it is a response without a waiting Condition
             if msg.status == STS_CHALLENGE
@@ -1269,12 +1269,11 @@ function read_socket(socket, process, rb, isconnected::Condition)
         rb.socket = socket
         yield()
         # signal to the initiator function _connect that the connection is up.
-        # notify(isconnected)
-        while notify(isconnected) == 0
-            sleep(0.001)
-        end
+        notify(isconnected)
+        #while notify(isconnected) == 0
+        #    sleep(0.001)
+        #end
 
-        # enable connection alive watchdog
         @async keep_alive(rb.socket)
         while isopen(socket)
             response = transport_read(socket)
@@ -1282,9 +1281,9 @@ function read_socket(socket, process, rb, isconnected::Condition)
                 parse_msg(rb, response)
             else
                 @debug "[$(rb.client.id)] connection closed"
+                close(socket)
             end
         end
-        @debug "[$process] connection closed"
     catch e
         @debug "[$(rb.client.id)] connection closed: $e"
         if !isa(e, HTTP.WebSockets.WebSocketError) ||
@@ -1477,21 +1476,15 @@ function authenticate(rb)
 
     reason = nothing
     msg = IdentityMsg(rb.client.id)
-    response = wait_response(rb, msg, request_timeout())
-    if isa(response, RembusTimeout)
-        close(rb.socket)
-        throw(response)
-    elseif (response.status == STS_GENERIC_ERROR)
+    response = response_or_timeout(rb, msg, request_timeout())
+    if (response.status == STS_GENERIC_ERROR)
         throw(AlreadyConnected(rb.client.id))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)
-        response = wait_response(rb, msg, request_timeout())
+        response = response_or_timeout(rb, msg, request_timeout())
     end
 
-    if isa(response, RembusTimeout)
-        close(rb.socket)
-        rembuserror(code=STS_TIMEOUT, cid=rb.client.id)
-    elseif (response.status != STS_SUCCESS)
+    if (response.status != STS_SUCCESS)
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
     else
@@ -2104,6 +2097,16 @@ function response_timeout(condition::Condition, msg::RembusMsg)
     return nothing
 end
 
+function response_or_timeout(rb::RBHandle, msg::RembusMsg, timeout)
+    response = wait_response(rb, msg, request_timeout())
+    if isa(response, RembusTimeout)
+        close(rb.socket)
+        throw(response)
+    end
+
+    return response
+end
+
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     mid::UInt128 = msg.id
@@ -2200,7 +2203,6 @@ macro forever()
         end
     end
 end
-
 
 @setup_workload begin
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"

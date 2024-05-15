@@ -25,9 +25,9 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-function type_from_fields(::Type{T}, fields) where {T}
-    ccall(:jl_new_structv, Any, (Any, Ptr{Cvoid}, UInt32), T, fields, length(fields))
-end
+#function type_from_fields(::Type{T}, fields) where {T}
+#    ccall(:jl_new_structv, Any, (Any, Ptr{Cvoid}, UInt32), T, fields, length(fields))
+#end
 
 function peekbyte(io::IO)
     mark(io)

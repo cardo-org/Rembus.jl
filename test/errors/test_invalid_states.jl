@@ -26,6 +26,13 @@ function run()
 
     res = rpc(rb, "version")
     @test isa(res, String)
+
+    # send invalid admin command
+    @test_throws RembusError Rembus.rpcreq(
+        rb,
+        Rembus.AdminReqMsg(Rembus.BROKER_CONFIG, Dict(Rembus.COMMAND => "wrong_cmd"))
+    )
+
     close(rb)
 
     # a ping to a closed socket logs an error
@@ -71,4 +78,4 @@ function run()
     end
 end
 
-execute(run, "test_dealer_zmq_message")
+execute(run, "test_invalid_states")

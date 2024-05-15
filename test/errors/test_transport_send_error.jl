@@ -5,17 +5,23 @@ using Sockets
 
 function Rembus.transport_send(
     twin::Rembus.Twin,
-    ws::Union{WebSockets.WebSocket,TCPSocket},
-    msg::Rembus.PubSubMsg{Float64}
+    sock::TCPSocket,
+    msg::Rembus.PubSubMsg
 )
+    @info "generate a transport exception broker side: $(typeof(msg))"
     error("transport exception")
 end
 
-foo(x::Float64) = @info "foo called"
+called = false
+function foo(x::Float64)
+    global called
+    @info "foo called: $x"
+    called = true
+end
 
 function run()
-    rb = tryconnect("myc")
-    sub = Rembus.connect()
+    rb = tryconnect("tcp://:9000/send_error_component")
+    sub = Rembus.connect("tcp://:9000")
     subscribe(sub, foo)
     reactive(sub)
 
@@ -23,9 +29,9 @@ function run()
     @test isconnected(sub)
     publish(rb, "foo", 1.0)
     sleep(1)
-
     close(rb)
     close(sub)
+    @test !called
 end
 
-execute(run, "test_transport_send_error")
+execute(run, "test_transport_send_error", args=Dict("tcp" => 9000))

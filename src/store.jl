@@ -8,16 +8,12 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 function load_pages(twin_id::AbstractString)
     tdir = joinpath(twins_dir(), twin_id)
     pages = []
-    try
-        if !isdir(tdir)
-            mkdir(tdir)
-        end
-        # Load the latest page if any
-        pages = readdir(tdir, join=true, sort=true)
-        @debug "[$tdir] files pages: $pages"
-    catch e
-        @error "[$twin_id] load_pages error: $e"
+    if !isdir(tdir)
+        mkdir(tdir)
     end
+    # Load the latest page if any
+    pages = readdir(tdir, join=true, sort=true)
+    @debug "[$tdir] files pages: $pages"
     return pages
 end
 
@@ -100,9 +96,6 @@ key_file(cid::AbstractString) = joinpath(CONFIG.db, "keys", cid)
 
 
 function save_table(router_tbl, filename)
-    if !isdir(CONFIG.db)
-        mkdir(CONFIG.db)
-    end
     table = Dict()
     for (topic, twins) in router_tbl
         twin_ids = [tw.id for tw in twins if tw.hasname]
@@ -168,25 +161,21 @@ end
 isregistered(cid::AbstractString) = isfile(key_file(cid))
 
 function load_impl_table(router)
-    try
-        @debug "loading impls table"
-        fn = joinpath(CONFIG.db, "exposers.json")
-        if isfile(fn)
-            content = read(fn, String)
-            table = JSON3.read(content, Dict)
-            for (topic, twin_ids) in table
-                twins = Set{Twin}()
-                for tid in twin_ids
-                    twin = create_twin(tid, router)
-                    push!(twins, twin)
-                end
-                if !isempty(twins)
-                    router.topic_impls[topic] = twins
-                end
+    @debug "loading impls table"
+    fn = joinpath(CONFIG.db, "exposers.json")
+    if isfile(fn)
+        content = read(fn, String)
+        table = JSON3.read(content, Dict)
+        for (topic, twin_ids) in table
+            twins = Set{Twin}()
+            for tid in twin_ids
+                twin = create_twin(tid, router)
+                push!(twins, twin)
+            end
+            if !isempty(twins)
+                router.topic_impls[topic] = twins
             end
         end
-    catch e
-        @error "[exposers.json] load failed: $e"
     end
 end
 
@@ -281,14 +270,6 @@ Save twins configuration only if twin has a name.
 Persist undelivered messages if they are queued in memory.
 =#
 function save_twins(router)
-    if !isdir(CONFIG.db)
-        mkdir(CONFIG.db)
-    end
-    twin_dir = joinpath(CONFIG.db, "twins")
-    if !isdir(twin_dir)
-        mkdir(twin_dir)
-    end
-
     twin_cfg = Dict{String,Dict{String,Bool}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
@@ -321,28 +302,23 @@ function park(ctx::Any, twin::Twin, msg::PubSubMsg)
         return
     end
 
-    try
+    pager_io = twin.pager.io
+    if pager_io === nothing
+        @debug "[$twin] creating new Page"
+        twin.pager = Pager(IOBuffer(; write=true, read=true))
         pager_io = twin.pager.io
-        if pager_io === nothing
-            @debug "[$twin] creating new Page"
-            twin.pager = Pager(IOBuffer(; write=true, read=true))
-            pager_io = twin.pager.io
-        end
-
-        io = transport_file_io(msg)
-        psize = pager_io.size
-        if psize >= REMBUS_PAGE_SIZE
-            @debug "[$twin]: saving page on disk"
-            save_page(twin)
-            twin.pager = Pager(IOBuffer(; write=true, read=true))
-            pager_io = twin.pager.io
-        end
-
-        write(pager_io, io.data)
-    catch e
-        @error "[$twin] park_message: $e"
-        @showerror e
     end
+
+    io = transport_file_io(msg)
+    psize = pager_io.size
+    if psize >= REMBUS_PAGE_SIZE
+        @debug "[$twin]: saving page on disk"
+        save_page(twin)
+        twin.pager = Pager(IOBuffer(; write=true, read=true))
+        pager_io = twin.pager.io
+    end
+
+    write(pager_io, io.data)
 end
 
 function getmsg(f)

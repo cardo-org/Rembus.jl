@@ -18,13 +18,7 @@ end
 function component_id(cfg)
     url = get(cfg, "cid", get(ENV, "REMBUS_CID", DEFAULT_APP_NAME))
     uri = URI(url)
-    proto = uri.scheme
-    if proto == ""
-        name = uri.path
-    else
-        name = uri.host
-    end
-    name
+    return startswith(uri.path, "/") ? uri.path[2:end] : uri.path
 end
 
 mutable struct Settings

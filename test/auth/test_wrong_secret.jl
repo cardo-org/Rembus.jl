@@ -1,7 +1,9 @@
 include("../utils.jl")
 
 function generate_key(cid)
+    mkpath(Rembus.keys_dir())
     private_fn = Rembus.pkfile(cid)
+
     if isfile(private_fn)
         rm(private_fn)
     end
@@ -13,7 +15,9 @@ end
 
 function setup(cid)
     private_fn = generate_key(cid)
-    mv("$private_fn.pub", Rembus.key_file(cid), force=true)
+    open(Rembus.key_file(cid), "w") do f
+        write(f, read(`ssh-keygen -f $private_fn -e -m PEM`))
+    end
 
     # generate another private key
     generate_key(cid)

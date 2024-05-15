@@ -64,9 +64,5 @@ function Logging.handle_message(
     kwargs...
 )
     println(logger.io, "[$(now())][$_module][$(Threads.threadid())][$level] $message")
-    if haskey(kwargs, :exception)
-        e, bt = kwargs[:exception]
-        showerror(logger.io, e, bt)
-    end
     flush(logger.io)
 end

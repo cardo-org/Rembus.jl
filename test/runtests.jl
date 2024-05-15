@@ -48,6 +48,12 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "balancer_less_busy" begin
             include("unit/test_less_busy.jl")
         end
+        @time @safetestset "logfile" begin
+            include("unit/test_logfile.jl")
+        end
+        @time @safetestset "component_id" begin
+            include("unit/test_component_id.jl")
+        end
     end
     if GROUP == "all" || GROUP == "private"
         @time @safetestset "private_topic" begin
@@ -194,6 +200,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "park_macro" begin
             include("park/test_park_macro.jl")
         end
+        @time @safetestset "unpark" begin
+            include("park/test_unpark.jl")
+        end
     end
     if GROUP == "all" || GROUP == "zmq"
         @time @safetestset "zmq" begin
@@ -219,6 +228,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         end
     end
     if GROUP == "all" || GROUP == "errors"
+        @time @safetestset "unknown_broker_msg" begin
+            include("errors/test_unknown_broker_msg.jl")
+        end
         @time @safetestset "authenticate_timeout" begin
             include("errors/test_authenticate_timeout.jl")
         end

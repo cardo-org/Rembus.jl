@@ -2,19 +2,20 @@ include("../utils.jl")
 
 using JSON3
 
-function setup(admin)
-    fn = joinpath(Rembus.CONFIG.db, "admins.json")
-    @info "setting admin: $fn"
-    open(fn, "w") do io
-        write(io, JSON3.write(Set([admin])))
-    end
-    @info "admins.json setup done"
-end
-
 function teardown()
     fn = joinpath(Rembus.CONFIG.db, "admins.json")
     open(fn, "w") do io
         write(io, JSON3.write(Set([])))
+    end
+end
+
+function set_topic_auth()
+    topic_auth = Dict(
+        "topic1" => ["cid1"]
+    )
+    fn = joinpath(Rembus.broker_dir(), "topic_auth.json")
+    open(fn, "w") do io
+        write(io, JSON3.write(topic_auth))
     end
 end
 
@@ -51,20 +52,14 @@ function run()
     finally
         close(rb)
     end
-
-
-    #    try
-    #        Rembus.broker_shutdown(rb)
-    #        @test false
-    #    catch e
-    #        @info "[test_admin_commands] expected error: $e"
-    #        @test true
-    #    finally
-    #        close(rb)
-    #    end
 end
 
 admin = "admin"
-setup() = setup(admin)
+
+function setup()
+    set_admin(admin)
+    set_topic_auth()
+end
+
 execute(run, "test_admin_commands", setup=setup)
-#teardown()
+teardown()

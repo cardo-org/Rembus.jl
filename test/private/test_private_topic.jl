@@ -15,6 +15,9 @@ function private_service(bag, n)
     return n + 1
 end
 
+function another_service()
+end
+
 function run(authorized_component)
     bag = TestHolder()
 
@@ -27,13 +30,14 @@ function run(authorized_component)
 
     rb = tryconnect(authorized_component)
 
+    authorize(rb, myconsumer, priv_topic)
+
     private_topic(rb, priv_topic)
     private_topic(rb, another_priv_topic)
     private_topic(rb, priv_service)
 
     authorize(rb, myproducer, priv_topic)
 
-    authorize(rb, myconsumer, priv_topic)
     authorize(rb, myconsumer, priv_service)
 
     producer = connect(myproducer)
@@ -75,12 +79,29 @@ function run(authorized_component)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
 
+    @test_throws RembusError unsubscribe(unauth_consumer, priv_topic)
+    @test_throws RembusError expose(unauth_consumer, priv_topic, consume)
+
     subscribe(consumer, priv_topic, consume)
     expose(consumer, private_service)
+    expose(rb, another_service)
+
     reactive(consumer)
 
     publish(producer, priv_topic, "some_data")
-    sleep(0.2)
+    sleep(1)
+
+    # unknow topic
+    @test_throws RembusError unsubscribe(consumer, "unknown_topic")
+    @test_throws RembusError unexpose(consumer, "unknown_topic")
+
+    # component not authorized to topic
+    @test_throws RembusError unexpose(consumer, another_priv_topic)
+
+    # topic not exposed by component
+    @test_throws RembusError unexpose(consumer, another_service)
+
+    unexpose(consumer, priv_service)
 
     unauthorize(rb, myproducer, priv_topic)
 

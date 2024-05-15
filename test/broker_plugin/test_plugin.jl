@@ -22,6 +22,8 @@ function init(ok_cid, ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end
+
+    set_admin(ok_cid)
 end
 
 
@@ -73,6 +75,7 @@ end
 
 function save_configuration(ctx, router)
     @info "CarontePlugin::save_configuration"
+    error("save configuration failed")
 end
 
 #
@@ -137,6 +140,10 @@ function run(ok_cid, ko_cid)
     # triggers CarontePlugin.park
     Rembus.handle_ack_timeout(tim, twin, "msg", msgid)
 
+    # request a broker shutdown
+    res = Rembus.broker_shutdown(rb)
+    @info "shutdown: $res"
+
     close(rb)
 
     try
@@ -165,4 +172,6 @@ finally
     remove_keys(ok_cid)
     remove_keys(ko_cid)
     shutdown()
+    rm(Rembus.root_dir(), recursive=true)
+    Rembus.reset_broker_plugin()
 end

@@ -984,6 +984,8 @@ function set_broker_plugin(extension::Module)
     CONFIG.broker_plugin = extension
 end
 
+reset_broker_plugin() = CONFIG.broker_plugin = nothing
+
 #=
     set_broker_context(ctx)
 
@@ -1370,23 +1372,15 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
         router.server = server
         @info "caronte up and running at port $proto:$caronte_port"
         while true
-            try
-                sock = accept(server)
-                if issecure
-                    ctx = MbedTLS.SSLContext()
-                    MbedTLS.setup!(ctx, sslconfig)
-                    MbedTLS.associate!(ctx, sock)
-                    MbedTLS.handshake(ctx)
-                    @async client_receiver(router, ctx)
-                else
-                    @async client_receiver(router, sock)
-                end
-            catch e
-                if !isa(e, Visor.ProcessInterrupt)
-                    @error "tcp server: $e"
-                    @showerror e
-                end
-                rethrow()
+            sock = accept(server)
+            if issecure
+                ctx = MbedTLS.SSLContext()
+                MbedTLS.setup!(ctx, sslconfig)
+                MbedTLS.associate!(ctx, sock)
+                MbedTLS.handshake(ctx)
+                @async client_receiver(router, ctx)
+            else
+                @async client_receiver(router, sock)
             end
         end
     finally
@@ -1732,10 +1726,6 @@ function broker(self, router)
                 @warn "unknow $(typeof(msg)) message $msg "
             end
         end
-    catch e
-        @error "[broker] error: $e"
-        @showerror e
-        rethrow()
     finally
         for tw in values(router.id_twin)
             ## detach(tw)

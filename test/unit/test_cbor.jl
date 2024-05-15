@@ -21,7 +21,6 @@ n = Int8(-1)
 e = encode(n)
 @test e == UInt8[0x20]
 
-
 @test typeof(decode(encode(SmallInteger(-1)))) == Int8
 @test typeof(decode(encode(SmallInteger(-Int8(Rembus.INT8_MAX_POSITIVE))))) == Int8
 @test typeof(decode(encode(SmallInteger(-(Rembus.INT8_MAX_POSITIVE + 2))))) == Int16
@@ -39,3 +38,21 @@ e = encode(n)
 @test Rembus.Tag(1, 1) == Rembus.Tag(1, 1)
 @test Rembus.num2hex(10) == "000000000000000a"
 @test Rembus.hex2num(Rembus.num2hex(1.0)) == 1.0
+
+v = Rembus.UndefLength([UInt8[1, 2], UInt8[3, 4]])
+buff = encode(v)
+decoded_v = decode(buff)
+@test decoded_v == UInt8[1, 2, 3, 4]
+
+buff = encode(1.0)
+# set an invalid value for type 7
+buff[1] = Rembus.TYPE_7 | UInt8(28)
+@test_throws ErrorException decode(buff)
+
+buff = encode(UInt16(1))
+buff[1] = Rembus.TYPE_0 | UInt8(28)
+@test_throws ErrorException decode(buff)
+
+buff = encode(Int16(-1))
+buff[1] = Rembus.TYPE_1 | UInt8(28)
+@test_throws ErrorException decode(buff)

@@ -12,6 +12,10 @@ exposers = Dict(
     "topic2" => ["cid1", "cid2", "cid3"]
 )
 
+topic_auth = Dict(
+    "topic1" => ["cid1"]
+)
+
 function set_exposers()
     fn = joinpath(Rembus.broker_dir(), "exposers.json")
     open(fn, "w") do io
@@ -28,6 +32,13 @@ function set_subscribers()
 
 end
 
+function set_topic_auth()
+    fn = joinpath(Rembus.broker_dir(), "topic_auth.json")
+    open(fn, "w") do io
+        write(io, JSON3.write(topic_auth))
+    end
+end
+
 function setup(admin)
     root_dir = Rembus.broker_dir()
     mkpath(Rembus.broker_dir())
@@ -41,6 +52,7 @@ function setup(admin)
     @info "admins.json setup done"
     set_exposers()
     set_subscribers()
+    set_topic_auth()
 end
 
 function teardown()

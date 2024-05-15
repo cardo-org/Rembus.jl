@@ -36,8 +36,14 @@ function run(request_url, subscriber_url, exposer_url)
     connect("")
     @test true
 
+    # anonymous component
+    # anonymous_twin_receiver returns because isempty(payload) returns true
+    rb = tryconnect("tcp://:8001")
+    sleep(0.1)
+    close(rb)
+
     bag = TestBag(false)
-    client = tryconnect(request_url)
+    client = connect(request_url)
 
     try
         rpc(client, rpc_topic, exceptionerror=true)
