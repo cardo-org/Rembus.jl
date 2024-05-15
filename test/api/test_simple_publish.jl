@@ -1,8 +1,4 @@
-using Distributed
-addprocs(2)
-
-@everywhere using Rembus
-using Test
+include("../utils.jl")
 
 mutable struct Ctx
     data::Any
@@ -11,10 +7,6 @@ end
 function foo(ctx, x)
     @info "[test_simple_publish] foo=$x"
     ctx.data = x
-end
-
-function start_broker()
-    remotecall(caronte, 2, wait=false, exit_when_done=false)
 end
 
 function run()
@@ -38,10 +30,6 @@ function run()
         @test false
     end
     @info "shutting down"
-    remotecall(shutdown, 2)
-    sleep(2)
 end
 
-@async start_broker()
-sleep(15)
-run()
+execute(run, "test_simple_publish")

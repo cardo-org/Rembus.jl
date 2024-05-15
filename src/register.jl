@@ -90,13 +90,3 @@ function unregister(rb, cid::AbstractString)
     # remove the private key
     rm(pkfile(cid), force=true)
 end
-
-function transport_send(router, ws, msg::Register)
-    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid, msg.pubkey]
-    transport_write(ws, pkt)
-end
-
-function transport_send(router, ws, msg::Unregister)
-    pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
-    transport_write(ws, pkt)
-end

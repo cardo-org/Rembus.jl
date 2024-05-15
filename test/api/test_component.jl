@@ -48,8 +48,14 @@ function run()
 
     # test unknown process
     #@test_throws Visor.UnknownProcess @publish "fabulous" foo()
-    @publish "fabulous" foo()
-
+    try
+        @publish "fabulous" foo()
+    catch e
+        @test isa(e, ErrorException)
+        @test e.msg == "unknown process fabulous"
+    finally
+        @terminate
+    end
 end
 
 execute(run, "test_component")

@@ -19,6 +19,12 @@ function run(url)
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
+        Rembus.register(url, uid, pin)
+    catch e
+        @info "[test_register] expected error: $e"
+    end
+
+    try
         # wrong token
         Rembus.register("mycomponent", uid, "00000000")
         @test false

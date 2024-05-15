@@ -21,6 +21,9 @@ n = Int8(-1)
 e = encode(n)
 @test e == UInt8[0x20]
 
+n128 = UInt128(1 << 62)^2
+@test_throws ErrorException encode(Rembus.SmallInteger(n128))
+
 @test typeof(decode(encode(SmallInteger(-1)))) == Int8
 @test typeof(decode(encode(SmallInteger(-Int8(Rembus.INT8_MAX_POSITIVE))))) == Int8
 @test typeof(decode(encode(SmallInteger(-(Rembus.INT8_MAX_POSITIVE + 2))))) == Int16
