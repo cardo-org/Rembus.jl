@@ -15,7 +15,7 @@ proc = process("router", task, args=(router,))
 twin = Rembus.Twin(router, "twin", Channel())
 supervise(process(Rembus.twin_task, args=(twin,)), wait=false)
 
-@test !isauthorized(twin)
+@test !isauthenticated(twin)
 
 router.address2twin[identity] = twin
 router.topic_impls["topic"] = Set([twin])

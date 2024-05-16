@@ -51,41 +51,18 @@ function publish_workflow(pub, sub)
     reactive(sub)
 
     publish(publisher, my_topic, 2)
-    #publish(publisher, my_topic, df)
-    #publish(publisher, my_topic, bdf)
-
-    ## publish with no args
-    #try
-    #    publish(publisher, noarg_topic)
-    #catch e
-    #    @test false
-    #end
 
     sleep(waittime)
 
     @test testbag.msg_received === 1
-
     for cli in [publisher, sub]
         close(cli)
     end
 
-    #@test testbag.noarg_message_received === true
 end
 
 function run()
     publish_workflow("pub", "ws://:8000/sub1")
-
-    #    for sub1 in ["tcp://:8001/sub1", "zmq://:8002/sub1"]
-    #        for sub2 in ["tcp://:8001/sub2", "zmq://:8002/sub2"]
-    #            for sub3 in ["sub3", "zmq://:8002/sub3"]
-    #                for publisher in ["pub", "zmq://:8002/pub"]
-    #                    @debug "test_publish endpoints: $sub1, $sub2, $sub3, $publisher, " _group = :test
-    #                    publish_workflow(publisher, sub1, sub2, sub3)
-    #                    testsummary()
-    #                end
-    #            end
-    #        end
-    #    end
 end
 
 execute(run, "test_publish_ack")

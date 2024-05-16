@@ -86,11 +86,11 @@ mutable struct Embedded <: AbstractRouter
 end
 
 """
-    embedded()
+    server()
 
-Initialize an embedded server for brokerless rpc and one way pub/sub.
+Initialize an server server for brokerless rpc and one way pub/sub.
 """
-embedded() = Embedded()
+server() = Embedded()
 
 mutable struct Router <: AbstractRouter
     start_ts::Float64
@@ -182,7 +182,7 @@ function create_twin(id, router::Embedded, queue=Queue{PubSubMsg}())
     else
         twin = Twin(router, id, Channel())
         spec = process(id, twin_task, args=(twin,))
-        startup(from("embedded.twins"), spec)
+        startup(from("server.twins"), spec)
         router.id_twin[id] = twin
         return twin
     end
@@ -493,7 +493,7 @@ function embedded_msg(router::Embedded, twin::Twin, msg::RembusMsg)
             respond(router, response)
         end
     else
-        @debug "[embedded] no provider for [$(msg.topic)]"
+        @debug "[server] no provider for [$(msg.topic)]"
         if isa(msg, RpcReqMsg)
             response = Msg(TYPE_RESPONSE, ResMsg(msg, STS_METHOD_NOT_FOUND, nothing), twin)
             respond(router, response)
@@ -1119,17 +1119,17 @@ function caronted()::Cint
 end
 
 """
-    serve(embedded::Embedded; wait=true, exit_when_done=true, secure=false)
+    serve(server::Embedded; wait=true, exit_when_done=true, secure=false)
 
 Start an embedded server and accept connections.
 """
 function serve(
-    embedded::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
+    server::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
     ; wait=true, exit_when_done=true, secure=false
 )
-    embedded_sv = from("embedded")
+    embedded_sv = from("server")
     if embedded_sv === nothing
-        # first embedded process
+        # first server process
         setup(CONFIG)
         init_log()
         tasks = [
@@ -1137,13 +1137,13 @@ function serve(
             process(
                 "serve:$port",
                 serve_ws,
-                args=(embedded, port, secure),
+                args=(server, port, secure),
                 restart=:transient,
                 stop_waiting_after=2.0
             ),
         ]
         sv = supervise(
-            [supervisor("embedded", tasks, strategy=:one_for_one)],
+            [supervisor("server", tasks, strategy=:one_for_one)],
             intensity=5,
             wait=wait
         )
@@ -1154,7 +1154,7 @@ function serve(
         p = process(
             "serve:$port",
             serve_ws,
-            args=(embedded, port, secure),
+            args=(server, port, secure),
             restart=:transient,
             stop_waiting_after=2.0
         )
@@ -1236,7 +1236,7 @@ end
 function client_receiver(router::Embedded, ws)
     cid = string(uuid4())
     twin = create_twin(cid, router)
-    @debug "[embedded] client bound to twin id [$cid]"
+    @debug "[server] client bound to twin id [$cid]"
     # start the trusted client task
     twin.sock = ws
     while isopen(ws)
@@ -1521,7 +1521,7 @@ function broadcast!(router, msg)
         topic = msg.reqdata.topic
         bmsg = PubSubMsg(topic, msg.reqdata.data)
     else
-        @debug "no broadcast for [$msg]: request data not available or embedded method"
+        @debug "no broadcast for [$msg]: request data not available or server method"
         return nothing
     end
 
@@ -1537,11 +1537,11 @@ function broadcast!(router, msg)
 end
 
 """
-    isauthorized(session)
+    isauthenticated(session)
 
 Return true if the connected component is authenticated.
 """
-isauthorized(session) = session.isauth
+isauthenticated(session) = session.isauth
 
 #=
     isauthorized(router::Router, twin::Twin, topic::AbstractString)
@@ -1624,7 +1624,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             result = router.topic_function[msg.topic](twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
-            @debug "[$(msg.topic)] embedded error (method too young?): $e"
+            @debug "[$(msg.topic)] server error (method too young?): $e"
             result = "$e"
             sts = STS_METHOD_EXCEPTION
 

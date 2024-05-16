@@ -1,10 +1,10 @@
 using Rembus
 using Test
 
-emb = embedded()
+emb = server()
 
 serve(emb, wait=false)
-@test from("embedded") !== nothing
+@test from("server") !== nothing
 
 shutdown()
 

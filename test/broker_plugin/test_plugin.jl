@@ -31,7 +31,7 @@ module CarontePlugin
 
 using Rembus # needed for session()
 
-export add_interest
+export subscribe
 export challenge
 export save_configuration
 export login
@@ -55,9 +55,9 @@ function login(twin, user, hash)
     return false
 end
 
-function add_interest(ctx, router, twin, msg)
-    @info "[add_interest][$ctx]: $msg"
-    ctx["add_interest"] = true
+function subscribe(ctx, router, twin, msg)
+    @info "[subscribe][$ctx]: $msg"
+    ctx["subscribe"] = true
 
     # an exception generate an error log
     error("something wrong!")
@@ -90,8 +90,7 @@ end
 function twin_finalize(ctx, twin)
 end
 
-
-end
+end # module CarontePlugin
 
 function test_plugin_topic()
 end
@@ -138,7 +137,7 @@ function run(ok_cid, ko_cid)
     twin.acktimer[1] = tim
 
     # triggers CarontePlugin.park
-    Rembus.handle_ack_timeout(tim, twin, "msg", msgid)
+    Rembus.handle_ack_timeout(tim, twin, "my_string", msgid)
 
     # request a broker shutdown
     res = Rembus.broker_shutdown(rb)
@@ -156,7 +155,7 @@ function run(ok_cid, ko_cid)
 
     sleep(1)
 
-    @test ctx["add_interest"]
+    @test ctx["subscribe"]
 end
 
 ok_cid = "ok_cid"

@@ -24,7 +24,7 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "caronted" begin
             include("unit/test_caronted.jl")
         end
-        @time @safetestset "embedded" begin
+        @time @safetestset "server" begin
             include("unit/test_embedded.jl")
         end
         @time @safetestset "messages" begin
@@ -60,9 +60,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
             include("private/test_private_topic.jl")
         end
     end
-    if GROUP == "all" || GROUP == "embedded"
-        @time @safetestset "embedded" begin
-            include("embedded/test_embedded.jl")
+    if GROUP == "all" || GROUP == "server"
+        @time @safetestset "server" begin
+            include("server/test_server.jl")
         end
     end
     if GROUP == "all" || GROUP == "ack"

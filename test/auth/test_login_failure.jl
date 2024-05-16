@@ -19,7 +19,7 @@ end
 
 function run_embedded()
     try
-        rb = embedded()
+        rb = server()
         serve(rb, wait=false, exit_when_done=false)
 
         connect(cid)

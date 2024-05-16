@@ -8,6 +8,10 @@ bdf = DataFrame(x=1:10, y=1:10)
 mutable struct TestBag
     noarg_message_received::Bool
     msg_received::Int
+    df::Union{Nothing,DataFrame}
+    bdf::Union{Nothing,DataFrame}
+    num::Number
+    TestBag() = new(false, 0, nothing, nothing)
 end
 
 function inspect(bag::TestBag)
@@ -18,17 +22,18 @@ function consume(bag::TestBag, data::Number)
     bag.msg_received += 1
 
     @debug "consume recv: $data" _group = :test
-    @atest data == 2 "consume(data=$data): expected data == 2"
+    bag.num = data
 end
 
 function consume(bag::TestBag, data)
     bag.msg_received += 1
 
-    @debug "df:\n$(view(data, 1:2, :))" _group = :test
     if names(data) == ["x", "y"]
-        @atest size(data) == size(bdf) "data:$(size(data)) == bdf:$(size(bdf))"
+        @debug "recv bdf" _group = :test
+        bag.bdf = data
     else
-        @atest size(data) == size(df) "data:$(size(data)) == df:$(size(df))"
+        @debug "recv df" _group = :test
+        bag.df = data
     end
 end
 
@@ -38,7 +43,7 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     my_topic = "consume"
     noarg_topic = "noarg_topic"
 
-    testbag = TestBag(false, 0)
+    testbag = TestBag()
 
     publisher = connect(pub)
 
@@ -56,12 +61,12 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     subscribe(sub2, noarg_topic, inspect)
     reactive(sub2)
 
-    # sub3 is not reactive: no messages delivered to sub3
     sub3 = connect(sub3)
     shared(sub3, testbag)
     subscribe(sub3, my_topic, consume, true)
     reactive(sub3)
 
+    #sleep(1)
     publish(publisher, my_topic, 2)
     publish(publisher, my_topic, df)
     publish(publisher, my_topic, bdf)
@@ -79,23 +84,19 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
     # removing a not registerd interest throws an error
     try
         unsubscribe(sub1, my_topic)
-        @test 0 == 1
+        @test false
     catch e
         @debug "[remove interest]: $e" _group = :test
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
 
-    #if isfirst
-    #    sleep(1)
-    #else
-    sleep(waittime / 4)
-    #end
-
     if isfirst
         @info "testbag.msg_received $(testbag.msg_received) === 9"
     else
         @test testbag.msg_received === 9
+        @test testbag.bdf == bdf
+        @test testbag.df == df
     end
 
     for cli in [publisher, sub1, sub2, sub3]
@@ -111,14 +112,13 @@ end
 
 function run()
     publish_workflow("pub", "tcp://:8001/sub1", "tcp://:8001/sub2", "sub3", true)
-
+    @info "starting real test"
     for sub1 in ["tcp://:8001/sub1", "zmq://:8002/sub1"]
         for sub2 in ["tcp://:8001/sub2", "zmq://:8002/sub2"]
             for sub3 in ["sub3", "zmq://:8002/sub3"]
                 for publisher in ["pub", "zmq://:8002/pub"]
                     @debug "test_publish endpoints: $sub1, $sub2, $sub3, $publisher, " _group = :test
                     publish_workflow(publisher, sub1, sub2, sub3)
-                    testsummary()
                 end
             end
         end

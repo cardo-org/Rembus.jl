@@ -25,7 +25,7 @@ end
 
 
 function start_server()
-    emb = embedded()
+    emb = server()
     provide(emb, df_service)
     provide(emb, rpc_service)
     provide(emb, rpc_fault)
@@ -74,7 +74,7 @@ function run()
 
         publish(rb, "signal", smoke_message)
 
-        # if an error on the embedded side occurred the connection is closed
+        # if an error on the server side occurred the connection is closed
         @test isconnected(rb)
 
         close(rb)

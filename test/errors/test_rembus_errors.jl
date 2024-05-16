@@ -16,6 +16,8 @@ function send_wrong_packet()
 end
 
 function run()
+    Rembus.CONFIG.stacktrace = true
+
     # wrong protocol
     @test_throws ErrorException Rembus.connect("foo://bar")
 

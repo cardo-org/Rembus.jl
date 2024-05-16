@@ -46,8 +46,8 @@ export @terminate
 
 # rembus client api
 export connect
-export isauthorized
-export embedded
+export isauthenticated
+export server
 export serve
 export expose, unexpose
 export subscribe, unsubscribe
@@ -1856,7 +1856,7 @@ function subscribe(
     add_receiver(rb, topic, fn)
     rb.subinfo[topic] = retroactive
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => ADD_INTEREST_CMD, RETROACTIVE => retroactive)),
+        AdminReqMsg(topic, Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => retroactive)),
         exceptionerror=exceptionerror
     )
 end
@@ -1879,7 +1879,7 @@ function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
     delete!(rb.subinfo, topic)
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => REMOVE_INTEREST_CMD)),
+        AdminReqMsg(topic, Dict(COMMAND => UNSUBSCRIBE_CMD)),
         exceptionerror=exceptionerror
     )
 end
@@ -1902,7 +1902,7 @@ If the `topic` argument is omitted the function name equals to the RPC method na
 function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
     add_receiver(rb, topic, fn)
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => ADD_IMPL_CMD)),
+        AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)),
         exceptionerror=exceptionerror
     )
 end
@@ -1920,7 +1920,7 @@ Stop servicing RPC requests targeting `topic` or `fn` methods.
 function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => REMOVE_IMPL_CMD)),
+        AdminReqMsg(topic, Dict(COMMAND => UNEXPOSE_CMD)),
         exceptionerror=exceptionerror
     )
 end

@@ -8,7 +8,7 @@ end
 myservice2(session, x) = x * x
 
 function start_server(port, fn)
-    emb = embedded()
+    emb = server()
     provide(emb, "myservice", fn)
     serve(emb, port, wait=false, exit_when_done=false)
 end
@@ -16,7 +16,7 @@ end
 function run()
     server_1 = start_server(9000, myservice1)
     server_2 = start_server(9001, myservice2)
-    Rembus.islistening(20, procs=["embedded.serve:9000", "embedded.serve:9001"])
+    Rembus.islistening(20, procs=["server.serve:9000", "server.serve:9001"])
     #sleep(10)
 
     Visor.dump()

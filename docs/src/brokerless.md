@@ -17,12 +17,12 @@ for others components and respond only to authorized components:
 using Rembus
 
 function my_service(session, x,y)
-    isauthorized(session) || error("unauthorized")
+    isauthenticated(session) || error("unauthorized")
     return x+y
 end
 
 function start_server()
-    rb = embedded()
+    rb = server()
     provide(rb, my_service)
     serve(rb)
 end
@@ -36,7 +36,7 @@ start_server()
 The component that play the server role is initialized as:
 
 ```julia
-rb = embedded()
+rb = server()
 ```
 
 Bind methods implementation to the server with `provide`:
@@ -52,7 +52,7 @@ a value to the rpc client.
 This means that one `expose` API works in place of `expose` and `subscribe` APIs required for configuring a broker.
 
 The signature of `mymethod` must have a `session` object as first argument. The `session` object may be
-useful for serving only authorized components with `isauthorized(session)`.
+useful for serving only authorized components with `isauthenticated(session)`.
 
 For example if rpc method is invoked with two arguments:
 

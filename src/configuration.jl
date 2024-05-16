@@ -112,5 +112,3 @@ function setup(setting)
 end
 
 const Rembus.CONFIG = Rembus.Settings()
-
-context() = CONFIG.broker_ctx

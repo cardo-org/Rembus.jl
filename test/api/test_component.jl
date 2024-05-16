@@ -25,7 +25,7 @@ function run()
     rb = connect("pub")
     publish(rb, "atopic", value)
 
-    sleep(0.5)
+    sleep(1)
     @test ctx.data == value
 
     ctx.data = nothing

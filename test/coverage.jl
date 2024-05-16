@@ -19,7 +19,7 @@ for dir in [
     "test/auth",
     "test/config",
     "test/connect",
-    "test/embedded",
+    "test/server",
     "test/errors",
     "test/integration",
     "test/park",

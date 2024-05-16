@@ -102,9 +102,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
     sts = STS_SUCCESS
     data = nothing
     cmd = msg.data[COMMAND]
-    if cmd == ADD_INTEREST_CMD
+    if cmd == SUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(ADD_INTEREST_CMD), router, twin, msg) do
+            callback_and(Symbol(SUBSCRIBE_CMD), router, twin, msg) do
                 retroactive = get(msg.data, RETROACTIVE, true)
                 twin.retroactive[msg.topic] = retroactive
                 if haskey(router.topic_interests, msg.topic)
@@ -116,9 +116,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
         else
             sts = STS_GENERIC_ERROR
         end
-    elseif cmd == ADD_IMPL_CMD
+    elseif cmd == EXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(ADD_IMPL_CMD), router, twin, msg) do
+            callback_and(Symbol(EXPOSE_CMD), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     push!(router.topic_impls[msg.topic], twin)
                 else
@@ -128,9 +128,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
         else
             sts = STS_GENERIC_ERROR
         end
-    elseif cmd == REMOVE_INTEREST_CMD
+    elseif cmd == UNSUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(REMOVE_INTEREST_CMD), router, twin, msg) do
+            callback_and(Symbol(UNSUBSCRIBE_CMD), router, twin, msg) do
                 if haskey(router.topic_interests, msg.topic)
                     if twin in router.topic_interests[msg.topic]
                         delete!(router.topic_interests[msg.topic], twin)
@@ -148,9 +148,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
         else
             sts = STS_GENERIC_ERROR
         end
-    elseif cmd == REMOVE_IMPL_CMD
+    elseif cmd == UNEXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(REMOVE_IMPL_CMD), router, twin, msg) do
+            callback_and(Symbol(UNEXPOSE_CMD), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     if twin in router.topic_impls[msg.topic]
                         delete!(router.topic_impls[msg.topic], twin)
