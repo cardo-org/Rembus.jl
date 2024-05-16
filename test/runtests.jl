@@ -148,6 +148,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "simple_publish" begin
             include("api/test_simple_publish.jl")
         end
+        @time @safetestset "simple_rpc" begin
+            include("api/test_simple_rpc.jl")
+        end
         @time @safetestset "conditional_publish" begin
             include("api/test_conditional_publish.jl")
         end
