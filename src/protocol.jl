@@ -83,10 +83,6 @@ struct ResMsg{T} <: RembusMsg
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
         return new{typeof(data)}(req.id, status, data, flags)
     end
-
-    function ResMsg(exec::RpcReqMsg, flags=0x0)
-        return new{typeof(exec.data)}(exec.id, exec.status, exec.data, flags)
-    end
 end
 
 Base.show(io::IO, message::ResMsg) = show(io, "msgid:$(message.id) status:$(message.status)")

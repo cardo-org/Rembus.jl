@@ -47,6 +47,22 @@ buff = encode(v)
 decoded_v = decode(buff)
 @test decoded_v == UInt8[1, 2, 3, 4]
 
+d = Dict(
+    "msg1" => 1,
+    "msg2" => 2
+)
+
+function values(ch::Channel)
+    for (k, v) in d
+        put!(ch, k)
+        put!(ch, v)
+    end
+end
+
+buff = encode(Rembus.UndefLength{Pair}(Channel(values)))
+res = decode(buff)
+@test res == d
+
 buff = encode(1.0)
 # set an invalid value for type 7
 buff[1] = Rembus.TYPE_7 | UInt8(28)
