@@ -119,7 +119,7 @@ function run(ok_cid, ko_cid)
     #@info "exposed =  $exposed"
     #@info "isdefined(park) = $(isdefined(Rembus.CONFIG.broker_plugin, :park))"
 
-    caronte(wait=false, exit_when_done=false)
+    caronte(wait=false)
     sleep(2)
 
     rb = tryconnect(ok_cid)

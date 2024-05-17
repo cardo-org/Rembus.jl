@@ -7,26 +7,21 @@ The broker setup is affected by the following environment variables.
 | Variable |Default| Descr |
 |----------|-------|-------|
 |`BROKER_DIR`|\$HOME/.config/caronte | Root dir for configuration files and cached messages to be delivered to offline components opting for retroactive mode|
-|`BROKER_TCP_PORT`|8000|use `tls://<host>:$BROKER_TCP_PORT` for serving TLS protocol|
-|`BROKER_WS_PORT`|8001|use `wss://<host>:$BROKER_WS_PORT` for serving WSS protocol|
-|`BROKER_ZMQ_PORT`|8002|ZeroMQ port `zmq://<host>:$BROKER_ZMQ_PORT`|
+|`BROKER_WS_PORT`|8000|default port for serving WebSocket protocol|
 |`REMBUS_DEBUG`|0| "1": enable debug traces|
 |`REMBUS_KEYSTORE`|\$BROKER\_DIR/keystore| Directory of broker certificate `caronte.crt` and broker secret key `caronte.key`|
 
 ## Component environment variables
 
-A Rembus component is affected by the following environement variables. 
+A Rembus component is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
 |`REMBUS_DIR`|\$HOME/.config/rembus| Root dir for component configuration files|
 |`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
-|##`REMBUS_CA`|rembus-ca.crt|CA certificate file name. This file has to be in `$REMBUS_KEYSTORE` directory|
 |`REMBUS_DEBUG`|0| "1": enable debug traces|
-|##`REMBUS_KEYSTORE`|\$REMBUS\_DIR/keystore| Directory of CA certificate|
 |`REMBUS_TIMEOUT`|5| Maximum number of seconds waiting for rpc responses|
 |`HTTP_CA_BUNDLE`|\$REMBUS\_DIR/ca/rembus-ca.crt|CA certificate|
-|##`HTTP_CA_BUNDLE_OLD`|\$REMBUS\_KEYSTORE/\$REMBUS\_CA|CA certificate|
 
 ## Broker configuration files
 
@@ -52,7 +47,7 @@ The directory `BROKER_DIR` contains broker settings and secret materials.
 
 ```
 
-where `foo` and `bar` are example component names.
+where `foo` and `bar` files are named after component names.
 
 In case the component are offline the undelivered messages are temporarly persisted into `twins/bar` and `/twins/foo` files.
 

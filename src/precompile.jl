@@ -16,9 +16,6 @@ mutable struct TestBag
     msg_received::Int
 end
 
-#function noarg()
-#end
-
 function mytopic(bag::TestBag, data::Number)
     @debug "mytopic recv: $data"
 end
@@ -84,21 +81,6 @@ function add_one(add_one_arg)
     add_one_arg + 1
 end
 
-#function do_method_error()
-#    reason = "this is an error"
-#    error(reason)
-#end
-#
-#function do_args_error(data)
-#    args_error_msg = "expected a float32"
-#    if !isa(data, Float32)
-#        throw(ErrorException(args_error_msg))
-#    end
-#end
-#
-#function rpc_method(rpc_method_arg)
-#end
-
 function request_api(request_url, exposer_url)
     rpc_topic = "rpc_method"
     request_arg = 1
@@ -114,12 +96,6 @@ function request_api(request_url, exposer_url)
     expose(implementor, rpc_topic, add_one)
 
     res = rpc(client, rpc_topic, request_arg)
-
-    #    expose(implementor, rpc_topic, do_method_error)
-    #    try
-    #        res = rpc(client, rpc_topic)
-    #    catch e
-    #    end
 
     for cli in [implementor, client]
         close(cli)

@@ -17,7 +17,7 @@ macro start_caronte(init, args, reset)
                 fn()
             end
 
-            Rembus.caronte(wait=false, exit_when_done=false, args=$(esc(args)))
+            Rembus.caronte(wait=false, args=$(esc(args)))
         end
     end
 end

@@ -15,6 +15,7 @@ The following macros comprise the API and enable Julia to be supercharged with t
 - [@publish](#publish)
 - [@reactive](#reactive)
 - [@unreactive](#reactive)
+- [@forever](#forever)
 - [@shared](#shared)
 - [@rpc_timeout](#rpc_timeout)
 - [@terminate](#terminate)
@@ -156,6 +157,7 @@ Publishing a message is like calling a local function named as the pub/sub topic
 ```julia
 @publish mytopic(1.2, 3.0)
 ```
+
 ## reactive
 
 Enable the reception of published messages from subscribed topics.
@@ -175,6 +177,14 @@ Stop receiving published messages.
 ```julia
 @unreactive
 ```
+
+## forever
+
+Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods.
+Wait forever for rpc requests or pub/sub messages.
+
+By default `@forever` enable component reactiveness, see [@reactive](#reactive).
+
 ## shared
 
 `@shared` is handy when a state must be shared between the subscribed methods, the exposed methods and the application.
@@ -186,9 +196,9 @@ For convention the first argument of a method that [@subscribe](#subscribe) or
 
 The following example shows how to use a shared state:
 
--  the struct `MyState` manages the state;
--  the `@shared` macro binds the state object to the component;
--  the subscribed and the exposed method must provide as first argument the state object;
+- the struct `MyState` manages the state;
+- the `@shared` macro binds the state object to the component;
+- the subscribed and the exposed method must provide as first argument the state object;
 
 ```julia
 mutable struct MyState

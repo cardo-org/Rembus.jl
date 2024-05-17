@@ -30,13 +30,13 @@ function run()
     sleep(2)
 
     # restart caronte
-    Rembus.caronte(wait=false, exit_when_done=false, args=Dict("zmq" => 8002))
+    Rembus.caronte(wait=false, args=Dict("zmq" => 8002))
     sleep(2)
 
     shutdown()
     sleep(2)
     # restart caronte
-    Rembus.caronte(wait=false, exit_when_done=false, args=Dict("zmq" => 8002))
+    Rembus.caronte(wait=false, args=Dict("zmq" => 8002))
     sleep(2)
 
 end

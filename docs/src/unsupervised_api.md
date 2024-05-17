@@ -14,6 +14,7 @@ The unsupervised API functions:
 - [publish](#publish)
 - [reactive](#reactive)
 - [unreactive](#unreactive)
+- [forever](#forever)
 - [shared](#shared)
 - [close](#close)
 
@@ -114,6 +115,7 @@ Stop the function to receive messages produced with [`publish`](#publish).
 ```julia
 unsubscribe(rb, myservice)
 ```
+
 ## publish
 
 Publish a message:
@@ -145,6 +147,14 @@ Stop receiving published messages.
 ```julia
 unreactive(rb)
 ```
+
+## forever
+
+Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods. Wait forever for rpc
+requests or pub/sub messages.
+
+By default `forever` enable component reactiveness, see [reactive](#reactive).
+
 ## shared
 
 `shared` is handy when a state must be shared between the subscribed methods, the exposed methods and the application.
@@ -156,9 +166,9 @@ For convention the first argument of a method that [subscribe](#subscribe) or
 
 The following example shows how to use a shared state:
 
--  the struct `MyState` manages the state;
--  the `shared` method binds the state object to the component;
--  the subscribed and the exposed method must provide as first argument the state object;
+- the struct `MyState` manages the state;
+- the `shared` method binds the state object to the component;
+- the subscribed and the exposed method must provide as first argument the state object;
 
 ```julia
 mutable struct MyState

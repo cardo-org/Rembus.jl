@@ -63,7 +63,7 @@ end
 function run_embedded()
     try
         rb = server()
-        serve(rb, wait=false, exit_when_done=false)
+        serve(rb, wait=false)
 
         client = connect(cid)
         close(client)

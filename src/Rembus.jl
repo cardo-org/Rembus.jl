@@ -1416,7 +1416,6 @@ function tcp_connect(rb, process, isconnected::Condition)
             error("tcp endpoint: wrong $(uri.scheme) scheme")
         end
     catch e
-        @error "tcp_connect: $e"
         notify(isconnected, e, error=true)
     end
 end
@@ -2210,7 +2209,6 @@ end
     @compile_workload begin
         sv = Rembus.caronte(
             wait=false,
-            exit_when_done=false,
             args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
         )
         yield()

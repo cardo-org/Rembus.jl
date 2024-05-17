@@ -49,7 +49,11 @@ function Logging.shouldlog(
     group,
     id
 )
-    level >= Logging.Info || group in logger.groups || _module in CONFIG.debug_modules
+    if _module === HTTP.Servers
+        level >= Logging.Warn
+    else
+        level >= Logging.Info || group in logger.groups || _module in CONFIG.debug_modules
+    end
 end
 
 function Logging.handle_message(

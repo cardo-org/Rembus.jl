@@ -1012,17 +1012,14 @@ function command_line()
         help = "accept wss and tls connections"
         action = :store_true
         "--ws", "-w"
-        help = "accept WebSocket connections"
-        arg_type = Int
-        default = -1
+        help = "accept WebSocket clients on port WS"
+        arg_type = UInt16
         "--tcp", "-t"
-        help = "accept tcp connections"
-        arg_type = Int
-        default = -1
+        help = "accept tcp clients on port TCP"
+        arg_type = UInt16
         "--zmq", "-z"
-        help = "accept zmq connections"
-        arg_type = Int
-        default = -1
+        help = "accept zmq clients on port ZMQ"
+        arg_type = UInt16
         "--debug", "-d"
         help = "enable debug logs"
         action = :store_true
@@ -1038,15 +1035,15 @@ function caronte_reset()
 end
 
 """
-    caronte(; wait=true, exit_when_done=true)
+    caronte(; wait=true, args=Dict())
 
 Start the broker.
 
-Return immediately when `wait` is false, otherwise blocks until shut down.
+Return immediately when `wait` is false, otherwise blocks until shutdown is requested.
 
-Return instead of exiting if `exit_when_done` is false.
+Overwrite command line arguments if args is not empty.
 """
-function caronte(; wait=true, exit_when_done=true, args=Dict())
+function caronte(; wait=true, args=Dict())
     if isempty(args)
         args = command_line()
     end
@@ -1066,7 +1063,7 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
 
     tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
 
-    if get(args, "tcp", -1) !== -1
+    if get(args, "tcp", nothing) !== nothing
         push!(
             tasks,
             process(
@@ -1076,7 +1073,7 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
             )
         )
     end
-    if get(args, "zmq", -1) !== -1
+    if get(args, "zmq", nothing) !== nothing
         push!(
             tasks,
             process(
@@ -1086,10 +1083,10 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
                 debounce_time=2)
         )
     end
-    if get(args, "ws", -1) !== -1 ||
-       (get(args, "zmq", -1) == -1 && get(args, "tcp", -1) == -1)
-        wsport = get(args, "ws", -1)
-        if wsport == -1
+    if get(args, "ws", nothing) !== nothing ||
+       (get(args, "zmq", nothing) === nothing && get(args, "tcp", nothing) === nothing)
+        wsport = get(args, "ws", nothing)
+        if wsport === nothing
             wsport = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
         end
         push!(
@@ -1106,10 +1103,6 @@ function caronte(; wait=true, exit_when_done=true, args=Dict())
         [supervisor("caronte", tasks, strategy=:one_for_all, intensity=0)],
         wait=wait
     )
-    if exit_when_done
-        ###exit(0)
-    end
-
     return sv
 end
 
@@ -1119,13 +1112,13 @@ function caronted()::Cint
 end
 
 """
-    serve(server::Embedded; wait=true, exit_when_done=true, secure=false)
+    serve(server::Embedded; wait=true, secure=false)
 
 Start an embedded server and accept connections.
 """
 function serve(
     server::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
-    ; wait=true, exit_when_done=true, secure=false
+    ; wait=true, secure=false
 )
     embedded_sv = from("server")
     if embedded_sv === nothing
@@ -1147,9 +1140,6 @@ function serve(
             intensity=5,
             wait=wait
         )
-        if exit_when_done
-            ### exit(0)
-        end
     else
         p = process(
             "serve:$port",
@@ -1737,25 +1727,6 @@ function broker(self, router)
 end
 
 #=
-function caronte_context(fn, ctx)
-    if ctx === nothing
-        return data -> fn(data...)
-    else
-        return data -> fn(ctx, data...)
-    end
-end
-
-function eval_optional(router, modname, fname)
-    sts = eval(Meta.parse("isdefined(Main.$modname, :$fname)"))
-    if sts
-        return Base.invokelatest(Base.eval(Main, Meta.parse("$modname.$fname")), router)
-    else
-        return nothing
-    end
-end
-=#
-
-#=
     boot(router)
 
 Setup the router.
@@ -1779,13 +1750,7 @@ function boot(router)
     return nothing
 end
 
-function init_log()
-    if isinteractive()
-        Logging.disable_logging(Logging.Info)
-    else
-        logging(debug=[])
-    end
-end
+init_log() = logging(debug=[])
 
 function init(router)
     init_log()

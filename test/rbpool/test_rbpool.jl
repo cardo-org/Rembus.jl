@@ -10,7 +10,7 @@ myservice2(session, x) = x * x
 function start_server(port, fn)
     emb = server()
     provide(emb, "myservice", fn)
-    serve(emb, port, wait=false, exit_when_done=false)
+    serve(emb, port, wait=false)
 end
 
 function run()

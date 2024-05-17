@@ -30,7 +30,7 @@ function start_server()
     provide(emb, rpc_service)
     provide(emb, rpc_fault)
     provide(emb, signal)
-    serve(emb, wait=false, exit_when_done=false)
+    serve(emb, wait=false)
 end
 
 

@@ -13,6 +13,15 @@ There are two types of processes: Components and Brokers.
 - A Component expose RPC services and/or subscribe to Pub/Sub topics;
 - A Component make RPC requests and/or publish messages to Pub/Sub topics;
 
+## Installation
+
+```julia
+using Pkg
+Pkg.add("Rembus")
+```
+
+Rembus installs and compiles in a minute or two.
+
 ## Broker
 
 A `Broker` is a process that routes messages between components.
@@ -22,11 +31,13 @@ that uses the WebSocket protocol.
 
 Starting a `Broker` is simple as:
 
-```sh
-julia -e "using Rembus; caronte()"
+```julia
+using Rembus
+
+caronte()
 ```
 
-A startup script could be useful and the following `caronte` script suffice:
+A startup script could be useful and the following `caronte` script will do:
 
 ```julia
 ##!/bin/bash
@@ -38,6 +49,23 @@ exec julia --threads auto --color=no -e "include(popfirst!(ARGS))" \
 using Rembus
 
 Rembus.caronte()
+```
+
+`caronte` starts by default a WebSocket server listening on port 8000,
+for enabling `tcp` and/or `zmq` transports use the appropriate arguments:
+
+```text
+shell> ./caronte
+usage: caronte [-r] [-s] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
+
+optional arguments:
+  -r, --reset    factory reset, clean up broker configuration
+  -s, --secure   accept wss and tls connections
+  -w, --ws WS    accept WebSocket clients on port WS (type: UInt16)
+  -t, --tcp TCP  accept tcp clients on port TCP (type: UInt16)
+  -z, --zmq ZMQ  accept zmq clients on port ZMQ (type: UInt16)
+  -d, --debug    enable debug logs
+  -h, --help     show this help message and exit
 ```
 
 See [Broker environment variables](@ref) for customizing the runtime setting.  
@@ -60,8 +88,8 @@ There are three type of components:
 An `Anonymous` component assume a random and ephemeral identity each time it connects to the broker. Example usage for anonymous components may be:
 
 - when it is not required to trace the originating source of messages;
-- for a `Subscriber` when it is not required to receive messages published before the
-  component goes online;
+- for a `Subscriber` not interested to receive messages published when it was
+  offline;
 - for preliminary prototyping;
 
 A `Named` component has a unique and persistent name that make possible to receive messages published when the component was offline.

@@ -4,7 +4,7 @@ Beside struggling to provide a simple and lean API one of the main points of Rem
 its ability to be fault-tolerant respect to networks and application failures.
 
 The [Supervised API](@ref) provide an automatic reconnection policy in case of network
-faults and try at the best to guarantee message delivery when faults happen. 
+faults and try at the best to guarantee message delivery when faults happen.
 
 This mean that the following RPC service will run forever and it will reconnect
 automatically in case of network failures or broker unavailability.
@@ -22,7 +22,7 @@ end
 
 @expose myservice
 
-forever()
+@forever
 ```
 
 Fault-tolerance holds equally for publish/subscribe setups: in case of connection lost the subscriber retries to reconnect to the broker until the connection will be up again.   
@@ -42,5 +42,5 @@ end
 
 @subscribe mytopic before_now
 
-forever()
+@forever
 ```
