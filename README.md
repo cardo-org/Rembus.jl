@@ -38,8 +38,8 @@ end
 @expose myservice
 
 # Serve forever until Ctrl-C 
-# in REPL forever() is not needed
-forever()
+# in REPL @forever is not needed
+@forever
 ```
 
 > The `@component` macro declares a unique name for the component that get known to the broker.
@@ -64,9 +64,9 @@ end
 
 @subscribe mytopic
 
-# forever() serves forever until Ctrl-C 
-# in REPL forever() is not needed
-forever()
+# Receive messages forever until Ctrl-C 
+# in REPL @forever is not needed
+@forever
 ```
 
 ## Pub/Sub publisher
