@@ -9,3 +9,7 @@
 - [#4](https://github.com/cardo-org/Rembus.jl/issues/4) Improve connection error logs .
 
 - [#5](https://github.com/cardo-org/Rembus.jl/issues/4) Guarantee ordered by time delivery of published messages.
+
+- Optimization: partial CBOR encode/decoding of messages at broker side.
+
+- Full test coverage.

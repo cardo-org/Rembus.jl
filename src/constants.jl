@@ -5,7 +5,7 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-const VERSION = "0.1.0"
+const VERSION = "0.2.0"
 
 #const Rembus.CONFIG = Rembus.Settings()
 
