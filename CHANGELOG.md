@@ -4,7 +4,7 @@
 
 - First Release.
 
-## 0.2.0
+## 0.2.0 (18 May, 2024)
 
 - [#4](https://github.com/cardo-org/Rembus.jl/issues/4) Improve connection error logs .
 
