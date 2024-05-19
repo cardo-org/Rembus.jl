@@ -224,6 +224,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "broker_plugin" begin
             include("broker_plugin/test_plugin.jl")
         end
+        @time @safetestset "publish_interceptor" begin
+            include("broker_plugin/test_publish_interceptor.jl")
+        end
     end
     if GROUP == "all" || GROUP == "repl"
         @time @safetestset "repl" begin

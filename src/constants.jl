@@ -48,6 +48,15 @@ const BROKER_CONFIG_CMD = "broker_config"
 const LOAD_CONFIG_CMD = "load_config"
 const SAVE_CONFIG_CMD = "save_config"
 
+const SUBSCRIBE_HANDLER = "subscribe_handler"
+const UNSUBSCRIBE_HANDLER = "unsubscribe_handler"
+const EXPOSE_HANDLER = "expose_handler"
+const UNEXPOSE_HANDLER = "unexpose_handler"
+const AUTHORIZE_HANDLER = "authorize_handler"
+const UNAUTHORIZE_HANDLER = "unauthorize_handler"
+const PRIVATE_TOPIC_HANDLER = "private_topic_handler"
+const PUBLIC_TOPIC_HANDLER = "public_topic_handler"
+
 const TYPE_IDENTITY::UInt8 = 0
 const TYPE_PUB::UInt8 = 1
 const TYPE_RPC::UInt8 = 2

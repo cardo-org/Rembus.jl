@@ -106,6 +106,7 @@ mutable struct Router <: AbstractRouter
     admins::Set{String}
     twin_initialize::Function
     twin_finalize::Function
+    pub_handler::Union{Nothing,Function}
     park::Function
     unpark::Function
     process::Visor.Process
@@ -128,6 +129,7 @@ mutable struct Router <: AbstractRouter
         Set(),
         twin_initialize,
         twin_finalize,
+        nothing,
         park,
         unpark
     )
@@ -546,8 +548,14 @@ function pubsub_msg(router, twin, msg)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
     else
         # msg is routable, get it to router
-        @debug "[$twin] to router: $(prettystr(msg))"
-        put!(router.process.inbox, Msg(TYPE_PUB, msg, twin))
+        pass = true
+        if router.pub_handler !== nothing
+            pass = router.pub_handler(router, twin, msg)
+        end
+        if pass
+            @debug "[$twin] to router: $(prettystr(msg))"
+            put!(router.process.inbox, Msg(TYPE_PUB, msg, twin))
+        end
     end
 
     return nothing
@@ -1778,6 +1786,9 @@ function init(router)
         )
         for topic in exposed
             router.topic_function[string(topic)] = topic
+        end
+        if isdefined(Rembus.CONFIG.broker_plugin, :publish_interceptor)
+            router.pub_handler = getfield(Rembus.CONFIG.broker_plugin, :publish_interceptor)
         end
     end
 

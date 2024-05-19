@@ -6,7 +6,7 @@ Administration command to declare a private topic.
 function private_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PRIVATE_TOPIC_CMD)
-        callback_and(Symbol(PRIVATE_TOPIC_CMD), router, twin, msg) do
+        callback_and(Symbol(PRIVATE_TOPIC_HANDLER), router, twin, msg) do
             if !haskey(router.topic_auth, msg.topic)
                 router.topic_auth[msg.topic] = Dict()
             end
@@ -25,7 +25,7 @@ Administration command to reset a topic to public.
 function public_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PUBLIC_TOPIC_CMD)
-        callback_and(Symbol(PUBLIC_TOPIC_CMD), router, twin, msg) do
+        callback_and(Symbol(PUBLIC_TOPIC_HANDLER), router, twin, msg) do
             delete!(router.topic_auth, msg.topic)
         end
     else
@@ -49,7 +49,7 @@ function authorize(router, twin, msg)
     if isadmin(router, twin, AUTHORIZE_CMD) &&
        haskey(msg.data, CID) &&
        !isempty(msg.data[CID])
-        callback_and(Symbol(AUTHORIZE_CMD), router, twin, msg) do
+        callback_and(Symbol(AUTHORIZE_HANDLER), router, twin, msg) do
             if !haskey(router.topic_auth, msg.topic)
                 router.topic_auth[msg.topic] = Dict()
             end
@@ -72,7 +72,7 @@ function unauthorize(router, twin, msg)
     if isadmin(router, twin, UNAUTHORIZE_CMD) &&
        haskey(msg.data, CID) &&
        !isempty(msg.data[CID])
-        callback_and(Symbol(UNAUTHORIZE_CMD), router, twin, msg) do
+        callback_and(Symbol(UNAUTHORIZE_HANDLER), router, twin, msg) do
             if haskey(router.topic_auth, msg.topic)
                 delete!(router.topic_auth[msg.topic], msg.data[CID])
             end
@@ -104,7 +104,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
     cmd = msg.data[COMMAND]
     if cmd == SUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(SUBSCRIBE_CMD), router, twin, msg) do
+            callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
                 retroactive = get(msg.data, RETROACTIVE, true)
                 twin.retroactive[msg.topic] = retroactive
                 if haskey(router.topic_interests, msg.topic)
@@ -118,7 +118,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == EXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(EXPOSE_CMD), router, twin, msg) do
+            callback_and(Symbol(EXPOSE_HANDLER), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     push!(router.topic_impls[msg.topic], twin)
                 else
@@ -130,7 +130,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == UNSUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(UNSUBSCRIBE_CMD), router, twin, msg) do
+            callback_and(Symbol(UNSUBSCRIBE_HANDLER), router, twin, msg) do
                 if haskey(router.topic_interests, msg.topic)
                     if twin in router.topic_interests[msg.topic]
                         delete!(router.topic_interests[msg.topic], twin)
@@ -150,7 +150,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == UNEXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(UNEXPOSE_CMD), router, twin, msg) do
+            callback_and(Symbol(UNEXPOSE_HANDLER), router, twin, msg) do
                 if haskey(router.topic_impls, msg.topic)
                     if twin in router.topic_impls[msg.topic]
                         delete!(router.topic_impls[msg.topic], twin)

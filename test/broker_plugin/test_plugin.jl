@@ -31,10 +31,9 @@ module CarontePlugin
 
 using Rembus # needed for session()
 
-export subscribe
 export challenge
-export save_configuration
 export login
+
 export myfunction
 
 function myfunction(twin)
@@ -55,7 +54,7 @@ function login(twin, user, hash)
     return false
 end
 
-function subscribe(ctx, router, twin, msg)
+function subscribe_handler(ctx, router, twin, msg)
     @info "[subscribe][$ctx]: $msg"
     ctx["subscribe"] = true
 
