@@ -311,6 +311,10 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
     namedtwin = create_twin(msg.cid, router)
     # move the opened socket
     namedtwin.sock = twin.sock
+    if !isa(twin.sock, ZMQ.Socket)
+        twin.sock = nothing
+    end
+
     #create a pager
     if paging
         namedtwin.pager = Pager(namedtwin)
@@ -352,15 +356,14 @@ function attestation(router, twin, msg, authenticate=true)
             login(router, twin, msg)
         end
         authtwin = setidentity(router, twin, msg, isauth=authenticate)
+        transport_send(authtwin, authtwin.sock, ResMsg(msg.id, sts, reason))
     catch e
         @error "[$(msg.cid)] attestation: $e"
         sts = STS_GENERIC_ERROR
         reason = isa(e, ErrorException) ? e.msg : string(e)
+        transport_send(twin, twin.sock, ResMsg(msg.id, sts, reason))
     end
 
-    response = ResMsg(msg.id, sts, reason)
-    #@mlog("[$twin] -> $response")
-    transport_send(twin, twin.sock, response)
     if sts !== STS_SUCCESS
         detach(twin)
     end
@@ -863,6 +866,9 @@ function twin_task(self, twin)
         #### rethrow()
     finally
         cleanup(twin, twin.router)
+        if isa(twin.sock, WebSockets.WebSocket)
+            close(twin.sock, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
+        end
     end
     @debug "[$twin] task done"
 end
