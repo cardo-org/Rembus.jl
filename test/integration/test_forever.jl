@@ -5,6 +5,10 @@ function consume(data)
 end
 
 function run()
+
+    # call keep_alive
+    Rembus.CONFIG.ws_ping_interval = 1
+
     topic = "mytopic"
     @test Rembus.islistening(30)
 
