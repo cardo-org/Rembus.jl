@@ -1,7 +1,7 @@
 name = "Rembus"
 uuid = "aa126574-2ec3-42c9-8bf5-7f62001d6bce"
 authors = ["Attilio <attilio.dona@telecomitalia.it>"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"

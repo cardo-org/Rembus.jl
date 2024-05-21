@@ -67,7 +67,7 @@ export set_balancer
 export forever
 
 # broker api
-export caronte, session, context
+export caronte, session, republish, msg_payload
 
 export RembusError
 export RembusTimeout

@@ -546,6 +546,26 @@ function rpc_request(router, twin, msg)
     return nothing
 end
 
+#=
+Get the message data payload.
+Useful for content filtering by publish_interceptor().
+=#
+function msg_payload(io::IOBuffer)
+    mark(io)
+    payload = decode(io)
+    reset(io)
+    return payload
+end
+
+#=
+Publish data on topic. Used by broker plugin module to republish messages
+after transforming them.
+=#
+function republish(router, twin, topic, data, flags=UInt8(0))
+    new_msg = PubSubMsg(topic, data, flags)
+    put!(router.process.inbox, Msg(TYPE_PUB, new_msg, twin))
+end
+
 function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"

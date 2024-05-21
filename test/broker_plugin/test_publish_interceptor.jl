@@ -5,32 +5,22 @@ module CarontePlugin
 
 using Rembus
 
-function republish(router, component, topic, data, flags=UInt8(0))
-    new_msg = Rembus.PubSubMsg(topic, data, flags)
-    put!(router.process.inbox, Rembus.Msg(Rembus.TYPE_PUB, new_msg, component))
-end
 
-function get_payload(io::IOBuffer)
-    mark(io)
-    payload = decode(io)
-    @info "payload=$payload"
-    reset(io)
-    return payload
-end
-
-#function published(broker, component, msg)
 function publish_interceptor(broker, component, msg)
     @info "[$component]: pub: $msg ($(msg.data))"
 
-    subjects = split(msg.topic, "/")
-    metric = last(subjects)
+    try
+        subjects = split(msg.topic, "/")
+        metric = last(subjects)
 
-    content = Dict()
-    content["location"] = msg.topic
-    content["value"] = get_payload(msg.data)
+        content = Dict()
+        content["location"] = msg.topic
+        content["value"] = msg_payload(msg.data)
 
-    republish(broker, component, metric, content)
-
+        republish(broker, component, metric, content)
+    catch e
+        @error "publish_interceptor: $e"
+    end
     # do not broadcast original message
     return false
 end

@@ -13,3 +13,7 @@
 - Optimization: partial CBOR encode/decoding of messages at broker side.
 
 - Full test coverage.
+
+## 0.2.1 (21 May, 2024)
+
+- Add publish_interceptor method for extract and transform published messages.
