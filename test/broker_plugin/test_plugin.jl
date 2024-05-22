@@ -149,7 +149,7 @@ function run(ok_cid, ko_cid)
         @test false
     catch e
         @info "[$ko_cid] expected error: $e"
-        @test isa(e, Rembus.RembusError)
+        @test isa(e, HTTP.Exceptions.ConnectError)
     end
 
     sleep(1)

@@ -38,7 +38,7 @@ function execute_caronte_process(fn, testname; setup=nothing)
     end
     sleep(10)
 
-    Rembus.logging(debug=[:test])
+    Rembus.logging()
     @info "[$testname] start"
     try
         fn()
@@ -63,7 +63,7 @@ function execute(
     Rembus.setup(Rembus.CONFIG)
     @start_caronte setup args reset
     sleep(0.5)
-    Rembus.logging(debug=[:test])
+    Rembus.logging()
     @info "[$testname] start"
     try
         fn()

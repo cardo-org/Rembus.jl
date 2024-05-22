@@ -220,13 +220,13 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == ENABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.debug_modules = [Rembus, Visor]
+            CONFIG.debug = true
         else
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == DISABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.debug_modules = []
+            CONFIG.debug = false
         else
             sts = STS_GENERIC_ERROR
         end

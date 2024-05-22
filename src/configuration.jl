@@ -28,7 +28,7 @@ mutable struct Settings
     home::String
     db::String
     log::String
-    debug_modules::Vector{Module}
+    debug::Bool
     overwrite_connection::Bool
     stacktrace   # log stacktrace on error
     metering     # log in and out messages
@@ -60,9 +60,9 @@ mutable struct Settings
         rawdump = false
         cid = DEFAULT_APP_NAME
         connection_retry_period = 2.0
-        debug_modules = []
+        debug = false
         page_size = get(ENV, "REMBUS_PAGE_SIZE", REMBUS_PAGE_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, home, db, log, debug_modules,
+        new(zmq_ping_interval, ws_ping_interval, balancer, home, db, log, debug,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, nothing, page_size)
     end
@@ -99,12 +99,15 @@ function setup(setting)
     setting.connection_retry_period = get(cfg, "connection_retry_period", 2.0)
     setting.page_size = get(cfg, "page_size", setting.page_size)
 
-    if get(ENV, "REMBUS_DEBUG", "0") == "1"
-        setting.debug_modules = [Rembus, Visor]
+    if haskey(ENV, "REMBUS_DEBUG")
+        if ENV["REMBUS_DEBUG"] == "1"
+            setting.debug = true
+        else
+            setting.debug = false
+        end
     else
-        setting.debug_modules = []
+        setting.debug = get(cfg, "debug", false)
     end
-
     balancer = get(cfg, "balancer", get(ENV, "BROKER_BALANCER", "first_up"))
     set_balancer(setting, balancer)
 

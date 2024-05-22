@@ -1134,7 +1134,7 @@ function caronte(; wait=true, args=Dict())
     end
 
     sv = supervise(
-        [supervisor("caronte", tasks, strategy=:one_for_all, intensity=0)],
+        [supervisor("caronte", tasks, strategy=:one_for_all, intensity=1)],
         wait=wait
     )
     return sv
@@ -1330,12 +1330,18 @@ function listener(proc, caronte_port, router, sslconfig)
 
     setphase(proc, :listen)
 
-    HTTP.WebSockets.listen(IP, caronte_port, server=server, sslconfig=sslconfig) do ws
+    return HTTP.WebSockets.listen!(
+        IP,
+        caronte_port,
+        server=server,
+        sslconfig=sslconfig
+    ) do ws
         client_receiver(router, ws)
     end
 end
 
 function serve_ws(td, router, port, issecure=false)
+    @debug "[serve_ws] starting"
     sslconfig = nothing
     try
         if issecure
@@ -1343,21 +1349,26 @@ function serve_ws(td, router, port, issecure=false)
         end
 
         listener(td, port, router, sslconfig)
+        for msg in td.inbox
+            if isshutdown(msg)
+                return
+            end
+        end
     catch e
         if !isa(e, Visor.ProcessInterrupt)
-            @error "ws server: $e"
+            @error "[serve_ws]: $e"
             @showerror e
         end
         rethrow()
     finally
-        @debug "serve_ws closed"
+        @debug "[serve_ws] closed"
         setphase(td, :terminate)
         isdefined(router, :ws_server) && close(router.ws_server)
     end
 end
 
 function serve_zeromq(pd, router, port)
-    @debug "starting serve_zeromq [$(pd.id)]"
+    @debug "[serve_zeromq] starting"
     context = ZMQ.Context()
     router.zmqsocket = Socket(context, ROUTER)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
@@ -1377,6 +1388,7 @@ function serve_zeromq(pd, router, port)
         setphase(pd, :terminate)
         ZMQ.close(router.zmqsocket)
         ZMQ.close(context)
+        @debug "[serve_zeromq] closed"
     end
 end
 
@@ -1784,7 +1796,7 @@ function boot(router)
     return nothing
 end
 
-init_log() = logging(debug=[])
+init_log() = logging()
 
 function init(router)
     init_log()

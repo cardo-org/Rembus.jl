@@ -7,7 +7,6 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 struct RembusLogger <: AbstractLogger
     io::IO
-    groups::Vector{Symbol}
 end
 
 function repl_log()
@@ -22,20 +21,16 @@ function repl_metafmt(level::LogLevel, _module, group, id, file, line)
     return color, prefix, suffix
 end
 
-function logging(; debug=[])
-    groups = []
-    for item in debug
-        isa(item, Module) && push!(CONFIG.debug_modules, item)
-        isa(item, Symbol) && push!(groups, item)
-    end
-
+function logging()
     if CONFIG.log === "stdout"
-        RembusLogger(stdout, groups) |> global_logger
+        rlogger = RembusLogger(stdout)
+        rlogger |> global_logger
     else
-        RembusLogger(open(CONFIG.log, "a+"), groups) |> global_logger
+        rlogger = RembusLogger(open(CONFIG.log, "a+"))
+        rlogger |> global_logger
     end
 
-    return nothing
+    return rlogger
 end
 
 function Logging.min_enabled_level(logger::RembusLogger)
@@ -51,8 +46,10 @@ function Logging.shouldlog(
 )
     if _module === HTTP.Servers
         level >= Logging.Warn
+    elseif CONFIG.debug && (_module === Rembus || _module === Visor)
+        level >= Logging.Debug
     else
-        level >= Logging.Info || group in logger.groups || _module in CONFIG.debug_modules
+        level >= Logging.Info
     end
 end
 
