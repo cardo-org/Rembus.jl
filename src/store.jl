@@ -335,7 +335,7 @@ function getmsg(f)
 end
 
 function unpark_file(twin::Twin, fn::AbstractString)
-    @debug "unparking $fn"
+    @debug "[$twin] unparking $fn"
     content = read(fn)
     io = IOBuffer(content)
     try
@@ -343,7 +343,7 @@ function unpark_file(twin::Twin, fn::AbstractString)
         rm(fn)
     catch e
         reset(io)
-        @error "unparking $fn: $e"
+        @error "[$twin] unparking $fn: $e"
         # write back the remaining messages
         open(fn, write=true) do f
             write(f, io)
@@ -361,7 +361,7 @@ function unpark_page(twin::Twin)
         twin.pager.io = nothing
     catch e
         reset(io)
-        @error "unparking page: $e"
+        @error "[$twin] unparking page: $e"
         # write back the remaining messages
         newio = IOBuffer(write=true, read=true)
         write(newio, io)

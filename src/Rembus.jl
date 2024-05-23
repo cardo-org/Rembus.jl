@@ -88,11 +88,9 @@ include("store.jl")
 include("register.jl")
 
 function __init__()
+    setup(CONFIG)
     Visor.setroot(intensity=3)
     atexit(shutdown)
-    ###    if isinteractive()
-    ###        repl_log()
-    ###    end
 end
 
 struct CloseConnection end

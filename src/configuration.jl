@@ -41,7 +41,7 @@ mutable struct Settings
     Settings(rootdir=nothing) = begin
         if rootdir === nothing
             if Sys.iswindows()
-                home = get(ENV, "LOCALAPPDATA", ".")
+                home = get(ENV, "USERPROFILE", ".")
             else
                 home = get(ENV, "HOME", ".")
             end
@@ -100,10 +100,9 @@ function setup(setting)
     setting.page_size = get(cfg, "page_size", setting.page_size)
 
     if haskey(ENV, "REMBUS_DEBUG")
+        setting.debug = false
         if ENV["REMBUS_DEBUG"] == "1"
             setting.debug = true
-        else
-            setting.debug = false
         end
     else
         setting.debug = get(cfg, "debug", false)

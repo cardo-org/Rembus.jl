@@ -1083,7 +1083,7 @@ function caronte(; wait=true, args=Dict())
     end
 
     if haskey(args, "debug") && args["debug"] === true
-        ENV["REMBUS_DEBUG"] = "1"
+        CONFIG.debug = true
     end
 
     if haskey(args, "reset") && args["reset"] === true
