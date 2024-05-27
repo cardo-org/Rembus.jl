@@ -6,7 +6,7 @@ module CarontePlugin
 using Rembus
 
 
-function publish_interceptor(broker, component, msg)
+function publish_interceptor(component, msg)
     @info "[$component]: pub: $msg ($(msg.data))"
 
     try
@@ -17,7 +17,7 @@ function publish_interceptor(broker, component, msg)
         content["location"] = msg.topic
         content["value"] = msg_payload(msg.data)
 
-        republish(broker, component, metric, content)
+        republish(component, metric, content)
     catch e
         @error "publish_interceptor: $e"
     end
