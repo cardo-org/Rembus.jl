@@ -1082,6 +1082,7 @@ function caronte(; wait=true, args=Dict())
         args = command_line()
     end
 
+    setup(CONFIG)
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.debug = true
     end
@@ -1092,7 +1093,6 @@ function caronte(; wait=true, args=Dict())
 
     issecure = get(args, "secure", false)
 
-    setup(CONFIG)
     router = Router()
 
     tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
