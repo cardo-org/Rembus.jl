@@ -430,7 +430,7 @@ end
 
 function holder_expr(shared, cid=nothing)
     ex = :(call(
-        Rembus.name2proc("cid", false, false),
+        Rembus.name2proc("cid", true, true),
         Rembus.SetHolder(aaa),
         timeout=Rembus.request_timeout()
     ))
