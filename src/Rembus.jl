@@ -128,7 +128,7 @@ mutable struct RBConnection <: RBHandle
     client::Component
     receiver::Dict{String,Function}
     subinfo::Dict{String,Bool}
-    out::Dict{UInt128,Condition}
+    out::Dict{UInt128,Threads.Condition}
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
     RBConnection(name::String) = new(
@@ -1192,7 +1192,9 @@ function handle_input(rb, msg)
             # prevent requests timeouts because when jit compiling
             # notify() may be called before wait()
             yield()
-            notify(rb.out[msg.id], msg)
+            lock(rb.out[msg.id]) do
+                notify(rb.out[msg.id], msg)
+            end
             #while notify(rb.out[msg.id], msg) == 0
             #    sleep(0.001)
             #end
@@ -2094,13 +2096,16 @@ function direct(
     return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
 end
 
-function response_timeout(condition::Condition, msg::RembusMsg)
+function response_timeout(condition::Threads.Condition, msg::RembusMsg)
     if hasproperty(msg, :topic)
         descr = "[$(msg.topic)]: request timeout"
     else
         descr = "[$msg]: request timeout"
     end
-    notify(condition, RembusTimeout(descr), error=false)
+
+    lock(condition) do
+        notify(condition, RembusTimeout(descr), error=false)
+    end
 
     return nothing
 end
@@ -2118,13 +2123,16 @@ end
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     mid::UInt128 = msg.id
-    resp_cond = Condition()
+    resp_cond = Threads.Condition()
     rb.out[mid] = resp_cond
     t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
     # @async ensures that wait is always triggered before notify
     put!(rb.msgch, msg)
 
+    lock(resp_cond)
     res = wait(resp_cond)
+    unlock(resp_cond)
+
     close(t)
     delete!(rb.out, mid)
     return res
