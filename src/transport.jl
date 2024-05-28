@@ -27,8 +27,8 @@ function zmq_load(socket::ZMQ.Socket)
     data::Vector{UInt8} = pkt.data
 
     type = header[1]
-    ptype = type & 0x3f
-    flags = type & 0xc0
+    ptype = type & 0x0f
+    flags = type & 0xf0
     if ptype == TYPE_PUB
         if flags == ACK_FLAG
             ackid = bytes2id(header[2])
@@ -65,8 +65,8 @@ The decoding is performed at the component side.
 =#
 function connected_socket_load(packet)
     payload = decode(packet)
-    ptype = payload[1] & 0x3f
-    flags = payload[1] & 0xc0
+    ptype = payload[1] & 0x0f
+    flags = payload[1] & 0xf0
     if ptype == TYPE_PUB
         if flags == ACK_FLAG
             ackid = bytes2id(payload[2])
@@ -85,6 +85,8 @@ function connected_socket_load(packet)
         data = dataframe_if_tagvalue(payload[4])
         #                          id        statuss
         return ResMsg(bytes2id(payload[2]), payload[3], data, flags)
+    elseif ptype == TYPE_ACK
+        return AckMsg(bytes2id(payload[2]))
     end
 end
 
@@ -104,18 +106,25 @@ function broker_parse(pkt)
 
     # the first byte is the packet type
     type = read(io, UInt8)
-    ptype = type & 0x3f
-    flags = type & 0xc0
+    ptype = type & 0x0f
+    flags = type & 0xf0
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         @debug "<<message IDENTITY, cid: $cid)"
         return IdentityMsg(bytes2id(id), cid)
     elseif ptype == TYPE_PUB
-        # do not decode dataframe, just pass through the broker
-        topic = decode_internal(io, Val(TYPE_3))
-        @debug "<<message PUB, topic: $topic"
-        return PubSubMsg(topic, io, flags)
+        if (flags & ACK_FLAG) == ACK_FLAG
+            id = decode_internal(io, Val(TYPE_2))
+            topic = decode_internal(io, Val(TYPE_3))
+            @debug "<<message PUB/ACK, topic: $topic"
+            return PubSubMsg(topic, io, flags, bytes2id(id))
+        else
+            # do not decode dataframe, just pass through the broker
+            topic = decode_internal(io, Val(TYPE_3))
+            @debug "<<message PUB, topic: $topic"
+            return PubSubMsg(topic, io, flags)
+        end
     elseif ptype == TYPE_RPC
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
@@ -324,8 +333,8 @@ function broker_parse(router::Router, pkt::ZMQPacket)
     id = pkt.identity
     type = pkt.header[1]
 
-    ptype = type & 0x3f
-    flags = type & 0xc0
+    ptype = type & 0x0f
+    flags = type & 0xf0
 
     @debug "[zmq parse] from $id recv type $type"
 
@@ -470,7 +479,7 @@ function bytes2zid(buff::Vector{UInt8})
     UInt128(read(IOBuffer(buff[2:end]), UInt32))
 end
 
-function transport_send(socket::ZMQ.Socket, msg::PingMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::PingMsg)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_PING, id2bytes(msg.id), msg.cid]), more=true)
     send(socket, DATA_EMPTY, more=true)
@@ -479,12 +488,12 @@ end
 
 #transport_send(::Twin, ws, msg::IdentityMsg) = transport_send(ws, msg)
 
-function transport_send(ws, msg::IdentityMsg)
+function transport_send(::RBConnection, ws, msg::IdentityMsg)
     pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::IdentityMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::IdentityMsg)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_IDENTITY, id2bytes(msg.id), msg.cid]), more=true)
     send(socket, DATA_EMPTY, more=true)
@@ -539,16 +548,54 @@ function transport_send(
         pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
         broker_transport_write(ws, pkt)
     end
-
 end
 
-function transport_send(ws, msg::PubSubMsg)
+#=
+    client_ack_timeout(tim, twin, msg, msgid)
+
+Resend a PubSub message in case the acknowledge message is not received.
+=#
+function client_ack_timeout(tim, rb, msg, msgid)
+    if haskey(rb.acktimer, msgid)
+        try
+            put!(rb.msgch, msg)
+        catch e
+            @error "[$rb] publish ack timeout: $e"
+        end
+    end
+
+    if haskey(rb.out, msgid)
+        ##lock(rb.out[msgid]) do
+        notify(rb.out[msgid])
+        ##end
+    end
+end
+
+function transport_send(rb::RBConnection, ws, msg::PubSubMsg)
     content = tagvalue_if_dataframe(msg.data)
-    pkt = [TYPE_PUB | msg.flags, msg.topic, message2data(content)]
-    transport_write(ws, pkt)
+    if (msg.flags & ACK_FLAG) == ACK_FLAG
+        msgid = id()
+        ##ack_cond = Threads.Condition()
+        ack_cond = Condition()
+        rb.out[msgid] = ack_cond
+        rb.acktimer[msgid] = Timer((tim) -> client_ack_timeout(
+                tim, rb, msg, msgid
+            ), ACK_WAIT_TIME)
+        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
+        transport_write(ws, pkt)
+        ##lock(ack_cond) do
+        wait(ack_cond)
+        ##end
+        close(rb.acktimer[msgid])
+        delete!(rb.acktimer, msgid)
+        delete!(rb.out, msgid)
+    else
+        pkt = [TYPE_PUB | msg.flags, msg.topic, content]
+        transport_write(ws, pkt)
+    end
 end
 
-function transport_send(socket::ZMQ.Socket, msg::PubSubMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::PubSubMsg)
     content = tagvalue_if_dataframe(msg.data)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_PUB | msg.flags, msg.topic]), more=true)
@@ -608,7 +655,7 @@ function transport_send(::Twin, ws, msg::RpcReqMsg)
     broker_transport_write(ws, pkt)
 end
 
-function transport_send(ws, msg::RpcReqMsg)
+function transport_send(::RBConnection, ws, msg::RpcReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     if msg.target === nothing
         pkt = [
@@ -641,7 +688,7 @@ function transport_send(twin::Twin, socket::ZMQ.Socket, msg::RpcReqMsg)
     end
 end
 
-function transport_send(socket::ZMQ.Socket, msg::RpcReqMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::RpcReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     send(socket, Message(), more=true)
 
@@ -672,7 +719,7 @@ function transport_send(twin::Twin, socket::ZMQ.Socket, msg::ResMsg, enc=false)
     end
 end
 
-function transport_send(socket::ZMQ.Socket, msg::ResMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::ResMsg)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
     send(socket, encode(msg.data), more=true)
@@ -684,19 +731,19 @@ function transport_send(::Twin, ws, msg::ResMsg, enc=false)
     broker_transport_write(ws, pkt)
 end
 
-function transport_send(ws, msg::ResMsg, ::Bool=false)
+function transport_send(::RBConnection, ws, msg::ResMsg, ::Bool=false)
     content = tagvalue_if_dataframe(msg.data)
     pkt = [TYPE_RESPONSE | msg.flags, id2bytes(msg.id), msg.status, message2data(content)]
     transport_write(ws, pkt)
 end
 
-function transport_send(ws, msg::AdminReqMsg)
+function transport_send(::RBConnection, ws, msg::AdminReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, content]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::AdminReqMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::AdminReqMsg)
     #    if isa(msg.data, DataFrame)
     content = tagvalue_if_dataframe(msg.data)
     #    else
@@ -708,78 +755,67 @@ function transport_send(socket::ZMQ.Socket, msg::AdminReqMsg)
     send(socket, MESSAGE_END, more=false)
 end
 
-# TODO: Required for broker to publisher acknowldge
-#transport_send(::Twin, ws, msg::AckMsg) = transport_send(ws, msg::AckMsg)
+function transport_send(::Twin, ws, msg::AckMsg)
+    pkt = [TYPE_ACK, id2bytes(msg.id)]
+    broker_transport_write(ws, pkt)
+end
 
-function transport_send(ws, msg::AckMsg)
-    pkt = [TYPE_ACK, id2bytes(msg.hash)]
+function transport_send(::RBConnection, ws, msg::AckMsg)
+    pkt = [TYPE_ACK, id2bytes(msg.id)]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::AckMsg)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::AckMsg)
     send(socket, Message(), more=true)
-    send(socket, encode([TYPE_ACK, id2bytes(msg.hash)]), more=true)
+    send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
     send(socket, DATA_EMPTY, more=true)
     send(socket, MESSAGE_END, more=false)
 end
 
 #transport_send(::Twin, ws, msg::Attestation) = transport_send(ws, msg::Attestation)
 
-function transport_send(ws, msg::Attestation)
+function transport_send(::RBConnection, ws, msg::Attestation)
     pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::Attestation)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::Attestation)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_ATTESTATION, id2bytes(msg.id), msg.cid]), more=true)
     send(socket, msg.signature, more=true)
     send(socket, MESSAGE_END, more=false)
 end
 
-#transport_send(::Twin, ws, msg::Register) = transport_send(ws, msg::Register)
-
-function transport_send(ws, msg::Register)
+function transport_send(::RBConnection, ws, msg::Register)
     pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid, msg.pubkey]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::Register)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::Register)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid]), more=true)
     send(socket, msg.pubkey, more=true)
     send(socket, MESSAGE_END, more=false)
 end
 
-#transport_send(::Twin, ws, msg::Unregister) = transport_send(ws, msg::Unregister)
-
-function transport_send(ws, msg::Unregister)
+function transport_send(::RBConnection, ws, msg::Unregister)
     pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
     transport_write(ws, pkt)
 end
 
-function transport_send(socket::ZMQ.Socket, msg::Unregister)
+function transport_send(::RBConnection, socket::ZMQ.Socket, msg::Unregister)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
     send(socket, DATA_EMPTY, more=true)
     send(socket, MESSAGE_END, more=false)
 end
 
-function transport_send(socket::ZMQ.Socket, ::Close)
+function transport_send(::RBConnection, socket::ZMQ.Socket, ::Close)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_CLOSE]), more=true)
     send(socket, DATA_EMPTY, more=true)
     send(socket, MESSAGE_END, more=false)
 end
-
-#=
-function transport_send(socket::ZMQ.Socket, ::Remove)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_REMOVE]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
-end
-=#
 
 function tagvalue_if_dataframe(data)
     if isa(data, Vector)

@@ -9,8 +9,8 @@ function send_wrong_packet()
 
     send(socket, identity, more=true)
     send(socket, Message(), more=true)
-    # send a wrong message id 50
-    send(socket, encode([50, "topic"]), more=true)
+    # send a wrong message id 0x17
+    send(socket, encode([0x17, "topic"]), more=true)
     send(socket, "data", more=true)
     send(socket, Rembus.MESSAGE_END, more=false)
 end

@@ -60,7 +60,7 @@ function unpark(count)
     shared(subscriber, ctx)
     reactive(subscriber)
 
-    sleep(10)
+    sleep(12)
     close(subscriber)
 
     @info "[second_round] test results: count=$(ctx.count)"

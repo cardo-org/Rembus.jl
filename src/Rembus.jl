@@ -74,6 +74,101 @@ export RembusTimeout
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
 
+struct Component
+    id::String
+    protocol::Symbol
+    host::String
+    port::UInt16
+    props::Dict{String,String}
+
+    function Component(url::String)
+        baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
+        baseuri = URI(baseurl)
+        uri = URI(url)
+        props = queryparams(uri)
+
+        host = uri.host
+        if host == ""
+            host = baseuri.host
+        end
+
+        portstr = uri.port
+        if portstr == ""
+            portstr = baseuri.port
+        end
+
+        port = parse(UInt16, portstr)
+
+        proto = uri.scheme
+        if proto == ""
+            name = uri.path
+            protocol = Symbol(baseuri.scheme)
+        elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
+            name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
+            protocol = Symbol(proto)
+        else
+            error("wrong url $url: unknown protocol $proto")
+        end
+        if isempty(name)
+            name = "rembus"
+        end
+        return new(name, protocol, host, port, props)
+    end
+end
+
+brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
+
+abstract type RBHandle end
+
+mutable struct RBConnection <: RBHandle
+    shared::Any
+    socket::Any
+    msgch::Channel
+    reactive::Bool
+    client::Component
+    receiver::Dict{String,Function}
+    subinfo::Dict{String,Bool}
+    out::Dict{UInt128,Condition}
+    acktimer::Dict{UInt128,Timer}
+    context::Union{Nothing,ZMQ.Context}
+    RBConnection(name::String) = new(
+        missing,
+        nothing,
+        Channel(MESSAGE_CHANNEL_SZ),
+        false,
+        Component(name),
+        Dict(),
+        Dict(),
+        Dict(),
+        Dict(),
+        nothing
+    )
+    RBConnection(client=getcomponent()) = new(
+        missing,
+        nothing,
+        Channel(MESSAGE_CHANNEL_SZ),
+        false,
+        client,
+        Dict(),
+        Dict(),
+        Dict(),
+        Dict(),
+        nothing
+    )
+end
+
+Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
+
+function Base.show(io::IO, rb::RBConnection)
+    return print(io, "client [$(rb.client.id)], isconnected: $(isconnected(rb))")
+end
+
+mutable struct RBPool <: RBHandle
+    last_invoked::Dict{String,Int} # topic => index of last used connection
+    connections::Vector{RBConnection}
+    RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
+end
+
 include("constants.jl")
 include("configuration.jl")
 include("logger.jl")
@@ -240,104 +335,12 @@ function rembuserror(raise::Bool=true; code, cid=nothing, topic=nothing, reason=
     end
 end
 
-struct Component
-    id::String
-    protocol::Symbol
-    host::String
-    port::UInt16
-    props::Dict{String,String}
-
-    function Component(url::String)
-        baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
-        baseuri = URI(baseurl)
-        uri = URI(url)
-        props = queryparams(uri)
-
-        host = uri.host
-        if host == ""
-            host = baseuri.host
-        end
-
-        portstr = uri.port
-        if portstr == ""
-            portstr = baseuri.port
-        end
-
-        port = parse(UInt16, portstr)
-
-        proto = uri.scheme
-        if proto == ""
-            name = uri.path
-            protocol = Symbol(baseuri.scheme)
-        elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
-            name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
-            protocol = Symbol(proto)
-        else
-            error("wrong url $url: unknown protocol $proto")
-        end
-        if isempty(name)
-            name = "rembus"
-        end
-        return new(name, protocol, host, port, props)
-    end
-end
-
-brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
-
 struct CastCall
     topic::String
     data::Any
 end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
-
-abstract type RBHandle end
-
-mutable struct RBConnection <: RBHandle
-    shared::Any
-    socket::Any
-    msgch::Channel
-    reactive::Bool
-    client::Component
-    receiver::Dict{String,Function}
-    subinfo::Dict{String,Bool}
-    out::Dict{UInt128,Condition}
-    context::Union{Nothing,ZMQ.Context}
-    RBConnection(name::String) = new(
-        missing,
-        nothing,
-        Channel(MESSAGE_CHANNEL_SZ),
-        false,
-        Component(name),
-        Dict(),
-        Dict(),
-        Dict(),
-        nothing
-    )
-    RBConnection(client=getcomponent()) = new(
-        missing,
-        nothing,
-        Channel(MESSAGE_CHANNEL_SZ),
-        false,
-        client,
-        Dict(),
-        Dict(),
-        Dict(),
-        nothing
-    )
-end
-
-Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
-
-function Base.show(io::IO, rb::RBConnection)
-    return print(io, "client [$(rb.client.id)], isconnected: $(isconnected(rb))")
-end
-
-mutable struct RBPool <: RBHandle
-    last_invoked::Dict{String,Int} # topic => index of last used connection
-    connections::Vector{RBConnection}
-    RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
-end
 
 rembus_dir() = joinpath(CONFIG.home, ".config", "rembus")
 
@@ -1217,8 +1220,8 @@ function handle_input(rb, msg)
             put!(rb.msgch, response)
         elseif isa(msg, PubSubMsg) && (msg.flags & ACK_FLAG) == ACK_FLAG
             # check if ack is enabled
-            # @debug "$msg sending Ack with hash=$(msg.hash)"
-            put!(rb.msgch, AckMsg(msg.hash))
+            # @debug "$msg sending Ack with hash=$(msg.id)"
+            put!(rb.msgch, AckMsg(msg.id))
         end
     end
 
@@ -1295,26 +1298,28 @@ end
 
 function write_task(rb::RBConnection)
 
-    for msg in rb.msgch
-        if isa(msg, CloseConnection)
-            try
+    try
+        for msg in rb.msgch
+            if isa(msg, CloseConnection)
                 if rb.socket !== nothing
                     if isa(rb.socket, ZMQ.Socket)
-                        transport_send(rb.socket, Close())
+                        transport_send(rb, rb.socket, Close())
                         close(rb.context)
                     else
                         close(rb.socket)
                     end
                 end
-            catch e
-                @warn "[$(rb.client.id)] close: $e"
-            finally
-                rb.socket = nothing
+
+                break
+            else
+                rembus_write(rb, msg)
             end
-            close(rb.msgch)
-        else
-            rembus_write(rb, msg)
         end
+    catch e
+        @error "write_task: $e"
+    finally
+        rb.socket = nothing
+        close(rb.msgch)
     end
     @debug "[$(rb.client.id)] write_task done"
 end
@@ -1539,7 +1544,7 @@ end
 
 function rembus_write(rb::RBHandle, msg)
     @debug ">> [$(rb.client.id)] -> $msg"
-    transport_send(rb.socket, msg)
+    transport_send(rb, rb.socket, msg)
     return nothing
 end
 
@@ -2028,6 +2033,12 @@ function publish(rb::RBHandle, topic::AbstractString, data=[])
     put!(rb.msgch, PubSubMsg(topic, data))
     return nothing
 end
+
+function publish_ack(rb::RBHandle, topic::AbstractString, data=[])
+    put!(rb.msgch, PubSubMsg(topic, data, ACK_FLAG))
+    return nothing
+end
+
 
 """
     rpc(rb::RBHandle,

@@ -96,7 +96,7 @@ const STS_SHUTDOWN::UInt8 = 100
 # Rembus timeout
 const STS_TIMEOUT::UInt8 = 70
 
-const ACK_FLAG = 0x80
+const ACK_FLAG = 0x10
 
 const TYPE_0 = zero(UInt8)
 const TYPE_1 = one(UInt8) << 5

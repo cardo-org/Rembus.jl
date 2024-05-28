@@ -29,7 +29,7 @@ msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", zeros(UInt8, 11)),
 @test_throws ErrorException Rembus.transport_send(twin, nothing, msg)
 
 # encode a wrong Rembus message type value
-@test_throws ErrorException Rembus.broker_parse(encode([50, "topic"]))
+@test_throws ErrorException Rembus.broker_parse(encode([0x17, "topic"]))
 
 # park an anonymous twin does nothing
 Rembus.park(nothing, twin, rembusMessage)

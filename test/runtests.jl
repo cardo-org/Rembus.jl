@@ -75,6 +75,9 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         @time @safetestset "zmq_ack" begin
             include("ack/test_zmq_ack.jl")
         end
+        @time @safetestset "publish_side" begin
+            include("ack/test_publish_side.jl")
+        end
     end
     if GROUP == "all" || GROUP == "connect"
         @time @safetestset "tls_connect" begin

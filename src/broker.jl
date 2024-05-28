@@ -561,8 +561,8 @@ end
 Publish data on topic. Used by broker plugin module to republish messages
 after transforming them.
 =#
-function republish(twin, topic, data, flags=UInt8(0))
-    new_msg = PubSubMsg(topic, data, flags)
+function republish(twin, topic, data)
+    new_msg = PubSubMsg(topic, data)
     put!(twin.router.process.inbox, Msg(TYPE_PUB, new_msg, twin))
 end
 
@@ -570,6 +570,10 @@ function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
     else
+        if (msg.flags & ACK_FLAG) == ACK_FLAG
+            # reply with an ack message
+            put!(twin.process.inbox, Msg(TYPE_ACK, AckMsg(msg.id), twin))
+        end
         # msg is routable, get it to router
         pass = true
         if router.pub_handler !== nothing
@@ -580,13 +584,12 @@ function pubsub_msg(router, twin, msg)
             put!(router.process.inbox, Msg(TYPE_PUB, msg, twin))
         end
     end
-
     return nothing
 end
 
 function ack_msg(twin, msg)
     if twin.qos === with_ack
-        msgid = msg.hash
+        msgid = msg.id
         if haskey(twin.acktimer, msgid)
             close(twin.acktimer[msgid])
             delete!(twin.acktimer, msgid)

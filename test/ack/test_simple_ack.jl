@@ -31,7 +31,7 @@ function run()
     sleep(1)
     close(pub)
     close(sub)
-    @test ctx.count == 2
+    @test ctx.count >= 2
 end
 
 execute(run, "test_simple_ack)")

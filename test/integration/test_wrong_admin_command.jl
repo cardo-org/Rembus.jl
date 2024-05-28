@@ -6,7 +6,7 @@ function run()
     rb = connect()
     msg = Rembus.AdminReqMsg(Rembus.BROKER_CONFIG, Dict("nocmd" => nothing))
     @info "sending"
-    Rembus.transport_send(rb.socket, msg)
+    Rembus.transport_send(rb, rb.socket, msg)
     @info "done"
     sleep(0.1)
     close(rb)

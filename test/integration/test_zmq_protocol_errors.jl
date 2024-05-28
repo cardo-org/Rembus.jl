@@ -12,14 +12,14 @@ struct PartialMsg <: Rembus.RembusMsg
     PartialMsg() = new(Rembus.id())
 end
 
-function Rembus.transport_send(socket::ZMQ.Socket, msg::InvalidMsg)
+function Rembus.transport_send(::Rembus.RBConnection, socket::ZMQ.Socket, msg::InvalidMsg)
     send(socket, Message(), more=true)
     send(socket, encode([63]), more=true)
     send(socket, "aaaa", more=true)
     send(socket, Rembus.MESSAGE_END, more=false)
 end
 
-function Rembus.transport_send(socket::ZMQ.Socket, msg::PartialMsg)
+function Rembus.transport_send(::Rembus.RBConnection, socket::ZMQ.Socket, msg::PartialMsg)
     send(socket, Message(), more=true)
     send(socket, encode([Rembus.TYPE_PUB, "mytopic"]), more=true)
     send(socket, encode("my_value"), more=false)

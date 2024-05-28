@@ -20,10 +20,10 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     topic::String
     data::T
     flags::UInt8
-    hash::UInt128
+    id::UInt128
 
-    function PubSubMsg(topic, data=nothing, flags=0x0, hash=0)
-        return new{typeof(data)}(topic, data, flags, hash)
+    function PubSubMsg(topic, data=nothing, flags=0x0, id=0)
+        return new{typeof(data)}(topic, data, flags, id)
     end
 end
 
@@ -69,7 +69,7 @@ struct AdminReqMsg{T} <: RembusTopicMsg
 end
 
 struct AckMsg <: RembusMsg
-    hash::UInt128
+    id::UInt128
 end
 
 struct ResMsg{T} <: RembusMsg
@@ -139,3 +139,4 @@ id() = uuid4().value  # unique message identifier
 
 isresponse(msg::RembusMsg) = false
 isresponse(msg::ResMsg) = true
+isresponse(msg::AckMsg) = true
