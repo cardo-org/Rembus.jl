@@ -66,7 +66,7 @@ function run()
     identity = router.twin2address["cut"]
 
     # just logs an error
-    #wrong_message_type(identity, socket)
+    wrong_message_type(identity, socket)
     no_empty_message(identity, socket)
     #ok_message(identity, socket)
     no_msgend(identity, socket)

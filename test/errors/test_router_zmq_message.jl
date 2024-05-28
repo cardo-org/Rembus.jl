@@ -1,6 +1,16 @@
 include("../utils.jl")
 using ZMQ
 
+function wrong_message_type(socket)
+    identity = zeros(UInt8, 5)
+    send(socket, identity, more=true)
+    send(socket, Message(), more=true)
+    # send a wrong message id 0x17
+    send(socket, encode([0x17, "topic"]), more=true)
+    send(socket, "data", more=true)
+    send(socket, Rembus.MESSAGE_END, more=false)
+end
+
 function wrong_identity(socket)
     wrong_identity = zeros(UInt8, 4)
 
@@ -112,6 +122,7 @@ function run()
     context = ZMQ.Context()
     socket = ZMQ.Socket(context, DEALER)
     ZMQ.connect(socket, "tcp://127.0.0.1:8002")
+    wrong_message_type(socket)
     wrong_identity(socket)
     no_empty_message(socket)
     ok_message(socket)

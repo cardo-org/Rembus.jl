@@ -556,12 +556,8 @@ end
 Resend a PubSub message in case the acknowledge message is not received.
 =#
 function client_ack_timeout(tim, rb, msg, msgid)
-    if haskey(rb.acktimer, msgid)
-        try
-            put!(rb.msgch, msg)
-        catch e
-            @error "[$rb] publish ack timeout: $e"
-        end
+    if haskey(rb.acktimer, msgid) & isopen(rb.msgch)
+        put!(rb.msgch, msg)
     end
 
     if haskey(rb.out, msgid)
