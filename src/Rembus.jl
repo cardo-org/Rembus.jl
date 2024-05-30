@@ -2199,7 +2199,7 @@ end
 """
 function forever(rb::RBHandle)
     reactive(rb)
-    supervise([process(waiter)])
+    supervise([process(waiter)], wait=!isinteractive())
 end
 
 """
