@@ -560,11 +560,25 @@ end
 #=
 Publish data on topic. Used by broker plugin module to republish messages
 after transforming them.
+
+The routing is performed by the broker
 =#
 function republish(twin, topic, data)
     new_msg = PubSubMsg(topic, data)
     put!(twin.router.process.inbox, Msg(TYPE_PUB, new_msg, twin))
 end
+
+#=
+Publish data on topic. Used by broker plugin module to republish messages
+after transforming them.
+
+The message is delivered by the twin.
+=#
+function publish(twin, topic, data)
+    new_msg = PubSubMsg(topic, data)
+    put!(twin.process.inbox, Msg(TYPE_PUB, new_msg, twin))
+end
+
 
 function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
@@ -577,7 +591,7 @@ function pubsub_msg(router, twin, msg)
         # msg is routable, get it to router
         pass = true
         if router.pub_handler !== nothing
-            pass = router.pub_handler(twin, msg)
+            pass = router.pub_handler(CONFIG.broker_ctx, twin, msg)
         end
         if pass
             @debug "[$twin] to router: $(prettystr(msg))"

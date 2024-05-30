@@ -1,12 +1,18 @@
 using Rembus
 using Test
 
-module CarontePlugin
+mutable struct PluginCtx
+    subscriber::Union{Nothing,Rembus.Twin}
+end
 
+module CarontePlugin
 using Rembus
 
+function subscribe_handler(ctx, broker, component, msg)
+    ctx.subscriber = component
+end
 
-function publish_interceptor(component, msg)
+function publish_interceptor(ctx, component, msg)
     @info "[$component]: pub: $msg ($(msg.data))"
 
     try
@@ -17,7 +23,12 @@ function publish_interceptor(component, msg)
         content["location"] = msg.topic
         content["value"] = msg_payload(msg.data)
 
+        # publish using the internal routes
         republish(component, metric, content)
+
+        # publish directly
+        publish(ctx.subscriber, "direct_message", 999)
+
     catch e
         @error "publish_interceptor: $e"
     end
@@ -37,17 +48,26 @@ function temperature(ctx, data)
     ctx.received[data["location"]] = data["value"]
 end
 
+function direct_message(ctx, x)
+    ctx.received["direct"] = x
+end
+
 function run()
     ctx = Ctx()
 
     Rembus.set_broker_plugin(CarontePlugin)
+    Rembus.set_broker_context(PluginCtx(nothing))
+
     caronte(wait=false)
+    sleep(10)
 
     pub = connect()
     sub = connect()
     shared(sub, ctx)
     subscribe(sub, temperature)
+
     reactive(sub)
+
 
     publish(pub, "town/house/kitchen/temperature", 20.2)
     publish(pub, "town/house/garden/temperature", 25.2)
@@ -59,6 +79,8 @@ function run()
     @test length(ctx.received) == 2
     @test ctx.received["town/house/kitchen/temperature"] == 20.2
     @test ctx.received["town/house/garden/temperature"] == 25.2
+
+    @info "direct: $(ctx.received["direct"])"
     shutdown()
 end
 
