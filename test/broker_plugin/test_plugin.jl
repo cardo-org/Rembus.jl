@@ -36,7 +36,7 @@ export login
 
 export myfunction
 
-function myfunction(twin)
+function myfunction(ctx, twin)
     @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
     return "hello from caronte plugin"
 end
@@ -102,7 +102,7 @@ function run(ok_cid, ko_cid)
     ctx = Dict()
 
     Rembus.set_broker_plugin(CarontePlugin)
-    Rembus.set_broker_context(ctx)
+    Rembus.set_context(ctx)
 
     Rembus.setup(Rembus.CONFIG)
 

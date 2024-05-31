@@ -107,6 +107,52 @@ end
 
 @subscribe announcement
 
-forever()
+@forever
+
+```
+
+## data_hierarchy.jl
+
+This example shows how to extends the broker with custom logic.
+
+The broker plugin implements pub/sub message routing using the
+a topic expression language on the same lines of [zenoh](https://zenoh.io/docs/manual/abstractions/) design of the key/value spaces.
+
+Start the broker:
+
+```shell
+> j examples/data_hierarchy.jl
+```
+
+Start a component that uses a topic expression to subscribe to a space of topics:
+
+```julia
+using Rembus
+
+consume(topic, value) = @info "$topic = $value"
+
+rb = connect()
+
+subscribe(rb, "a/*/c", consume)
+forever(rb)
+```
+
+Please note that the first argument of the subscribed function `consume` is
+the topic used by the publisher. This is because you are subscribed to a space of topics and the information about the specific topic will otherwise be lost.
+
+Then publish on different topics to see this hierarchical topic subscrition
+in action:
+
+```julia
+using Rembus
+
+rb = connect()
+publish(rb, "a/foo/c", "RECEIVED")
+publish(rb, "a/bar/c", "RECEIVED")
+publish(rb, "a/b/x/c", "NOT RECEIVED")
+publish(rb, "b/b/c", "NOT RECEIVED")
+
+# The sealed topic
+publish(rb, "a/@v1/c", "NOT RECEIVED")
 
 ```

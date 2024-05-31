@@ -36,7 +36,7 @@ mutable struct Settings
     cid::String  # rembus default component cid
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
-    broker_ctx::Any
+    context::Any
     page_size::UInt
     Settings(rootdir=nothing) = begin
         if rootdir === nothing

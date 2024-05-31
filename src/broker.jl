@@ -201,7 +201,7 @@ function create_twin(id, router)
         startup(from("caronte.twins"), spec)
         yield()
         router.id_twin[id] = twin
-        twin_initialize(CONFIG.broker_ctx, twin)
+        twin_initialize(CONFIG.context, twin)
         return twin
     end
 end
@@ -591,7 +591,11 @@ function pubsub_msg(router, twin, msg)
         # msg is routable, get it to router
         pass = true
         if router.pub_handler !== nothing
-            pass = router.pub_handler(CONFIG.broker_ctx, twin, msg)
+            try
+                pass = router.pub_handler(CONFIG.context, twin, msg)
+            catch e
+                @error "publish_interceptor: $e"
+            end
         end
         if pass
             @debug "[$twin] to router: $(prettystr(msg))"
@@ -799,7 +803,7 @@ function zeromq_receiver(router::Router)
 
                         # check if there are cached messages
                         if twin.reactive
-                            unpark(CONFIG.broker_ctx, twin)
+                            unpark(CONFIG.context, twin)
                         end
                     end
                 end
@@ -893,7 +897,7 @@ function twin_task(self, twin)
             elseif isa(msg, EnableReactiveMsg)
                 #@mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.sock, ResMsg(msg.id, STS_SUCCESS, nothing), true)
-                twin.router.unpark(CONFIG.broker_ctx, twin)
+                twin.router.unpark(CONFIG.context, twin)
             else
                 signal!(twin, msg)
             end
@@ -919,7 +923,7 @@ Persist a PubSub message in case the acknowledge message is not received.
 function handle_ack_timeout(tim, twin, msg, msgid)
     if haskey(twin.acktimer, msgid)
         try
-            twin.router.park(CONFIG.broker_ctx, twin, msg)
+            twin.router.park(CONFIG.context, twin, msg)
         catch e
             @error "[$twin] park (ack timeout): $e"
         end
@@ -947,12 +951,12 @@ Register the message into Twin.sent table.
 function signal!(twin, msg)
     @debug "[$twin] message>>: $msg, offline:$(offline(twin)), type:$(msg.ptype)"
     if (offline(twin) || notreactive(twin, msg)) && msg.ptype === TYPE_PUB
-        twin.router.park(CONFIG.broker_ctx, twin, msg.content)
+        twin.router.park(CONFIG.context, twin, msg.content)
         return nothing
 
     elseif twin.pager !== nothing && twin.pager.io !== nothing
         # it is online and reactive, send cached messages if any
-        twin.router.unpark(CONFIG.broker_ctx, twin)
+        twin.router.unpark(CONFIG.context, twin)
     end
 
     # current message
@@ -966,10 +970,10 @@ function signal!(twin, msg)
     try
         transport_send(twin, twin.sock, pkt)
     catch e
-        @debug "[$twin] going offline: $e"
+        @error "[$twin] going offline: $e"
         @showerror e
         if msg.ptype === TYPE_PUB
-            twin.router.park(CONFIG.broker_ctx, twin, msg.content)
+            twin.router.park(CONFIG.context, twin, msg.content)
         end
         detach(twin)
     end
@@ -990,7 +994,7 @@ Invoke `callback` function if it is injected via the plugin module otherwise inv
 function callback_or(fn::Function, router::AbstractRouter, callback::Symbol)
     if CONFIG.broker_plugin !== nothing && isdefined(CONFIG.broker_plugin, callback)
         cb = getfield(CONFIG.broker_plugin, callback)
-        cb(CONFIG.broker_ctx, router)
+        cb(CONFIG.context, router)
     else
         fn()
     end
@@ -1017,7 +1021,7 @@ function callback_and(
     try
         if CONFIG.broker_plugin !== nothing && isdefined(CONFIG.broker_plugin, cb)
             cb = getfield(CONFIG.broker_plugin, cb)
-            cb(CONFIG.broker_ctx, router, twin, msg)
+            cb(CONFIG.context, router, twin, msg)
         end
         fn()
     catch e
@@ -1038,7 +1042,7 @@ end
 reset_broker_plugin() = CONFIG.broker_plugin = nothing
 
 #=
-    set_broker_context(ctx)
+    set_context(ctx)
 
 Set the object to be passed ad first argument to functions related to twin lifecycle.
 
@@ -1049,8 +1053,8 @@ Actually the functions that use `ctx` are:
 - `park`
 - `unpark`
 =#
-function set_broker_context(ctx)
-    CONFIG.broker_ctx = ctx
+function set_context(ctx)
+    CONFIG.context = ctx
 end
 
 function command_line()
@@ -1674,7 +1678,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             payload = decode(msg.data)
         end
         try
-            result = router.topic_function[msg.topic](twin, getargs(payload)...)
+            result = router.topic_function[msg.topic](CONFIG.context, twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
             @debug "[$(msg.topic)] server error (method too young?): $e"
@@ -1685,6 +1689,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
                 try
                     result = Base.invokelatest(
                         router.topic_function[msg.topic],
+                        CONFIG.context,
                         twin,
                         getargs(payload)...
                     )
@@ -1693,6 +1698,10 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
                     result = "$e"
                 end
             end
+        end
+
+        if sts != STS_SUCCESS
+            @error "[$(msg.topic)]: $result"
         end
 
         return (true, isa(msg, RpcReqMsg) ? ResMsg(msg, sts, result) : nothing)
@@ -1726,8 +1735,8 @@ function broker(self, router)
         init(router)
 
         # example for registering a broker implementor
-        router.topic_function["uptime"] = (session) -> uptime(router)
-        router.topic_function["version"] = (session) -> Rembus.VERSION
+        router.topic_function["uptime"] = (ctx, session) -> uptime(router)
+        router.topic_function["version"] = (ctx, session) -> Rembus.VERSION
 
         for msg in self.inbox
             # process control messages

@@ -722,7 +722,12 @@ function transport_send(::RBConnection, socket::ZMQ.Socket, msg::ResMsg)
 end
 
 function transport_send(::Twin, ws, msg::ResMsg, enc=false)
-    pkt = [TYPE_RESPONSE | msg.flags, id2bytes(msg.id), msg.status, msg.data]
+    pkt = [
+        TYPE_RESPONSE | msg.flags,
+        id2bytes(msg.id),
+        msg.status,
+        tagvalue_if_dataframe(msg.data)
+    ]
     broker_transport_write(ws, pkt)
 end
 

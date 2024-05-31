@@ -2,22 +2,22 @@ include("../utils.jl")
 
 using DataFrames
 
-function df_service(session)
+function df_service(ctx, session)
     DataFrame(x=1:10)
 end
 
-function rpc_service(session, x, y)
+function rpc_service(ctx, session, x, y)
     return x + y
 end
 
-function rpc_fault(session, x::Integer, y::Integer)
+function rpc_fault(ctx, session, x::Integer, y::Integer)
     return x // y
 end
 
 smoke_message = "ola"
 received = false
 
-function signal(session, name)
+function signal(ctx, session, name)
     global received
     @atest name == smoke_message "expected name == $smoke_message"
     received = true

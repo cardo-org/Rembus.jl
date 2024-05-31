@@ -273,7 +273,7 @@ function save_twins(router)
     twin_cfg = Dict{String,Dict{String,Bool}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
-            twin_finalize(CONFIG.broker_ctx, twin)
+            twin_finalize(CONFIG.context, twin)
             delete!(router.id_twin, twin_id)
             twin_cfg[twin_id] = twin.retroactive
         end

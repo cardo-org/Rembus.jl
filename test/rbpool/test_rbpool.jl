@@ -1,11 +1,11 @@
 include("../utils.jl")
 
-function myservice1(session, x)
+function myservice1(ctx, session, x)
     sleep(1)
     x + 1
 end
 
-myservice2(session, x) = x * x
+myservice2(ctx, session, x) = x * x
 
 function start_server(port, fn)
     emb = server()
@@ -59,7 +59,7 @@ function run()
 
     # test connection errors
     cli = connect(["ws://localhost:9998/cmp1", "ws://localhost:9999/cmp2"])
-
+    @info "[test_rbpool] done"
     shutdown()
 end
 
