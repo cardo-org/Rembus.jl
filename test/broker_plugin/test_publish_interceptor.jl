@@ -15,7 +15,6 @@ end
 function publish_interceptor(ctx, component, msg)
     @info "[$component]: pub: $msg ($(msg.data))"
 
-    #try
     subjects = split(msg.topic, "/")
     metric = last(subjects)
 
@@ -34,10 +33,6 @@ function publish_interceptor(ctx, component, msg)
     # publish directly
     publish(ctx.subscriber, "direct_message", 999)
 
-    #catch e
-    #    @error "publish_interceptor: $e"
-    #end
-    # do not broadcast original message
     return false
 end
 
