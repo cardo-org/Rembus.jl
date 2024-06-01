@@ -223,7 +223,7 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
             include("tcp/test_tcp.jl")
         end
     end
-    if GROUP == "all" || GROUP == "broker"
+    if GROUP == "all" || GROUP == "broker_plugin"
         @time @safetestset "broker_plugin" begin
             include("broker_plugin/test_plugin.jl")
         end

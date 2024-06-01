@@ -15,23 +15,28 @@ end
 function publish_interceptor(ctx, component, msg)
     @info "[$component]: pub: $msg ($(msg.data))"
 
-    try
-        subjects = split(msg.topic, "/")
-        metric = last(subjects)
+    #try
+    subjects = split(msg.topic, "/")
+    metric = last(subjects)
 
-        content = Dict()
-        content["location"] = msg.topic
-        content["value"] = msg_payload(msg.data)
-
-        # publish using the internal routes
-        republish(component, metric, content)
-
-        # publish directly
-        publish(ctx.subscriber, "direct_message", 999)
-
-    catch e
-        @error "publish_interceptor: $e"
+    data = msg_payload(msg.data)
+    if isa(data, String)
+        error("expected a number")
     end
+
+    content = Dict()
+    content["location"] = msg.topic
+    content["value"] = data
+
+    # publish using the internal routes
+    republish(component, metric, content)
+
+    # publish directly
+    publish(ctx.subscriber, "direct_message", 999)
+
+    #catch e
+    #    @error "publish_interceptor: $e"
+    #end
     # do not broadcast original message
     return false
 end
@@ -65,6 +70,7 @@ function run()
     sub = connect()
     shared(sub, ctx)
     subscribe(sub, temperature)
+    subscribe(sub, direct_message)
 
     reactive(sub)
 
@@ -72,11 +78,14 @@ function run()
     publish(pub, "town/house/kitchen/temperature", 20.2)
     publish(pub, "town/house/garden/temperature", 25.2)
 
+    # publish_interceptor throws an error
+    publish(pub, "town/house/garden/temperature", "foo")
+
     sleep(1)
     close(pub)
     close(sub)
     @info "ctx: $ctx"
-    @test length(ctx.received) == 2
+    @test length(ctx.received) == 3
     @test ctx.received["town/house/kitchen/temperature"] == 20.2
     @test ctx.received["town/house/garden/temperature"] == 25.2
 
