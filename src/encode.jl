@@ -254,7 +254,7 @@ function encode_partial(data)
 end
 
 function add_payload(io, payload)
-    if isa(payload, IOBuffer)
+    if isa(payload, Base.GenericIOBuffer)
         pos = position(payload)
         write(io, payload)
         seek(payload, pos)

@@ -1788,6 +1788,9 @@ function broker(self, router)
                 @warn "unknow $(typeof(msg)) message $msg "
             end
         end
+    catch e
+        @error "broker: $e"
+        rethrow()
     finally
         for tw in values(router.id_twin)
             ## detach(tw)

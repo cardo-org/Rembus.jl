@@ -348,7 +348,7 @@ broker_dir() = CONFIG.db
 
 keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(), "keystore"))
 
-request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "5"))
+request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "10"))
 
 connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "10"))
 
