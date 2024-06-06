@@ -72,4 +72,4 @@ admin_component = "test_admin"
 
 setup() = set_admin(admin_component)
 execute(() -> run(admin_component), "test_subscribe_glob", setup=setup)
-rm(Rembus.root_dir(), recursive=true)
+rm(Rembus.broker_dir(BROKER_NAME), recursive=true)

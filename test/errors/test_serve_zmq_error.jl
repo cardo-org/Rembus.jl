@@ -1,6 +1,8 @@
 include("../utils.jl")
 using ZMQ
 
+# tests: 1
+
 function close_zmq_router_socket()
     broker = from("caronte.broker")
     router = broker.args[1]

@@ -5,8 +5,8 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-function load_pages(twin_id::AbstractString)
-    tdir = joinpath(twins_dir(), twin_id)
+function load_pages(twin::Twin)
+    tdir = joinpath(twins_dir(twin.router), twin.id)
     pages = []
     if !isdir(tdir)
         mkdir(tdir)
@@ -22,7 +22,7 @@ function Pager(twin::Twin)
         return twin.pager
     end
 
-    pages = load_pages(twin.id)
+    pages = load_pages(twin)
     if isempty(pages)
         return Pager()
     else
@@ -40,8 +40,8 @@ end
 
 Return the owners dataframe
 =#
-function load_owners()
-    fn = joinpath(CONFIG.db, "owners.csv")
+function load_owners(router)
+    fn = joinpath(broker_dir(router), "owners.csv")
     if isfile(fn)
         DataFrame(CSV.File(fn, types=[String, String, String, Bool]))
     else
@@ -55,18 +55,18 @@ end
 
 Save the owners table.
 =#
-function save_owners(owners_df)
-    fn = joinpath(CONFIG.db, "owners.csv")
+function save_owners(router, owners_df)
+    fn = joinpath(broker_dir(router), "owners.csv")
     CSV.write(fn, owners_df)
 end
 
 #=
-    load_token_app()
+    load_token_app(router)
 
 Return the component_owner dataframe
 =#
-function load_token_app()
-    fn = joinpath(CONFIG.db, "component_owner.csv")
+function load_token_app(router)
+    fn = joinpath(broker_dir(router), "component_owner.csv")
     if isfile(fn)
         df = DataFrame(CSV.File(fn, types=Dict(1 => String, 2 => String)))
         return df
@@ -81,27 +81,41 @@ end
 
 Save the component_owner table.
 =#
-function save_token_app(df)
-    fn = joinpath(CONFIG.db, "component_owner.csv")
+function save_token_app(router, df)
+    fn = joinpath(broker_dir(router), "component_owner.csv")
     CSV.write(fn, df)
 end
 
-root_dir() = CONFIG.db
+broker_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id)
+broker_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name)
 
-twins_dir() = joinpath(CONFIG.db, "twins")
+keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(router), "keystore"))
 
-keys_dir() = joinpath(CONFIG.db, "keys")
+twins_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "twins")
+twins_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "twins")
 
-key_file(cid::AbstractString) = joinpath(CONFIG.db, "keys", cid)
+keys_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys")
+keys_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "keys")
 
+function key_file(router::Router, cid::AbstractString)
+    return joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys", cid)
+end
 
-function save_table(router_tbl, filename)
+function key_file(server::Embedded, cid::AbstractString)
+    return joinpath(CONFIG.root_dir, server.process.id, "keys", cid)
+end
+
+function key_file(broker_name::AbstractString, cid::AbstractString)
+    return joinpath(CONFIG.root_dir, broker_name, "keys", cid)
+end
+
+function save_table(router, router_tbl, filename)
     table = Dict()
     for (topic, twins) in router_tbl
         twin_ids = [tw.id for tw in twins if tw.hasname]
         table[topic] = twin_ids
     end
-    fn = joinpath(CONFIG.db, filename)
+    fn = joinpath(broker_dir(router), filename)
     open(fn, "w") do io
         write(io, JSON3.write(table))
     end
@@ -109,12 +123,12 @@ end
 
 function save_impl_table(router)
     @debug "saving impls table"
-    save_table(router.topic_impls, "exposers.json")
+    save_table(router, router.topic_impls, "exposers.json")
 end
 
 function save_topic_auth_table(router)
     @debug "saving topic_auth table"
-    fn = joinpath(CONFIG.db, "topic_auth.json")
+    fn = joinpath(broker_dir(router), "topic_auth.json")
 
     d = Dict()
     for (topic, cids) in router.topic_auth
@@ -128,28 +142,28 @@ end
 
 function save_admins(router)
     @debug "saving admins"
-    fn = joinpath(CONFIG.db, "admins.json")
+    fn = joinpath(broker_dir(router), "admins.json")
     open(fn, "w") do io
         write(io, JSON3.write(router.admins))
     end
 end
 
-function save_pubkey(cid::AbstractString, pubkey)
-    fn = key_file(cid)
+function save_pubkey(router, cid::AbstractString, pubkey)
+    fn = key_file(router, cid)
     open(fn, "w") do io
         write(io, pubkey)
     end
 end
 
-function remove_pubkey(cid::AbstractString)
-    fn = key_file(cid)
+function remove_pubkey(router, cid::AbstractString)
+    fn = key_file(router, cid)
     if isfile(fn)
         rm(fn)
     end
 end
 
-function pubkey_file(cid::AbstractString)
-    fn = key_file(cid)
+function pubkey_file(router, cid::AbstractString)
+    fn = key_file(router, cid)
 
     if isfile(fn)
         return fn
@@ -158,11 +172,11 @@ function pubkey_file(cid::AbstractString)
     end
 end
 
-isregistered(cid::AbstractString) = isfile(key_file(cid))
+isregistered(router, cid::AbstractString) = isfile(key_file(router, cid))
 
 function load_impl_table(router)
     @debug "loading impls table"
-    fn = joinpath(CONFIG.db, "exposers.json")
+    fn = joinpath(broker_dir(router), "exposers.json")
     if isfile(fn)
         content = read(fn, String)
         table = JSON3.read(content, Dict)
@@ -181,7 +195,7 @@ end
 
 function load_topic_auth_table(router)
     @debug "loading topic_auth table"
-    fn = joinpath(CONFIG.db, "topic_auth.json")
+    fn = joinpath(broker_dir(router), "topic_auth.json")
     if isfile(fn)
         content = read(fn, String)
         topics = Dict()
@@ -194,7 +208,7 @@ end
 
 function load_admins(router)
     @debug "loading admins"
-    fn = joinpath(CONFIG.db, "admins.json")
+    fn = joinpath(broker_dir(router), "admins.json")
     if isfile(fn)
         content = read(fn, String)
         router.admins = JSON3.read(content, Set)
@@ -207,7 +221,7 @@ end
 Instantiates twins that subscribed to one or more topics.
 =#
 function load_twins(router)
-    fn = joinpath(CONFIG.db, "subscribers.json")
+    fn = joinpath(broker_dir(router), "subscribers.json")
     if isfile(fn)
         content = read(fn, String)
         twin_topicsdict = JSON3.read(content, Dict)
@@ -278,7 +292,7 @@ function save_twins(router)
             twin_cfg[twin_id] = twin.retroactive
         end
     end
-    fn = joinpath(CONFIG.db, "subscribers.json")
+    fn = joinpath(broker_dir(router), "subscribers.json")
     open(fn, "w") do io
         write(io, JSON3.write(twin_cfg))
     end
@@ -389,7 +403,7 @@ end
 function unpark(ctx::Any, twin::Twin)
     if twin.hasname
         @debug "[$twin]: unparking"
-        files = load_pages(twin.id)
+        files = load_pages(twin)
         for fn in files
             unpark_file(twin, fn)
         end
@@ -423,8 +437,8 @@ function load_configuration(router)
         load_topic_auth_table(router)
         load_admins(router)
 
-        router.owners = load_owners()
-        router.component_owner = load_token_app()
+        router.owners = load_owners(router)
+        router.component_owner = load_token_app(router)
     end
 end
 
@@ -447,7 +461,7 @@ end
 function debug_unpark(ctx::Any, twin::Twin)
     if twin.hasname
         @debug "[$twin]: unparking"
-        files = load_pages(twin.id)
+        files = load_pages(twin)
         for fn in files
             debug_unpark_file(twin, fn)
         end

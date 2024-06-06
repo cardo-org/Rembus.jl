@@ -10,7 +10,12 @@ mutable struct Ctx
 end
 
 function set_subscribers()
-    fn = joinpath(Rembus.broker_dir(), "subscribers.json")
+    bdir = Rembus.broker_dir(BROKER_NAME)
+    if !isdir(bdir)
+        mkpath(bdir)
+    end
+
+    fn = joinpath(bdir, "subscribers.json")
     open(fn, "w") do io
         write(io, JSON3.write(subscribers))
     end

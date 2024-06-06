@@ -11,7 +11,12 @@ function init(cid)
     end
 
     # broker side
-    fn = Rembus.key_file(cid)
+    kdir = Rembus.keys_dir(BROKER_NAME)
+    if !isdir(kdir)
+        mkpath(kdir)
+    end
+
+    fn = Rembus.key_file(BROKER_NAME, cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end
@@ -19,8 +24,9 @@ end
 
 function run_embedded()
     try
+        # set name to BROKER_NAME to get the secret
         rb = server()
-        serve(rb, wait=false)
+        serve(rb, name=BROKER_NAME, wait=false)
 
         connect(cid)
         @test false
@@ -30,11 +36,9 @@ function run_embedded()
     finally
         shutdown()
     end
-
 end
 
 function run()
-
     try
         connect(url)
         @test false
@@ -51,5 +55,4 @@ execute(run, "test_login_failure", setup=setup)
 
 @info "[test_login_embedded_failure] start"
 run_embedded()
-
 remove_keys(cid)

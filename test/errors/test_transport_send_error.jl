@@ -1,5 +1,7 @@
 include("../utils.jl")
 
+# tests: 3
+
 using HTTP
 using Sockets
 

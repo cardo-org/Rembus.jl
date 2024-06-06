@@ -1,6 +1,7 @@
 include("../utils.jl")
 using HTTP
 
+# tests: 6
 
 function run()
 
@@ -15,7 +16,7 @@ function run()
     @test isa(rpc(rb, "version"), String)
 
     @test_throws Rembus.AlreadyConnected connect("freddy")
-
+    sleep(1)
     # if a component is already connected the component downgrade to anonymous
     res = @rpc version()
     @test isa(res, String)

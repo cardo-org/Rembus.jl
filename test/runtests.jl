@@ -5,17 +5,6 @@ using Visor
 
 const GROUP = get(ENV, "GROUP", "all")
 
-if Sys.iswindows()
-    rootdir = joinpath(get(ENV, "LOCALAPPDATA", "."), "caronte_test")
-else
-    rootdir = joinpath(get(ENV, "HOME", "."), "caronte_test")
-end
-
-Rembus.CONFIG = Rembus.Settings(rootdir)
-
-rm(Rembus.CONFIG.db, force=true, recursive=true)
-rm(Rembus.rembus_dir(), force=true, recursive=true)
-
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"
         @time @safetestset "caronte" begin
@@ -225,10 +214,10 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
     end
     if GROUP == "all" || GROUP == "broker_plugin"
         @time @safetestset "error_plugin" begin
-            include("broker_plugin/test_combo.jl")
+            include("broker_plugin/test_error_plugin.jl")
         end
         @time @safetestset "combo" begin
-            include("broker_plugin/test_error_plugin.jl")
+            include("broker_plugin/test_combo.jl")
         end
         @time @safetestset "broker_plugin" begin
             include("broker_plugin/test_plugin.jl")

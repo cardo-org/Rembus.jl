@@ -144,4 +144,4 @@ setup() = set_admin(authorized_component)
 
 execute(() -> run(authorized_component), "test_private_topic", setup=setup)
 
-rm(Rembus.root_dir(), recursive=true)
+rm(Rembus.broker_dir(BROKER_NAME), recursive=true)

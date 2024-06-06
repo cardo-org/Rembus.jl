@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function generate_key(cid)
-    mkpath(Rembus.keys_dir())
+    mkpath(Rembus.keys_dir(BROKER_NAME))
     private_fn = Rembus.pkfile(cid)
 
     if isfile(private_fn)
@@ -15,7 +15,7 @@ end
 
 function setup(cid)
     private_fn = generate_key(cid)
-    open(Rembus.key_file(cid), "w") do f
+    open(Rembus.key_file(BROKER_NAME, cid), "w") do f
         write(f, read(`ssh-keygen -f $private_fn -e -m PEM`))
     end
 
@@ -26,7 +26,7 @@ end
 
 function teardown(cid)
     rm(Rembus.pkfile(cid))
-    rm(Rembus.key_file(cid))
+    rm(Rembus.key_file(BROKER_NAME, cid))
 end
 
 function run(cid)

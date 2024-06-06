@@ -1,5 +1,7 @@
 include("../utils.jl")
 
+# tests: 2
+
 function myservice()
     sleep(5)
     return 1
@@ -31,8 +33,6 @@ function run()
     sleep(1)
     close(rb)
     close(server)
-
-
 end
 
 rembus_timeout = Rembus.request_timeout()

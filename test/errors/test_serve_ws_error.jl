@@ -1,5 +1,6 @@
 include("../utils.jl")
 
+# tests: 1
 
 function run()
     # invalid ssl configuration prevent ws_serve process startup

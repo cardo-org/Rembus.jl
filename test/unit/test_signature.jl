@@ -1,10 +1,13 @@
 using Rembus
 using Test
 
-struct FakeTwin
-    challenge::Vector{UInt8}
-    session::Dict
-    FakeTwin(dare) = new(dare, Dict("challenge" => dare))
+const BROKER_NAME = "caronte_test"
+
+function task(pd, router)
+    router.process = pd
+    for msg in pd.inbox
+        @isshutdown(msg)
+    end
 end
 
 function verify(cid, wrong_challenge=nothing)
@@ -20,7 +23,22 @@ function verify(cid, wrong_challenge=nothing)
     else
         server_challenge = wrong_challenge
     end
-    Rembus.verify_signature(FakeTwin(server_challenge), att)
+
+    router = Rembus.Router()
+    proc = process("router", task, args=(router,))
+
+    twin = Rembus.Twin(router, "twin", Channel())
+    twin.session["challenge"] = server_challenge
+
+    supervise([
+            supervisor(BROKER_NAME, [
+                proc,
+                process(Rembus.twin_task, args=(twin,))
+            ])
+        ], wait=false)
+    yield()
+
+    Rembus.verify_signature(twin, att)
 end
 
 function run()
@@ -28,7 +46,7 @@ function run()
     secret = "pippo"
 
     client_fn = Rembus.pkfile(cid)
-    server_fn = Rembus.key_file(cid)
+    server_fn = Rembus.key_file(BROKER_NAME, cid)
     @info "secret file: $client_fn"
 
     # create client and server files
@@ -56,7 +74,7 @@ function run()
     mv("$(client_fn).tmp", client_fn, force=true)
 
     # create public secret
-    server_fn = Rembus.key_file(cid)
+    server_fn = Rembus.key_file(BROKER_NAME, cid)
     open(server_fn, "w") do f
         write(f, pubkey)
     end
@@ -69,10 +87,11 @@ testname = "test_signature"
 
 try
     @info "[$testname] start"
-    mkpath(Rembus.keys_dir())
+    mkpath(Rembus.keys_dir(BROKER_NAME))
     run()
 catch e
     @error "[$testname] error: $e"
+    showerror(stdout, e, stacktrace())
 finally
-    rm(Rembus.root_dir(), recursive=true)
+    rm(Rembus.broker_dir(BROKER_NAME), recursive=true)
 end

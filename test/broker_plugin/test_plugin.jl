@@ -4,7 +4,7 @@ test_name = "test_plugin"
 
 # set a mismatched shared secret
 function init(ok_cid, ko_cid)
-    mkpath(Rembus.keys_dir())
+    mkpath(Rembus.keys_dir(BROKER_NAME))
     # component side
     for cid in [ok_cid, ko_cid]
         pkfile = Rembus.pkfile(cid)
@@ -14,11 +14,11 @@ function init(ok_cid, ko_cid)
     end
 
     # broker side
-    fn = Rembus.key_file(ok_cid)
+    fn = Rembus.key_file(BROKER_NAME, ok_cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end
-    fn = Rembus.key_file(ko_cid)
+    fn = Rembus.key_file(BROKER_NAME, ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end
@@ -103,7 +103,12 @@ function run(ok_cid, ko_cid)
 
     Rembus.setup(Rembus.CONFIG)
 
-    caronte(wait=false, plugin=CarontePlugin, context=ctx)
+    caronte(
+        wait=false,
+        plugin=CarontePlugin,
+        context=ctx,
+        args=Dict("broker" => BROKER_NAME)
+    )
     sleep(2)
 
     rb = tryconnect(ok_cid)
@@ -114,7 +119,7 @@ function run(ok_cid, ko_cid)
     response = rpc(rb, "myfunction")
     @test response == "hello from caronte plugin"
 
-    okcid = from("caronte.twins.ok_cid")
+    okcid = from("$BROKER_NAME.twins.ok_cid")
     twin = okcid.args[1]
     tim = Timer(0)
     msgid = 1
@@ -155,5 +160,5 @@ finally
     remove_keys(ok_cid)
     remove_keys(ko_cid)
     shutdown()
-    rm(Rembus.root_dir(), recursive=true)
+    rm(Rembus.broker_dir(BROKER_NAME), recursive=true)
 end

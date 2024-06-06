@@ -1,6 +1,8 @@
 include("../utils.jl")
 using ZMQ
 
+# tests: 1
+
 function wrong_message_type(identity, socket)
     send(socket, identity, more=true)
     send(socket, Message(), more=true)
@@ -60,7 +62,7 @@ function run()
     rb = Rembus.connect("zmq://:8002/cut")
     sleep(0.2)
 
-    broker = from("caronte.broker")
+    broker = from("$BROKER_NAME.broker")
     router = broker.args[1]
     socket = router.zmqsocket
     identity = router.twin2address["cut"]

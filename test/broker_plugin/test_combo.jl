@@ -35,13 +35,16 @@ end
 
 function run(exposer_url, secure=false)
     # main broker
-    caronte(wait=false, args=Dict("reset" => true, "secure" => secure))
+    caronte(
+        wait=false,
+        args=Dict("broker" => "main_broker", "reset" => true, "secure" => secure)
+    )
     yield()
 
     caronte(
         wait=false,
         plugin=Broker,
-        args=Dict("sv_name" => "edge_broker", "ws" => 9000, "secure" => secure))
+        args=Dict("broker" => "edge_broker", "ws" => 9000, "secure" => secure))
     yield()
 
     proc = from("edge_broker.broker")

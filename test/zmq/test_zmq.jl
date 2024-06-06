@@ -9,12 +9,12 @@ function init(cid)
     end
 
     # broker side
-    kdir = Rembus.keys_dir()
+    kdir = Rembus.keys_dir(BROKER_NAME)
     if !isdir(kdir)
         mkpath(kdir)
     end
 
-    fn = Rembus.key_file(cid)
+    fn = Rembus.key_file(BROKER_NAME, cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end

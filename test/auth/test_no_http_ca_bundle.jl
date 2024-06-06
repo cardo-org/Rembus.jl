@@ -13,12 +13,12 @@ end
 
 function setup(cid)
     private_fn = generate_key(cid)
-    mv("$private_fn.pub", Rembus.key_file(cid), force=true)
+    mv("$private_fn.pub", Rembus.key_file(BROKER_NAME, cid), force=true)
 end
 
 function teardown(cid)
     rm(Rembus.pkfile(cid))
-    rm(Rembus.key_file(cid))
+    rm(Rembus.key_file(BROKER_NAME, cid))
 end
 
 function run(cid)

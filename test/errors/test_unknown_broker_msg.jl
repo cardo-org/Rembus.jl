@@ -1,7 +1,8 @@
 include("../utils.jl")
 
 function run()
-    broker = from("caronte.broker")
+    broker = from("$BROKER_NAME.broker")
+    @test broker !== nothing
     put!(broker.inbox, "invalid message")
 end
 

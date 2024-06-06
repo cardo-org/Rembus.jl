@@ -342,11 +342,7 @@ end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
 
-rembus_dir() = joinpath(CONFIG.home, ".config", "rembus")
-
-broker_dir() = CONFIG.db
-
-keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(), "keystore"))
+rembus_dir() = joinpath(CONFIG.root_dir, "rembus")
 
 request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "10"))
 
@@ -1482,6 +1478,7 @@ function authenticate(rb)
     msg = IdentityMsg(rb.client.id)
     response = response_or_timeout(rb, msg, request_timeout())
     if (response.status == STS_GENERIC_ERROR)
+        close(rb.socket)
         throw(AlreadyConnected(rb.client.id))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)

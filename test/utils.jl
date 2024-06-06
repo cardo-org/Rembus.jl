@@ -5,19 +5,23 @@ using Rembus
 using Visor
 using Test
 
+const BROKER_NAME = "caronte_test"
+
 results = []
 
 macro start_caronte(init, args, reset)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
+        params = $(esc(args))
         if !running
-            $(esc(reset)) && Rembus.caronte_reset()
+            name = get(params, "broker", BROKER_NAME)
+            $(esc(reset)) && Rembus.caronte_reset(name)
             fn = $(esc(init))
             if fn !== nothing
                 fn()
             end
 
-            Rembus.caronte(wait=false, args=$(esc(args)))
+            Rembus.caronte(wait=false, args=params)
         end
     end
 end
@@ -58,7 +62,7 @@ function execute(
     testname;
     reset=true,
     setup=nothing,
-    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
+    args=Dict("broker" => BROKER_NAME, "ws" => 8000, "tcp" => 8001, "zmq" => 8002)
 )
     Rembus.setup(Rembus.CONFIG)
     @start_caronte setup args reset
@@ -68,7 +72,7 @@ function execute(
     try
         fn()
     catch e
-        @error e
+        @error "[$testname] failed: $e"
         #showerror(stdout, e, catch_backtrace())
     finally
         shutdown()
@@ -105,19 +109,19 @@ end
 
 # name become an admin
 function set_admin(name)
-    if !isdir(Rembus.root_dir())
-        mkdir(Rembus.root_dir())
+    if !isdir(Rembus.broker_dir(BROKER_NAME))
+        mkdir(Rembus.broker_dir(BROKER_NAME))
     end
 
     # add admin privilege to client with name equals to test_private
-    fn = joinpath(Rembus.root_dir(), "admins.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "admins.json")
     open(fn, "w") do io
         write(io, JSON3.write(Set([name])))
     end
 end
 
 function remove_keys(cid)
-    for fn in [Rembus.pkfile(cid), Rembus.key_file(cid)]
+    for fn in [Rembus.pkfile(cid), Rembus.key_file(BROKER_NAME, cid)]
         @info "removing $fn"
         rm(fn, force=true)
     end

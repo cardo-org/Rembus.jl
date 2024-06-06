@@ -25,8 +25,7 @@ mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
     balancer::String
-    home::String
-    db::String
+    root_dir::String
     log::String
     debug::Bool
     overwrite_connection::Bool
@@ -38,21 +37,17 @@ mutable struct Settings
     broker_plugin::Union{Nothing,Module}
     context::Any
     page_size::UInt
-    Settings(rootdir=nothing) = begin
-        if rootdir === nothing
-            if Sys.iswindows()
-                home = get(ENV, "USERPROFILE", ".")
-            else
-                home = get(ENV, "HOME", ".")
-            end
+    Settings() = begin
+        if Sys.iswindows()
+            home = get(ENV, "USERPROFILE", ".")
         else
-            home = rootdir
+            home = get(ENV, "HOME", ".")
         end
 
         zmq_ping_interval = 0
         ws_ping_interval = 0
         balancer = "first_up"
-        db = joinpath(home, ".config", "caronte")
+        root_dir = joinpath(home, ".config")
         log = "stdout"
         overwrite_connection = true
         stacktrace = false
@@ -62,7 +57,7 @@ mutable struct Settings
         connection_retry_period = 2.0
         debug = false
         page_size = get(ENV, "REMBUS_PAGE_SIZE", REMBUS_PAGE_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, home, db, log, debug,
+        new(zmq_ping_interval, ws_ping_interval, balancer, root_dir, log, debug,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, nothing, page_size)
     end
@@ -71,7 +66,6 @@ end
 set_balancer(policy::AbstractString) = set_balancer(CONFIG, policy)
 
 function set_balancer(setting, policy)
-    #balancer = get(cfg, "balancer", get(ENV, "BROKER_BALANCER", "first_up"))
     if !(policy in ["first_up", "less_busy", "round_robin"])
         error("wrong balancer, must be one of first_up, less_busy, round_robin")
     end
@@ -89,7 +83,7 @@ function setup(setting)
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "120")))
 
-    setting.db = get(cfg, "db", get(ENV, "BROKER_DIR", setting.db))
+    setting.root_dir = get(cfg, "root_dir", get(ENV, "REMBUS_ROOT_DIR", setting.root_dir))
     setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)

@@ -1,8 +1,10 @@
 include("../utils.jl")
 using ZMQ
 
+# tests: 5
+
 function send_wrong_packet()
-    broker = from("caronte.broker")
+    broker = from("$BROKER_NAME.broker")
     router = broker.args[1]
     socket = router.zmqsocket
     identity = router.twin2address["cut"]

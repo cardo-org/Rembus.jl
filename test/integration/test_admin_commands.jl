@@ -3,7 +3,7 @@ include("../utils.jl")
 using JSON3
 
 function teardown()
-    fn = joinpath(Rembus.CONFIG.db, "admins.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "admins.json")
     open(fn, "w") do io
         write(io, JSON3.write(Set([])))
     end
@@ -13,7 +13,7 @@ function set_topic_auth()
     topic_auth = Dict(
         "topic1" => ["cid1"]
     )
-    fn = joinpath(Rembus.broker_dir(), "topic_auth.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "topic_auth.json")
     open(fn, "w") do io
         write(io, JSON3.write(topic_auth))
     end

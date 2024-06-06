@@ -81,7 +81,7 @@ mutable struct Embedded <: AbstractRouter
     topic_function::Dict{String,Function}
     id_twin::Dict{String,Twin}
     context::Any
-    process::Visor.Process
+    process::Visor.Supervisor
     ws_server::Sockets.TCPServer
     Embedded(context=nothing) = new(Dict(), Dict(), context)
 end
@@ -189,7 +189,8 @@ function create_twin(id, router::Embedded, queue=Queue{PubSubMsg}())
     else
         twin = Twin(router, id, Channel())
         spec = process(id, twin_task, args=(twin,))
-        startup(from("server.twins"), spec)
+        sv = router.process
+        startup(Visor.from_supervisor(sv, "twins"), spec)
         router.id_twin[id] = twin
         return twin
     end
@@ -282,7 +283,7 @@ end
 function verify_signature(twin, msg)
     challenge = pop!(twin.session, "challenge")
     @debug "verify signature, challenge $challenge"
-    file = pubkey_file(msg.cid)
+    file = pubkey_file(twin.router, msg.cid)
 
     try
         ctx = MbedTLS.parse_public_keyfile(file)
@@ -428,15 +429,15 @@ function register(router, twin, msg)
     if token === nothing
         sts = STS_GENERIC_ERROR
         reason = "wrong pin"
-    elseif isregistered(msg.cid)
+    elseif isregistered(router, msg.cid)
         sts = STS_NAME_ALREADY_TAKEN
         reason = "name $(msg.cid) not available for registration"
     else
-        save_pubkey(msg.cid, msg.pubkey)
+        save_pubkey(router, msg.cid, msg.pubkey)
         if !(msg.cid in router.component_owner.component)
             push!(router.component_owner, [msg.userid, msg.cid])
         end
-        save_token_app(router.component_owner)
+        save_token_app(router, router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
@@ -460,9 +461,9 @@ function unregister(router, twin, msg)
         sts = STS_GENERIC_ERROR
         reason = "invalid cid"
     else
-        remove_pubkey(msg.cid)
+        remove_pubkey(router, msg.cid)
         deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
-        save_token_app(router.component_owner)
+        save_token_app(router, router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
@@ -778,7 +779,7 @@ function zeromq_receiver(router::Router)
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
                 # check if cid is registered
-                rembus_login = isfile(key_file(msg.cid))
+                rembus_login = isfile(key_file(router, msg.cid))
                 if rembus_login
                     # authentication mode, send the challenge
                     response = challenge(router, twin, msg)
@@ -794,7 +795,7 @@ function zeromq_receiver(router::Router)
                     # broker restarted
                     # start the authentication flow if cid is registered
                     @debug "lost connection to broker: restarting $(msg.cid)"
-                    rembus_login = isfile(key_file(msg.cid))
+                    rembus_login = isfile(key_file(router, msg.cid))
                     if rembus_login
                         if haskey(twin.session, "challenge")
                             # challenge already sent
@@ -869,7 +870,7 @@ end
 
 close_is_ok(::Nothing, e) = true
 
-page_file(twin) = joinpath(twins_dir(), twin.id, string(twin.pager.ts))
+page_file(twin) = joinpath(twins_dir(twin.router), twin.id, string(twin.pager.ts))
 
 #=
     detach(twin)
@@ -1059,10 +1060,11 @@ function command_line()
     return parse_args(s)
 end
 
-function caronte_reset()
-    rm(twins_dir(), force=true, recursive=true)
-    if isdir(root_dir())
-        foreach(rm, filter(isfile, readdir(root_dir(), join=true)))
+function caronte_reset(broker_name="caronte")
+    rm(twins_dir(broker_name), force=true, recursive=true)
+    bdir = broker_dir(broker_name)
+    if isdir(bdir)
+        foreach(rm, filter(isfile, readdir(bdir, join=true)))
     end
 end
 
@@ -1080,15 +1082,15 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
         args = command_line()
     end
 
-    sv_name = get(args, "sv_name", "caronte")
+    sv_name = get(args, "broker", "caronte")
 
-    setup(CONFIG, sv_name)
+    setup(CONFIG)
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.debug = true
     end
 
     if haskey(args, "reset") && args["reset"] === true
-        Rembus.caronte_reset()
+        Rembus.caronte_reset(sv_name)
     end
 
     issecure = get(args, "secure", false)
@@ -1152,9 +1154,9 @@ Start an embedded server and accept connections.
 """
 function serve(
     server::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
-    ; wait=true, secure=false
+    ; wait=true, name="server", secure=false
 )
-    embedded_sv = from("server")
+    embedded_sv = from(name)
     if embedded_sv === nothing
         # first server process
         setup(CONFIG)
@@ -1170,7 +1172,7 @@ function serve(
             ),
         ]
         sv = supervise(
-            [supervisor("server", tasks, strategy=:one_for_one)],
+            [supervisor(name, tasks, strategy=:one_for_one)],
             intensity=5,
             wait=wait
         )
@@ -1185,6 +1187,7 @@ function serve(
         Visor.add_node(embedded_sv, p)
         Visor.start(p)
     end
+    server.process = from(name)
     return nothing
 end
 
@@ -1243,7 +1246,7 @@ function identity_check(router, twin, msg; paging=true)
         respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "already connected"), twin)
     else
         # check if cid is registered
-        rembus_login = isfile(key_file(msg.cid))
+        rembus_login = isfile(key_file(router, msg.cid))
         if rembus_login
             # authentication mode, send the challenge
             response = challenge(router, twin, msg)
@@ -1300,8 +1303,8 @@ function client_receiver(router::Embedded, ws)
     return nothing
 end
 
-function secure_config()
-    trust_store = keystore_dir()
+function secure_config(router)
+    trust_store = keystore_dir(router)
 
     entropy = MbedTLS.Entropy()
     rng = MbedTLS.CtrDrbg()
@@ -1345,7 +1348,7 @@ function serve_ws(td, router, port, issecure=false)
     sslconfig = nothing
     try
         if issecure
-            sslconfig = secure_config()
+            sslconfig = secure_config(router)
         end
 
         listener(td, port, router, sslconfig)
@@ -1401,7 +1404,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 
         if issecure
             proto = "tls"
-            sslconfig = secure_config()
+            sslconfig = secure_config(router)
         end
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
@@ -1781,16 +1784,17 @@ end
 Setup the router.
 =#
 function boot(router)
-    if !isdir(CONFIG.db)
-        mkpath(CONFIG.db)
+    dir = broker_dir(router)
+    if !isdir(dir)
+        mkpath(dir)
     end
 
-    appdir = keys_dir()
+    appdir = keys_dir(router)
     if !isdir(appdir)
         mkdir(appdir)
     end
 
-    twin_dir = twins_dir()
+    twin_dir = twins_dir(router)
     if !isdir(twin_dir)
         mkdir(twin_dir)
     end
@@ -1804,7 +1808,7 @@ init_log() = logging()
 function init(router)
     init_log()
     boot(router)
-    @debug "broker datadir: $(CONFIG.db)"
+    @debug "broker datadir: $(broker_dir(router))"
 
     if router.plugin !== nothing
         if isdefined(router.plugin, :park) &&

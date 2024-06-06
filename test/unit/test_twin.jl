@@ -13,7 +13,12 @@ router = Rembus.Router()
 proc = process("router", task, args=(router,))
 
 twin = Rembus.Twin(router, "twin", Channel())
-supervise(process(Rembus.twin_task, args=(twin,)), wait=false)
+supervise([
+        supervisor("broker", [
+            proc,
+            process(Rembus.twin_task, args=(twin,))
+        ])
+    ], wait=false)
 
 @test !isauthenticated(twin)
 
@@ -37,11 +42,10 @@ Rembus.park(nothing, twin, rembusMessage)
 twin.id = "mytwin"
 twin.hasname = true
 twin.pager = Rembus.Pager(IOBuffer(; write=true, read=true))
-twin_dir = joinpath(Rembus.CONFIG.db, "twins")
+twin_dir = joinpath(Rembus.broker_dir("broker"), "twins")
 mkpath(joinpath(twin_dir, twin.id))
 
 Rembus.park(nothing, twin, rembusMessage)
-
 yield()
 Rembus.destroy_twin(twin, router)
 

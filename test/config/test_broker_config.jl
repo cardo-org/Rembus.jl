@@ -17,7 +17,7 @@ topic_auth = Dict(
 )
 
 function set_exposers()
-    fn = joinpath(Rembus.broker_dir(), "exposers.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "exposers.json")
     open(fn, "w") do io
         write(io, JSON3.write(exposers))
     end
@@ -25,7 +25,7 @@ function set_exposers()
 end
 
 function set_subscribers()
-    fn = joinpath(Rembus.broker_dir(), "subscribers.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "subscribers.json")
     open(fn, "w") do io
         write(io, JSON3.write(subscribers))
     end
@@ -33,18 +33,18 @@ function set_subscribers()
 end
 
 function set_topic_auth()
-    fn = joinpath(Rembus.broker_dir(), "topic_auth.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "topic_auth.json")
     open(fn, "w") do io
         write(io, JSON3.write(topic_auth))
     end
 end
 
 function setup(admin)
-    root_dir = Rembus.broker_dir()
-    mkpath(Rembus.broker_dir())
+    bdir = Rembus.broker_dir(BROKER_NAME)
+    mkpath(bdir)
 
-    @info "root_dir:$root_dir - ($(pwd())) $(isdir(root_dir))"
-    fn = joinpath(Rembus.broker_dir(), "admins.json")
+    @info "broker_dir:$bdir - ($(pwd())) $(isdir(bdir))"
+    fn = joinpath(bdir, "admins.json")
     @info "setting admin: $fn"
     open(fn, "w") do io
         write(io, JSON3.write(Set([admin])))
@@ -56,7 +56,7 @@ function setup(admin)
 end
 
 function teardown()
-    fn = joinpath(Rembus.broker_dir(), "admins.json")
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "admins.json")
     open(fn, "w") do io
         write(io, JSON3.write(Set([])))
     end

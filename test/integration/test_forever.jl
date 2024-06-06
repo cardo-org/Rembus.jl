@@ -10,7 +10,14 @@ function run()
     Rembus.CONFIG.ws_ping_interval = 1
 
     topic = "mytopic"
-    @test Rembus.islistening(30)
+    @test Rembus.islistening(
+        30,
+        procs=[
+            "$(BROKER_NAME).serve_ws",
+            "$(BROKER_NAME).serve_tcp",
+            "$(BROKER_NAME).serve_zeromq"
+        ]
+    )
 
     Timer(tmr -> shutdown(), 5)
 

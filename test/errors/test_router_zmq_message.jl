@@ -1,6 +1,8 @@
 include("../utils.jl")
 using ZMQ
 
+# tests: 1
+
 function wrong_message_type(socket)
     identity = zeros(UInt8, 5)
     send(socket, identity, more=true)
@@ -136,6 +138,8 @@ function run()
     no_msgend_data_is_not_identity(socket)
     msgend_is_identity(socket)
     empty_cid(socket)
+
+    @test true
 end
 
 execute(run, "test_client_zmq_message")

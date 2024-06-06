@@ -1,5 +1,7 @@
 include("../utils.jl")
 
+# tests: 1
+
 function run()
     try
         connect("myc")
