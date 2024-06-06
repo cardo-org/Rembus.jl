@@ -273,7 +273,7 @@ function save_twins(router)
     twin_cfg = Dict{String,Dict{String,Bool}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
-            twin_finalize(CONFIG.context, twin)
+            twin_finalize(router.context, twin)
             delete!(router.id_twin, twin_id)
             twin_cfg[twin_id] = twin.retroactive
         end
@@ -379,7 +379,7 @@ function send_cached(twin, io)
         retro = get(twin.retroactive, msg.topic, true)
         if retro
             #@mlog("[$(twin.id)] <- $(prettystr(msg))")
-            transport_send(twin, twin.sock, msg)
+            transport_send(twin, twin.socket, msg)
         else
             @debug "[$twin] retroactive=$(retro): skipping msg $msg"
         end

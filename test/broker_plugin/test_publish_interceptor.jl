@@ -55,11 +55,8 @@ end
 function run()
     ctx = Ctx()
 
-    Rembus.set_broker_plugin(CarontePlugin)
-    Rembus.set_context(PluginCtx(nothing))
-
-    caronte(wait=false)
-    sleep(10)
+    caronte(wait=false, plugin=CarontePlugin, context=PluginCtx(nothing))
+    sleep(2)
 
     pub = connect()
     sub = connect()

@@ -500,6 +500,11 @@ function transport_send(::RBConnection, socket::ZMQ.Socket, msg::IdentityMsg)
     send(socket, MESSAGE_END, more=false)
 end
 
+function transport_send(::Twin, ws, msg::IdentityMsg)
+    pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid]
+    transport_write(ws, pkt)
+end
+
 message2data(data) = data
 
 # Return data to be sent via ws or tcp from ZMQ

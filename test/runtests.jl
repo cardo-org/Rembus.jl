@@ -224,6 +224,12 @@ rm(Rembus.rembus_dir(), force=true, recursive=true)
         end
     end
     if GROUP == "all" || GROUP == "broker_plugin"
+        @time @safetestset "error_plugin" begin
+            include("broker_plugin/test_combo.jl")
+        end
+        @time @safetestset "combo" begin
+            include("broker_plugin/test_error_plugin.jl")
+        end
         @time @safetestset "broker_plugin" begin
             include("broker_plugin/test_plugin.jl")
         end

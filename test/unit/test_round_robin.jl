@@ -19,8 +19,8 @@ twin1 = Rembus.Twin(router, "twin1", Channel())
 twin2 = Rembus.Twin(router, "twin2", Channel())
 twin3 = Rembus.Twin(router, "twin3", Channel())
 
-twin1.sock = FakeSocket()
-twin2.sock = FakeSocket()
+twin1.socket = FakeSocket()
+twin2.socket = FakeSocket()
 
 implementors = [twin1, twin2, twin3]
 @debug "implementors: $implementors"
@@ -41,7 +41,7 @@ target = Rembus.round_robin(router, topic, implementors)
 @debug "4. target: $target"
 @test target === twin2
 
-twin3.sock = FakeSocket()
+twin3.socket = FakeSocket()
 target = Rembus.round_robin(router, topic, implementors)
 @debug "5. target: $target"
 @test target === twin3
@@ -65,10 +65,9 @@ target = Rembus.round_robin(router, topic, implementors)
 @debug "9. target: $target"
 @test target === nothing
 
-twin1.sock = nothing
-twin2.sock = nothing
+twin1.socket = nothing
+twin2.socket = nothing
 implementors = [twin1, twin2]
 target = Rembus.round_robin(router, topic, implementors)
 @debug "10. target: $target"
 @test target === nothing
-

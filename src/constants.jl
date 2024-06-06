@@ -48,6 +48,7 @@ const BROKER_CONFIG_CMD = "broker_config"
 const LOAD_CONFIG_CMD = "load_config"
 const SAVE_CONFIG_CMD = "save_config"
 
+const REACTIVE_HANDLER = "reactive_handler"
 const SUBSCRIBE_HANDLER = "subscribe_handler"
 const UNSUBSCRIBE_HANDLER = "unsubscribe_handler"
 const EXPOSE_HANDLER = "expose_handler"

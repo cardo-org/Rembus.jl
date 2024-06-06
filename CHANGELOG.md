@@ -17,3 +17,7 @@
 ## 0.2.1 (21 May, 2024)
 
 - Add publish_interceptor method for extract and transform published messages.
+
+## 0.3.0
+
+- Broker to broker routing (WebSocket only, experimental).

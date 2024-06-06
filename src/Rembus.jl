@@ -2126,13 +2126,10 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     resp_cond = Threads.Condition()
     rb.out[mid] = resp_cond
     t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
-    # @async ensures that wait is always triggered before notify
     put!(rb.msgch, msg)
-
     lock(resp_cond)
     res = wait(resp_cond)
     unlock(resp_cond)
-
     close(t)
     delete!(rb.out, mid)
     return res

@@ -17,7 +17,7 @@ function run()
 end
 
 if Base.Sys.iswindows()
-    @info "Windows platform detected: skipping test-tls_connect"
+    @info "Windows platform detected: skipping test_tls_connect"
 else
     # create keystore
     test_keystore = "/tmp/keystore"

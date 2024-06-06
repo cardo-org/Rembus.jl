@@ -182,12 +182,18 @@ function admin_command(router, twin, msg::AdminReqMsg)
     elseif cmd == UNAUTHORIZE_CMD
         sts = unauthorize(router, twin, msg)
     elseif cmd == REACTIVE_CMD
-        enabled = get(msg.data, STATUS, false)
-        if enabled
-            twin.reactive = true
-            return EnableReactiveMsg(msg.id)
-        else
-            twin.reactive = false
+        outcome = callback_and(Symbol(REACTIVE_HANDLER), router, twin, msg) do
+            enabled = get(msg.data, STATUS, false)
+            if enabled
+                twin.reactive = true
+                return EnableReactiveMsg(msg.id)
+            else
+                twin.reactive = false
+                return nothing
+            end
+        end
+        if outcome !== nothing
+            return outcome
         end
     elseif cmd === ENABLE_ACK_CMD
         twin.qos = with_ack

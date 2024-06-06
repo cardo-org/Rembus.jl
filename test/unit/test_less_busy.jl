@@ -20,8 +20,8 @@ router = Rembus.Router()
 twin1 = Rembus.Twin(router, "twin1", Channel())
 twin2 = Rembus.Twin(router, "twin2", Channel())
 
-twin1.sock = FakeSocket()
-twin2.sock = FakeSocket()
+twin1.socket = FakeSocket()
+twin2.socket = FakeSocket()
 
 implementors = [twin1, twin2]
 
@@ -45,7 +45,7 @@ target = Rembus.less_busy(router, topic, implementors)
 @info "target: $target"
 @test target === twin1
 
-twin1.sock.connected = false
-twin2.sock.connected = false
+twin1.socket.connected = false
+twin2.socket.connected = false
 target = Rembus.less_busy(router, topic, implementors)
 @test target === nothing

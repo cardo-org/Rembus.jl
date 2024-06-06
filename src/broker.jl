@@ -24,7 +24,7 @@ end
 #=
 Twin is the broker-side image of a component.
 
-`sock` is the socket handle when the protocol is tcp/tls or ws/wss.
+`socket` is the socket handle when the protocol is tcp/tls or ws/wss.
 
 For ZMQ sockets one socket is shared between all twins.
 =#
@@ -34,10 +34,10 @@ mutable struct Twin
     session::Dict{String,Any}
     hasname::Bool
     isauth::Bool
-    sock::Any
+    socket::Any
     retroactive::Dict{String,Bool}
-    out::Channel # router inbox
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
+    out::Dict{UInt128,Threads.Condition}
     acktimer::Dict{UInt128,Timer}
     qos::QoS
     pager::Union{Nothing,Pager}
@@ -53,7 +53,7 @@ mutable struct Twin
         false,
         nothing,
         Dict(),
-        out_channel,
+        Dict(),
         Dict(),
         Dict(),
         fast,
@@ -80,9 +80,10 @@ end
 mutable struct Embedded <: AbstractRouter
     topic_function::Dict{String,Function}
     id_twin::Dict{String,Twin}
+    context::Any
     process::Visor.Process
     ws_server::Sockets.TCPServer
-    Embedded() = new(Dict(), Dict())
+    Embedded(context=nothing) = new(Dict(), Dict(), context)
 end
 
 """
@@ -109,13 +110,15 @@ mutable struct Router <: AbstractRouter
     pub_handler::Union{Nothing,Function}
     park::Function
     unpark::Function
+    plugin::Union{Nothing,Module}
+    context::Any
     process::Visor.Process
     server::Sockets.TCPServer
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
     owners::DataFrame
     component_owner::DataFrame
-    Router() = new(
+    Router(plugin=nothing, context=nothing) = new(
         time(),
         Dict(),
         Dict(),
@@ -131,7 +134,9 @@ mutable struct Router <: AbstractRouter
         twin_finalize,
         nothing,
         park,
-        unpark
+        unpark,
+        plugin, # plugin
+        context  # context
     )
 end
 
@@ -174,7 +179,7 @@ twin_initialize(ctx, twin) = (ctx, twin) -> ()
 
 twin_finalize(ctx, twin) = (ctx, twin) -> ()
 
-offline(twin::Twin) = ((twin.sock === nothing) || !isopen(twin.sock))
+offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
 
 session(twin::Twin) = twin.session
 
@@ -198,10 +203,11 @@ function create_twin(id, router)
     else
         twin = Twin(router, id, router.process.inbox)
         spec = process(id, twin_task, args=(twin,))
-        startup(from("caronte.twins"), spec)
+        sv = router.process.supervisor
+        startup(Visor.from_supervisor(sv, "twins"), spec)
         yield()
         router.id_twin[id] = twin
-        twin_initialize(CONFIG.context, twin)
+        twin_initialize(router.context, twin)
         return twin
     end
 end
@@ -213,7 +219,7 @@ Unbind the ZMQ socket from the twin.
 =#
 function offline!(twin)
     @debug "[$twin] closing: going offline"
-    twin.sock = nothing
+    twin.socket = nothing
 
     return nothing
 end
@@ -310,9 +316,9 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
     # get the eventually created twin associate with cid
     namedtwin = create_twin(msg.cid, router)
     # move the opened socket
-    namedtwin.sock = twin.sock
-    if !isa(twin.sock, ZMQ.Socket)
-        twin.sock = nothing
+    namedtwin.socket = twin.socket
+    if !isa(twin.socket, ZMQ.Socket)
+        twin.socket = nothing
     end
 
     #create a pager
@@ -356,12 +362,12 @@ function attestation(router, twin, msg, authenticate=true)
             login(router, twin, msg)
         end
         authtwin = setidentity(router, twin, msg, isauth=authenticate)
-        transport_send(authtwin, authtwin.sock, ResMsg(msg.id, sts, reason))
+        transport_send(authtwin, authtwin.socket, ResMsg(msg.id, sts, reason))
     catch e
         @error "[$(msg.cid)] attestation: $e"
         sts = STS_GENERIC_ERROR
         reason = isa(e, ErrorException) ? e.msg : string(e)
-        transport_send(twin, twin.sock, ResMsg(msg.id, sts, reason))
+        transport_send(twin, twin.socket, ResMsg(msg.id, sts, reason))
     end
 
     if sts !== STS_SUCCESS
@@ -388,7 +394,7 @@ function attestation(router::Embedded, twin, msg)
 
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    transport_send(twin, twin.sock, response)
+    transport_send(twin, twin.socket, response)
     if sts !== STS_SUCCESS
         detach(twin)
     end
@@ -434,7 +440,6 @@ function register(router, twin, msg)
     end
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    #transport_send(twin, twin.sock, response)
     put!(twin.process.inbox, response)
 end
 
@@ -461,11 +466,16 @@ function unregister(router, twin, msg)
     end
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    #transport_send(twin, twin.sock, response)
     put!(twin.process.inbox, response)
 end
 
 function rpc_response(router, twin, msg)
+    if haskey(twin.out, msg.id)
+        lock(twin.out[msg.id]) do
+            notify(twin.out[msg.id], msg)
+        end
+    end
+
     if haskey(twin.sent, msg.id)
         twinput = twin.sent[msg.id].request.twchannel
         reqdata = twin.sent[msg.id].request.content
@@ -592,7 +602,7 @@ function pubsub_msg(router, twin, msg)
         pass = true
         if router.pub_handler !== nothing
             try
-                pass = router.pub_handler(CONFIG.context, twin, msg)
+                pass = router.pub_handler(router.context, twin, msg)
             catch e
                 @error "publish_interceptor: $e"
             end
@@ -621,8 +631,8 @@ function ack_msg(twin, msg)
 end
 
 function receiver_exception(router, twin, e)
-    if isconnectionerror(twin.sock, e)
-        if close_is_ok(twin.sock, e)
+    if isconnectionerror(twin.socket, e)
+        if close_is_ok(twin.socket, e)
             @debug "[$twin] connection closed"
         else
             @error "[$twin] connection closed: $e"
@@ -647,14 +657,14 @@ end
 Receive messages from the client socket.
 =#
 function twin_receiver(router, twin)
-    @debug "client [$(twin.id)] is connected"
+    @debug "client [$twin] is connected"
     try
-        ws = twin.sock
+        ws = twin.socket
         while isopen(ws)
             payload = transport_read(ws)
             if isempty(payload)
-                twin.sock = nothing
-                @debug "component [$(twin.id)]: connection closed"
+                twin.socket = nothing
+                @debug "component [$twin]: connection closed"
                 break
             end
             msg::RembusMsg = broker_parse(payload)
@@ -704,11 +714,11 @@ Receive messages from the client socket.
 function anonymous_twin_receiver(router, twin)
     @debug "anonymous client [$(twin.id)] is connected"
     try
-        ws = twin.sock
+        ws = twin.socket
         while isopen(ws)
             payload = transport_read(ws)
             if isempty(payload)
-                twin.sock = nothing
+                twin.socket = nothing
                 @debug "component [$(twin.id)]: connection closed"
                 break
             end
@@ -759,7 +769,7 @@ function zeromq_receiver(router::Router)
                 @debug "[anonymous] client bound to twin id [$twin]"
                 router.address2twin[id] = twin
                 router.twin2address[twin.id] = id
-                twin.sock = router.zmqsocket
+                twin.socket = router.zmqsocket
             end
 
             msg::RembusMsg = broker_parse(router, pkt)
@@ -798,12 +808,12 @@ function zeromq_receiver(router::Router)
                     end
 
                 else
-                    if twin.sock !== nothing
-                        pong(twin.sock, msg.id, id)
+                    if twin.socket !== nothing
+                        pong(twin.socket, msg.id, id)
 
                         # check if there are cached messages
                         if twin.reactive
-                            unpark(CONFIG.context, twin)
+                            unpark(router.context, twin)
                         end
                     end
                 end
@@ -867,11 +877,11 @@ page_file(twin) = joinpath(twins_dir(), twin.id, string(twin.pager.ts))
 Disconnect the twin from the ws/tcp channel.
 =#
 function detach(twin)
-    if twin.sock !== nothing
-        if !isa(twin.sock, ZMQ.Socket)
-            close(twin.sock)
+    if twin.socket !== nothing
+        if !isa(twin.socket, ZMQ.Socket)
+            close(twin.socket)
         end
-        twin.sock = nothing
+        twin.socket = nothing
     end
 
     return nothing
@@ -893,11 +903,11 @@ function twin_task(self, twin)
                 break
             elseif isa(msg, ResMsg)
                 #@mlog("[$(twin.id)] -> $msg")
-                transport_send(twin, twin.sock, msg, true)
+                transport_send(twin, twin.socket, msg, true)
             elseif isa(msg, EnableReactiveMsg)
                 #@mlog("[$(twin.id)] -> $msg")
-                transport_send(twin, twin.sock, ResMsg(msg.id, STS_SUCCESS, nothing), true)
-                twin.router.unpark(CONFIG.context, twin)
+                transport_send(twin, twin.socket, ResMsg(msg.id, STS_SUCCESS, nothing), true)
+                twin.router.unpark(twin.router.context, twin)
             else
                 signal!(twin, msg)
             end
@@ -907,8 +917,8 @@ function twin_task(self, twin)
         #### rethrow()
     finally
         cleanup(twin, twin.router)
-        if isa(twin.sock, WebSockets.WebSocket)
-            close(twin.sock, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
+        if isa(twin.socket, WebSockets.WebSocket)
+            close(twin.socket, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
         end
     end
     @debug "[$twin] task done"
@@ -923,7 +933,7 @@ Persist a PubSub message in case the acknowledge message is not received.
 function handle_ack_timeout(tim, twin, msg, msgid)
     if haskey(twin.acktimer, msgid)
         try
-            twin.router.park(CONFIG.context, twin, msg)
+            twin.router.park(twin.router.context, twin, msg)
         catch e
             @error "[$twin] park (ack timeout): $e"
         end
@@ -951,12 +961,12 @@ Register the message into Twin.sent table.
 function signal!(twin, msg)
     @debug "[$twin] message>>: $msg, offline:$(offline(twin)), type:$(msg.ptype)"
     if (offline(twin) || notreactive(twin, msg)) && msg.ptype === TYPE_PUB
-        twin.router.park(CONFIG.context, twin, msg.content)
+        twin.router.park(twin.router.context, twin, msg.content)
         return nothing
 
     elseif twin.pager !== nothing && twin.pager.io !== nothing
         # it is online and reactive, send cached messages if any
-        twin.router.unpark(CONFIG.context, twin)
+        twin.router.unpark(twin.router.context, twin)
     end
 
     # current message
@@ -968,12 +978,12 @@ function signal!(twin, msg)
     pkt = msg.content
     #@mlog "[$twin] -> $pkt"
     try
-        transport_send(twin, twin.sock, pkt)
+        transport_send(twin, twin.socket, pkt)
     catch e
         @error "[$twin] going offline: $e"
         @showerror e
         if msg.ptype === TYPE_PUB
-            twin.router.park(CONFIG.context, twin, msg.content)
+            twin.router.park(twin.router.context, twin, msg.content)
         end
         detach(twin)
     end
@@ -981,20 +991,15 @@ function signal!(twin, msg)
     return nothing
 end
 
-### # Return true if Twin is interested to the message.
-### function interested(twin, message::Dict)::Bool
-###     true
-### end
-
 #=
     callback_or(fn::Function, router::AbstractRouter, callback::Symbol)
 
 Invoke `callback` function if it is injected via the plugin module otherwise invoke `fn`.
 =#
 function callback_or(fn::Function, router::AbstractRouter, callback::Symbol)
-    if CONFIG.broker_plugin !== nothing && isdefined(CONFIG.broker_plugin, callback)
-        cb = getfield(CONFIG.broker_plugin, callback)
-        cb(CONFIG.context, router)
+    if router.plugin !== nothing && isdefined(router.plugin, callback)
+        cb = getfield(router.plugin, callback)
+        cb(router.context, router)
     else
         fn()
     end
@@ -1019,42 +1024,14 @@ function callback_and(
     fn::Function, cb::Symbol, router::AbstractRouter, twin::Twin, msg::RembusMsg
 )
     try
-        if CONFIG.broker_plugin !== nothing && isdefined(CONFIG.broker_plugin, cb)
-            cb = getfield(CONFIG.broker_plugin, cb)
-            cb(CONFIG.context, router, twin, msg)
+        if router.plugin !== nothing && isdefined(router.plugin, cb)
+            cb = getfield(router.plugin, cb)
+            cb(router.context, router, twin, msg)
         end
         fn()
     catch e
         @error "$cb callback error: $e"
     end
-end
-
-#=
-    set_broker_plugin(extension::Module)
-
-Inject the module that implements the functions invoked at specific entry points of
-twin state machine.
-=#
-function set_broker_plugin(extension::Module)
-    CONFIG.broker_plugin = extension
-end
-
-reset_broker_plugin() = CONFIG.broker_plugin = nothing
-
-#=
-    set_context(ctx)
-
-Set the object to be passed ad first argument to functions related to twin lifecycle.
-
-Actually the functions that use `ctx` are:
-
-- `twin_initialize`
-- `twin_finalize`
-- `park`
-- `unpark`
-=#
-function set_context(ctx)
-    CONFIG.context = ctx
 end
 
 function command_line()
@@ -1098,12 +1075,14 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 
 Overwrite command line arguments if args is not empty.
 """
-function caronte(; wait=true, args=Dict())
+function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
     if isempty(args)
         args = command_line()
     end
 
-    setup(CONFIG)
+    sv_name = get(args, "sv_name", "caronte")
+
+    setup(CONFIG, sv_name)
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.debug = true
     end
@@ -1114,7 +1093,7 @@ function caronte(; wait=true, args=Dict())
 
     issecure = get(args, "secure", false)
 
-    router = Router()
+    router = Router(plugin, context)
 
     tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
 
@@ -1155,7 +1134,7 @@ function caronte(; wait=true, args=Dict())
     end
 
     sv = supervise(
-        [supervisor("caronte", tasks, strategy=:one_for_all, intensity=1)],
+        [supervisor(sv_name, tasks, strategy=:one_for_all, intensity=1)],
         wait=wait
     )
     return sv
@@ -1239,7 +1218,7 @@ function client_receiver(router::Router, sock)
     @debug "[anonymous] client bound to twin id [$cid]"
 
     # start the trusted client task
-    twin.sock = sock
+    twin.socket = sock
 
     # ws/tcp socket receiver task
     authtwin = anonymous_twin_receiver(router, twin)
@@ -1283,7 +1262,7 @@ function client_receiver(router::Embedded, ws)
     twin = create_twin(cid, router)
     @debug "[server] client bound to twin id [$cid]"
     # start the trusted client task
-    twin.sock = ws
+    twin.socket = ws
     while isopen(ws)
         try
             payload = transport_read(ws)
@@ -1460,7 +1439,7 @@ function islistening(
     return false
 end
 
-isconnected(twin) = twin.sock !== nothing && isopen(twin.sock)
+isconnected(twin) = twin.socket !== nothing && isopen(twin.socket)
 
 function first_up(router, topic, implementors)
     @debug "[$topic] first_up balancer"
@@ -1678,7 +1657,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             payload = decode(msg.data)
         end
         try
-            result = router.topic_function[msg.topic](CONFIG.context, twin, getargs(payload)...)
+            result = router.topic_function[msg.topic](router.context, twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
             @debug "[$(msg.topic)] server error (method too young?): $e"
@@ -1689,7 +1668,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
                 try
                     result = Base.invokelatest(
                         router.topic_function[msg.topic],
-                        CONFIG.context,
+                        router.context,
                         twin,
                         getargs(payload)...
                     )
@@ -1756,10 +1735,9 @@ function broker(self, router)
                         # find an implementor
                         if haskey(router.topic_impls, topic)
                             # request a method exec
-                            @debug "[broker] finding an target implementor for $topic"
                             implementors = router.topic_impls[topic]
                             target = select_twin(router, topic, implementors)
-                            @debug "[broker] target implementor: [$target]"
+                            @debug "[broker] exposer for $topic: [$target]"
                             if target === nothing
                                 msg.content = ResMsg(msg.content, STS_METHOD_UNAVAILABLE)
                                 put!(msg.twchannel.process.inbox, msg)
@@ -1768,32 +1746,28 @@ function broker(self, router)
                                 msg.content = ResMsg(msg.content, STS_METHOD_LOOPBACK)
                                 put!(msg.twchannel.process.inbox, msg)
                             elseif target !== nothing
-                                @debug "implementor target: $(target.id)"
                                 put!(target.process.inbox, msg)
                             end
-
                         else
-                            # method implementor not found
+                            # remote method not found
                             msg.content = ResMsg(msg.content, STS_METHOD_NOT_FOUND)
                             put!(msg.twchannel.process.inbox, msg)
                         end
                     end
                 elseif msg.ptype == TYPE_RESPONSE
-                    # it is a result from an implementor
+                    # it is a result from an exposer
                     # reply toward the client that has made the request
                     respond(router, msg)
                 end
-                # @debug "waiting next msg ..."
             else
-                @warn "unknow $(typeof(msg)) message $msg "
+                @warn "unknown message: $msg"
             end
         end
     catch e
-        @error "broker: $e"
+        @error "[broker] error: $e"
         rethrow()
     finally
         for tw in values(router.id_twin)
-            ## detach(tw)
             save_page(tw)
         end
         save_configuration(router)
@@ -1832,32 +1806,101 @@ function init(router)
     boot(router)
     @debug "broker datadir: $(CONFIG.db)"
 
-    if CONFIG.broker_plugin !== nothing
-        if isdefined(CONFIG.broker_plugin, :park) &&
-           isdefined(CONFIG.broker_plugin, :unpark)
-            router.park = getfield(CONFIG.broker_plugin, :park)
-            router.unpark = getfield(CONFIG.broker_plugin, :unpark)
+    if router.plugin !== nothing
+        if isdefined(router.plugin, :park) &&
+           isdefined(router.plugin, :unpark)
+            router.park = getfield(router.plugin, :park)
+            router.unpark = getfield(router.plugin, :unpark)
         end
 
-        if isdefined(CONFIG.broker_plugin, :twin_initialize)
-            router.twin_initialize = getfield(CONFIG.broker_plugin, :twin_initialize)
+        if isdefined(router.plugin, :twin_initialize)
+            router.twin_initialize = getfield(router.plugin, :twin_initialize)
         end
-        if isdefined(CONFIG.broker_plugin, :twin_finalize)
-            router.twin_finalize = getfield(CONFIG.broker_plugin, :twin_finalize)
+        if isdefined(router.plugin, :twin_finalize)
+            router.twin_finalize = getfield(router.plugin, :twin_finalize)
         end
 
-        topics = names(CONFIG.broker_plugin)
+        topics = names(router.plugin)
         exposed = filter(
             sym -> isa(sym, Function),
-            [getfield(Rembus.CONFIG.broker_plugin, t) for t in topics]
+            [getfield(router.plugin, t) for t in topics]
         )
         for topic in exposed
             router.topic_function[string(topic)] = topic
         end
-        if isdefined(Rembus.CONFIG.broker_plugin, :publish_interceptor)
-            router.pub_handler = getfield(Rembus.CONFIG.broker_plugin, :publish_interceptor)
+        if isdefined(router.plugin, :publish_interceptor)
+            router.pub_handler = getfield(router.plugin, :publish_interceptor)
         end
     end
 
     return nothing
+end
+
+function ws_connect(twin::Twin, broker::Component, isconnected::Condition)
+    try
+        url = brokerurl(broker)
+        uri = URI(url)
+
+        if uri.scheme == "wss"
+
+            if !haskey(ENV, "HTTP_CA_BUNDLE")
+                ENV["HTTP_CA_BUNDLE"] = joinpath(rembus_dir(), "ca", REMBUS_CA)
+            end
+
+            HTTP.WebSockets.open(socket -> begin
+                    twin.socket = socket
+                    notify(isconnected)
+                    twin_receiver(twin.router, twin)
+                end, url)
+        elseif uri.scheme == "ws"
+            HTTP.WebSockets.open(socket -> begin
+                    twin.socket = socket
+                    notify(isconnected)
+                    twin_receiver(twin.router, twin)
+                end, url, idle_timeout=1, forcenew=true)
+        else
+            error("ws endpoint: wrong $(uri.scheme) scheme")
+        end
+    catch e
+        notify(isconnected, e, error=true)
+        @showerror e
+    end
+end
+
+function wait_response(twin::Twin, msg::RembusMsg, timeout)
+    mid::UInt128 = msg.id
+    resp_cond = Threads.Condition()
+    twin.out[mid] = resp_cond
+    t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
+    signal!(twin, Msg(TYPE_RPC, msg, twin))
+    lock(resp_cond)
+    res = wait(resp_cond)
+    unlock(resp_cond)
+    close(t)
+    delete!(twin.out, mid)
+    return res
+end
+
+function broker_twin(router::Router, broker_url::AbstractString)
+    broker = Component(broker_url)
+    twin = create_twin(broker.id, router)
+    twin.hasname = true
+    twin.pager = Pager(twin)
+    isconnected = Condition()
+    t = Timer((tim) -> connect_timeout(twin, isconnected), connect_request_timeout())
+    @async ws_connect(twin, broker, isconnected)
+    wait(isconnected)
+    close(t)
+    msg = IdentityMsg(broker.id)
+    wait_response(twin, msg, request_timeout())
+
+    return twin
+end
+
+#=
+The twin send an admin request to the peer broker.
+=#
+function transport_send(::Twin, ws, msg::AdminReqMsg)
+    pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, msg.data]
+    transport_write(ws, pkt)
 end

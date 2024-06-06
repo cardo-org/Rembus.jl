@@ -29,7 +29,7 @@ end
 
 module CarontePlugin
 
-using Rembus # needed for session()
+using Rembus
 
 export challenge
 export login
@@ -101,24 +101,9 @@ function run(ok_cid, ko_cid)
     # store test related info
     ctx = Dict()
 
-    Rembus.set_broker_plugin(CarontePlugin)
-    Rembus.set_context(ctx)
-
     Rembus.setup(Rembus.CONFIG)
 
-    topics = names(Rembus.CONFIG.broker_plugin)
-
-    #exposed = filter(sym -> sym !== Symbol(Rembus.CONFIG.broker_plugin), topics)
-    exposed = filter(
-        sym -> isa(sym, Function),
-        [getfield(Rembus.CONFIG.broker_plugin, t) for t in topics]
-    )
-
-    #@info "topics =  $topics"
-    #@info "exposed =  $exposed"
-    #@info "isdefined(park) = $(isdefined(Rembus.CONFIG.broker_plugin, :park))"
-
-    caronte(wait=false)
+    caronte(wait=false, plugin=CarontePlugin, context=ctx)
     sleep(2)
 
     rb = tryconnect(ok_cid)
@@ -171,5 +156,4 @@ finally
     remove_keys(ko_cid)
     shutdown()
     rm(Rembus.root_dir(), recursive=true)
-    Rembus.reset_broker_plugin()
 end
