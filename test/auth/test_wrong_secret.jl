@@ -39,7 +39,7 @@ function run(cid)
 end
 
 if Base.Sys.iswindows()
-    @info "Windows platform detected: skipping test-tls_connect"
+    @info "Windows platform detected: skipping test_wrong_secret"
 else
     cid = "mycomponent"
     # create keystore

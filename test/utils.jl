@@ -62,10 +62,11 @@ function execute(
     testname;
     reset=true,
     setup=nothing,
-    args=Dict("broker" => BROKER_NAME, "ws" => 8000, "tcp" => 8001, "zmq" => 8002)
+    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
 )
     Rembus.setup(Rembus.CONFIG)
-    @start_caronte setup args reset
+
+    @start_caronte setup merge(args, Dict("broker" => BROKER_NAME)) reset
     sleep(0.5)
     Rembus.logging()
     @info "[$testname] start"

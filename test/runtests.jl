@@ -259,6 +259,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "serve_zmq_error" begin
             include("errors/test_serve_zmq_error.jl")
         end
+        @time @safetestset "identity_empty_string" begin
+            include("errors/test_identity_empty_string.jl")
+        end
         @time @safetestset "connection_error" begin
             include("errors/test_connection_error.jl")
         end

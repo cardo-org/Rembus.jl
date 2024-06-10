@@ -21,12 +21,6 @@ function run()
     res = @rpc version()
     @test isa(res, String)
     close(rb)
-
-    rb = connect()
-    msg = Rembus.IdentityMsg("")
-    response = Rembus.wait_response(rb, msg, 2)
-    @test response.status == Rembus.STS_GENERIC_ERROR
-
 end
 
 execute(run, "test_connection_error")

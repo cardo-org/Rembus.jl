@@ -3,7 +3,7 @@ include("../utils.jl")
 function run()
     # connect and reconnect
     for i in 1:2
-        @debug "[test_connect]: connecting round $i" _group = :test
+        @debug "[test_connect]: connecting round $i"
         for cid in ["tcp://:8001/aaa", "ws://:8000/bbb", "zmq://:8002/ccc"]
             rb = connect(cid)
             @test isconnected(rb) === true

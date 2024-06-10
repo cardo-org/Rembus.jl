@@ -797,10 +797,8 @@ function zeromq_receiver(router::Router)
                     @debug "lost connection to broker: restarting $(msg.cid)"
                     rembus_login = isfile(key_file(router, msg.cid))
                     if rembus_login
-                        if haskey(twin.session, "challenge")
-                            # challenge already sent
-                            @debug "[$(msg.cid)] challenge already sent"
-                        else
+                        # check if challenge was already sent
+                        if !haskey(twin.session, "challenge")
                             response = challenge(router, twin, msg)
                             transport_send(twin, router.zmqsocket, response)
                         end
@@ -1081,9 +1079,7 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
     if isempty(args)
         args = command_line()
     end
-
     sv_name = get(args, "broker", "caronte")
-
     setup(CONFIG)
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.debug = true
