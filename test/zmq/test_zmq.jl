@@ -30,15 +30,9 @@ function run()
     sleep(2)
 
     # restart caronte
-    Rembus.caronte(wait=false, args=Dict("zmq" => 8002))
+    # trigger a resend_attestate()
+    Rembus.caronte(wait=false, args=Dict("broker"=>BROKER_NAME, "zmq" => 8002))
     sleep(2)
-
-    shutdown()
-    sleep(2)
-    # restart caronte
-    Rembus.caronte(wait=false, args=Dict("zmq" => 8002))
-    sleep(2)
-
 end
 
 ENV["REMBUS_BASE_URL"] = "zmq://localhost:8002"

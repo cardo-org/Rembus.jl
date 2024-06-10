@@ -16,6 +16,12 @@ end
 function run(url)
     cmp = Rembus.Component(url)
 
+    # trigger a request timeout
+    ENV["REMBUS_TIMEOUT"] = 0.0
+    @test_throws RembusTimeout Rembus.register(url, uid, pin)
+    delete!(ENV, "REMBUS_TIMEOUT")
+    remove_keys(cmp.id)
+
     Rembus.register(url, uid, pin)
 
     # private key was created

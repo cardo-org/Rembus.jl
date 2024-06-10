@@ -56,7 +56,7 @@ function register(cid::AbstractString, userid::AbstractString, pin::AbstractStri
         msg = Register(msgid, cmp.id, userid, pubkey)
         response = wait_response(rb, msg, request_timeout())
         if isa(response, RembusTimeout)
-            rembuserror(code=STS_TIMEOUT)
+            throw(response)
         elseif (response.status != STS_SUCCESS)
             rembuserror(code=response.status, reason=response.data)
         end
