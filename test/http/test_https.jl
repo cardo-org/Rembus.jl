@@ -51,63 +51,62 @@ function run()
     x = 1
     y = 2
 
-    #    auth = basic_auth("mycomponent")
-    #    response = HTTP.post(
-    #        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #    @info "[test_http] POST response=$(body(response))"
-    #    @test response.status == 200
-    #    @test body(response) == "ok"
-    #
-    #    # send a password for a component not registered
-    #    auth = basic_auth("mycomponent:mysecret")
-    #    @test_throws HTTP.Exceptions.StatusError HTTP.post(
-    #        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
+    auth = basic_auth("mycomponent")
+    response = HTTP.post(
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+    )
+    @info "[test_http] POST response=$(body(response))"
+    @test response.status == 200
+    @test body(response) == "ok"
+
+    # send a password for a component not registered
+    auth = basic_auth("mycomponent:mysecret")
+    @test_throws HTTP.Exceptions.StatusError HTTP.post(
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+    )
 
     # send the right password
     auth = basic_auth("$authenticated_component:$password")
-    #    response = HTTP.post(
-    #        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #    @test response.status == 200
-    #    @test body(response) == "ok"
-    #
-    #    response = HTTP.get(
-    #        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #    @test response.status == 200
-    #    @test body(response) == Dict("status" => 0, "value" => x + y)
-    #
+    response = HTTP.post(
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+    )
+    @test response.status == 200
+    @test body(response) == "ok"
+
     response = HTTP.get(
         "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
     )
     @test response.status == 200
     @test body(response) == Dict("status" => 0, "value" => x + y)
 
+    response = HTTP.get(
+        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
+    )
+    @test response.status == 200
+    @test body(response) == Dict("status" => 0, "value" => x + y)
 
-    #    # send an unknown service
-    #    response = HTTP.get(
-    #        "https://127.0.0.1:9000/unknown", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #    @test response.status == 200
-    #    @test body(response) == Dict("status" => 42)
-    #
-    #    # send the wrong password
-    #    auth = basic_auth("$authenticated_component:wrong_pwd")
-    #    @test_throws HTTP.Exceptions.StatusError HTTP.post(
-    #        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #
-    #    @test_throws HTTP.Exceptions.StatusError HTTP.get(
-    #        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
-    #
-    #    # send only the component name for a registered component
-    #    auth = basic_auth("$authenticated_component")
-    #    @test_throws HTTP.Exceptions.StatusError HTTP.post(
-    #        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
-    #    )
+    # send an unknown service
+    response = HTTP.get(
+        "https://127.0.0.1:9000/unknown", ["Authorization" => auth], JSON3.write([x, y])
+    )
+    @test response.status == 200
+    @test body(response) == Dict("status" => 42)
+
+    # send the wrong password
+    auth = basic_auth("$authenticated_component:wrong_pwd")
+    @test_throws HTTP.Exceptions.StatusError HTTP.post(
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+    )
+
+    @test_throws HTTP.Exceptions.StatusError HTTP.get(
+        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
+    )
+
+    # send only the component name for a registered component
+    auth = basic_auth("$authenticated_component")
+    @test_throws HTTP.Exceptions.StatusError HTTP.post(
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+    )
 
     @terminate
     remove_keys(authenticated_component)
@@ -131,6 +130,3 @@ else
         rm(test_keystore, recursive=true, force=true)
     end
 end
-
-
-#execute(run, "test_https", args=Dict("secure" => true, "http" => 9000))

@@ -5,7 +5,7 @@ include("../utils.jl")
 function run()
     try
         # invalid ssl configuration prevent ws_serve process startup
-        caronte(wait=false, args=Dict("secure" => true))
+        caronte(wait=false, args=Dict("broker" => BROKER_NAME, "secure" => true))
 
         p = from("$BROKER_NAME.serve_ws")
         while p !== nothing

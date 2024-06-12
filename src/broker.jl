@@ -294,7 +294,6 @@ function verify_signature(twin, msg)
         hash = MbedTLS.digest(MD_SHA256, plain)
         MbedTLS.verify(ctx, MD_SHA256, hash, msg.signature)
     catch e
-        @info "verify signature: $e ($(typeof(e)))"
         if isa(e, MbedTLS.MbedException) &&
            e.ret == MbedTLS.MBEDTLS_ERR_RSA_VERIFY_FAILED
             rethrow()
