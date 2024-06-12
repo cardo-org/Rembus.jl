@@ -29,6 +29,7 @@ for dir in [
     "test/rbpool",
     "test/tcp",
     "test/zmq",
+    "test/http",
 ]
     foreach(rm, filter(endswith(".cov"), readdir(dir, join=true)))
 end

@@ -114,6 +114,7 @@ mutable struct Router <: AbstractRouter
     context::Any
     process::Visor.Process
     server::Sockets.TCPServer
+    http_server::HTTP.Server
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
     owners::DataFrame
@@ -178,6 +179,8 @@ end
 twin_initialize(ctx, twin) = (ctx, twin) -> ()
 
 twin_finalize(ctx, twin) = (ctx, twin) -> ()
+
+Base.isopen(c::Condition) = true
 
 offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
 
@@ -1043,6 +1046,9 @@ function command_line()
         "--secure", "-s"
         help = "accept wss and tls connections"
         action = :store_true
+        "--http", "-p"
+        help = "accept HTTP clients on port HTTP"
+        arg_type = UInt16
         "--ws", "-w"
         help = "accept WebSocket clients on port WS"
         arg_type = UInt16
@@ -1096,6 +1102,16 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
 
     tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
 
+    if get(args, "http", nothing) !== nothing
+        push!(
+            tasks,
+            process(
+                serve_http,
+                args=(router, args["http"], issecure),
+                restart=:transient
+            )
+        )
+    end
     if get(args, "tcp", nothing) !== nothing
         push!(
             tasks,
@@ -1337,6 +1353,115 @@ function listener(proc, caronte_port, router, sslconfig)
         sslconfig=sslconfig
     ) do ws
         client_receiver(router, ws)
+    end
+end
+
+function verify_basic_auth(router, authorization)
+
+    # See: https://datatracker.ietf.org/doc/html/rfc7617
+    val = String(Base64.base64decode(authorization))
+    idx = findfirst(':', val)
+
+    if idx === nothing
+        # no password, only component name
+        cid = val
+        file = key_file(router, cid)
+
+        if isfile(file)
+            error("authentication failed")
+        end
+    else
+        cid = val[1:idx-1]
+        pwd = val[idx+1:end]
+        file = key_file(router, cid)
+        if isfile(file)
+            secret = readline(file)
+            if secret != pwd
+                error("authentication failed")
+            end
+        else
+            error("authentication failed")
+        end
+    end
+    return cid
+end
+
+function authenticate(router::Router, req::HTTP.Request)
+    auth = HTTP.header(req, "Authorization")
+
+    if auth !== ""
+        cid = verify_basic_auth(router, auth)
+    else
+        cid = string(uuid4())
+    end
+
+    return cid
+end
+
+function http_publish(router::Router, req::HTTP.Request)
+    try
+        cid = authenticate(router, req)
+        topic = HTTP.getparams(req)["topic"]
+        content = JSON3.read(req.body, Any)
+        twin = create_twin(cid, router)
+        msg = PubSubMsg(topic, content)
+        pubsub_msg(router, twin, msg)
+        return HTTP.Response(200, JSON3.write("ok"))
+    catch e
+        @error "http::publish: $e"
+        return HTTP.Response(403, JSON3.write("error"))
+    end
+end
+
+function http_rpc(router::Router, req::HTTP.Request)
+    try
+        cid = authenticate(router, req)
+        query = HTTP.queryparams(req)
+        topic = HTTP.getparams(req)["topic"]
+        content = JSON3.read(req.body, Any)
+        twin = create_twin(cid, router)
+        twin.socket = Condition()
+        msg = RpcReqMsg(topic, content)
+        rpc_request(router, twin, msg)
+        response = wait(twin.socket)
+        retval = Dict{String,Any}("status" => response.status)
+        if response.status == STS_SUCCESS
+            retval["value"] = decode(response.data)
+        end
+
+        return HTTP.Response(200, JSON3.write(retval))
+    catch e
+        @error "http::rpc: $e"
+        return HTTP.Response(403, JSON3.write("error"))
+    end
+end
+
+function serve_http(td, router, port, issecure=false)
+    @info "[serve_http] starting"
+
+    # define REST endpoints to dispatch rembus functions
+    http_router = HTTP.Router()
+    # publish
+    HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
+    # rpc
+    HTTP.register!(http_router, "GET", "{topic}", req -> http_rpc(router, req))
+
+    try
+        sslconfig = nothing
+        if issecure
+            sslconfig = secure_config(router)
+        end
+
+        router.http_server = HTTP.serve!(http_router, ip"0.0.0.0", port, sslconfig=sslconfig)
+        for msg in td.inbox
+            if isshutdown(msg)
+                break
+            end
+        end
+    finally
+        @info "[serve_http] closed"
+        setphase(td, :terminate)
+        isdefined(router, :http_server) && close(router.http_server)
     end
 end
 

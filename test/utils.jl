@@ -62,7 +62,7 @@ function execute(
     testname;
     reset=true,
     setup=nothing,
-    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002)
+    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002, "http" => 9000)
 )
     Rembus.setup(Rembus.CONFIG)
 

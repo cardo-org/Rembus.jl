@@ -736,6 +736,10 @@ function transport_send(::Twin, ws, msg::ResMsg, enc=false)
     broker_transport_write(ws, pkt)
 end
 
+function transport_send(::Twin, ws::Condition, msg::ResMsg, enc=false)
+    notify(ws, msg)
+end
+
 function transport_send(::RBConnection, ws, msg::ResMsg, ::Bool=false)
     content = tagvalue_if_dataframe(msg.data)
     pkt = [TYPE_RESPONSE | msg.flags, id2bytes(msg.id), msg.status, message2data(content)]
