@@ -1415,7 +1415,6 @@ end
 function http_rpc(router::Router, req::HTTP.Request)
     try
         cid = authenticate(router, req)
-        query = HTTP.queryparams(req)
         topic = HTTP.getparams(req)["topic"]
         content = JSON3.read(req.body, Any)
         twin = create_twin(cid, router)
@@ -1424,8 +1423,10 @@ function http_rpc(router::Router, req::HTTP.Request)
         rpc_request(router, twin, msg)
         response = wait(twin.socket)
         retval = Dict{String,Any}("status" => response.status)
-        if response.status == STS_SUCCESS
+        if isa(response.data, IOBuffer)
             retval["value"] = decode(response.data)
+        else
+            retval["value"] = response.data
         end
 
         return HTTP.Response(200, JSON3.write(retval))
@@ -1436,7 +1437,7 @@ function http_rpc(router::Router, req::HTTP.Request)
 end
 
 function serve_http(td, router, port, issecure=false)
-    @info "[serve_http] starting"
+    @info "[serve_http] starting at port $port"
 
     # define REST endpoints to dispatch rembus functions
     http_router = HTTP.Router()
