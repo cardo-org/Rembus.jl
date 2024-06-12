@@ -1356,9 +1356,8 @@ function listener(proc, caronte_port, router, sslconfig)
 end
 
 function verify_basic_auth(router, authorization)
-
     # See: https://datatracker.ietf.org/doc/html/rfc7617
-    val = String(Base64.base64decode(authorization))
+    val = String(Base64.base64decode(replace(authorization, "Basic " => "")))
     idx = findfirst(':', val)
 
     if idx === nothing
@@ -1392,6 +1391,15 @@ function authenticate(router::Router, req::HTTP.Request)
         cid = verify_basic_auth(router, auth)
     else
         cid = string(uuid4())
+    end
+
+    return cid
+end
+
+function authenticate_admin(router::Router, req::HTTP.Request)
+    cid = authenticate(router, req)
+    if !(cid in router.admins)
+        error("admin authentication failed")
     end
 
     return cid
@@ -1436,6 +1444,47 @@ function http_rpc(router::Router, req::HTTP.Request)
     end
 end
 
+function http_admin_command(router::Router, req::HTTP.Request, cmd)
+    try
+        cid = authenticate_admin(router, req)
+        topic = HTTP.getparams(req)["topic"]
+        twin = create_twin(cid, router)
+        twin.socket = Condition()
+        msg = AdminReqMsg(topic, cmd)
+        admin_msg(router, twin, msg)
+        response = wait(twin.socket)
+        if response.status === STS_SUCCESS
+            return HTTP.Response(200, JSON3.write("ok"))
+        else
+            return HTTP.Response(403, JSON3.write("error"))
+        end
+    catch e
+        @error "http::admin: $e"
+        #showerror(stdout, e, stacktrace())
+        return HTTP.Response(403, JSON3.write("error"))
+    end
+end
+
+function http_private_topic(router::Router, req::HTTP.Request)
+    return http_admin_command(router, req, Dict(COMMAND => PRIVATE_TOPIC_CMD))
+end
+
+function http_public_topic(router::Router, req::HTTP.Request)
+    return http_admin_command(router, req, Dict(COMMAND => PUBLIC_TOPIC_CMD))
+end
+
+function http_authorize(router::Router, req::HTTP.Request)
+    return http_admin_command(
+        router, req, Dict(COMMAND => AUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"])
+    )
+end
+
+function http_unauthorize(router::Router, req::HTTP.Request)
+    return http_admin_command(
+        router, req, Dict(COMMAND => UNAUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"])
+    )
+end
+
 function serve_http(td, router, port, issecure=false)
     @info "[serve_http] starting at port $port"
 
@@ -1445,6 +1494,31 @@ function serve_http(td, router, port, issecure=false)
     HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
     # rpc
     HTTP.register!(http_router, "GET", "{topic}", req -> http_rpc(router, req))
+
+    HTTP.register!(
+        http_router,
+        "POST",
+        "private_topic/{topic}",
+        req -> http_private_topic(router, req)
+    )
+    HTTP.register!(
+        http_router,
+        "POST",
+        "public_topic/{topic}",
+        req -> http_public_topic(router, req)
+    )
+    HTTP.register!(
+        http_router,
+        "POST",
+        "/authorize/{cid}/{topic}",
+        req -> http_authorize(router, req)
+    )
+    HTTP.register!(
+        http_router,
+        "POST",
+        "/unauthorize/{cid}/{topic}",
+        req -> http_unauthorize(router, req)
+    )
 
     try
         sslconfig = nothing

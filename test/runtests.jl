@@ -51,6 +51,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "https" begin
             include("http/test_https.jl")
         end
+        @time @safetestset "http_admin" begin
+            include("http/test_http_admin.jl")
+        end
     end
     if GROUP == "all" || GROUP == "private"
         @time @safetestset "private_topic" begin

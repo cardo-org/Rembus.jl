@@ -115,6 +115,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             end
         else
             sts = STS_GENERIC_ERROR
+            data = "unauthorized"
         end
     elseif cmd == EXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
@@ -127,6 +128,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             end
         else
             sts = STS_GENERIC_ERROR
+            data = "unauthorized"
         end
     elseif cmd == UNSUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
@@ -147,6 +149,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             end
         else
             sts = STS_GENERIC_ERROR
+            data = "unauthorized"
         end
     elseif cmd == UNEXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
@@ -163,6 +166,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
             end
         else
             sts = STS_GENERIC_ERROR
+            data = "unauthorized"
         end
     elseif cmd == PRIVATE_TOPICS_CONFIG_CMD
         if isadmin(router, twin, cmd)
