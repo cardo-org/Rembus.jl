@@ -16,6 +16,15 @@ function run()
     end
 end
 
+function no_cacert()
+    try
+        @component "wss://:8000/bbb"
+        @rpc version()
+    catch e
+        @test isa(e, ErrorException)
+    end
+end
+
 if Base.Sys.iswindows()
     @info "Windows platform detected: skipping test_tls_connect"
 else
@@ -28,6 +37,10 @@ else
         Base.run(`$script -k $test_keystore`)
         args = Dict("secure" => true, "tcp" => 8001, "ws" => 8000)
         execute(run, "test_tls_connect", args=args)
+
+        delete!(ENV, "HTTP_CA_BUNDLE")
+        execute(no_cacert, "test_tls_connect_no_cacert", args=args)
+
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

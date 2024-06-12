@@ -1067,7 +1067,12 @@ function rembus_task(pd, rb, protocol=:ws)
 
         @showerror e
 
-        rethrow()
+        if isa(e, HTTP.Exceptions.ConnectError) &&
+           isa(e.error.ex, HTTP.OpenSSL.OpenSSLError)
+            @info "unrecoverable error $(e.error.ex): stop connection retry"
+        else
+            rethrow()
+        end
     finally
         @debug "[$pd]: terminating"
         close(rb)
@@ -1332,7 +1337,7 @@ function ws_connect(rb, process, isconnected::Condition)
             if !haskey(ENV, "HTTP_CA_BUNDLE")
                 ENV["HTTP_CA_BUNDLE"] = joinpath(rembus_dir(), "ca", REMBUS_CA)
             end
-
+            @debug "cacert: $(ENV["HTTP_CA_BUNDLE"])"
             HTTP.WebSockets.open(socket -> begin
                     read_socket(socket, process, rb, isconnected)
                 end, url)
