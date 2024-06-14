@@ -1,24 +1,20 @@
 using Rembus
 using Test
 
-struct Ctx
-    broker::Rembus.Twin
-end
-
 module Broker
 
 using Rembus
 
-function expose_handler(ctx, router, component, message)
-    Rembus.transport_send(component, ctx.broker.socket, message)
+function expose_handler(sock, router, component, message)
+    Rembus.transport_send(component, sock, message)
 end
 
-function subscribe_handler(ctx, router, component, message)
-    Rembus.transport_send(component, ctx.broker.socket, message)
+function subscribe_handler(sock, router, component, message)
+    Rembus.transport_send(component, sock, message)
 end
 
-function reactive_handler(ctx, router, component, message)
-    Rembus.transport_send(component, ctx.broker.socket, message)
+function reactive_handler(sock, router, component, message)
+    Rembus.transport_send(component, sock, message)
 end
 
 
@@ -47,9 +43,6 @@ function run(exposer_url, secure=false)
         args=Dict("broker" => "edge_broker", "ws" => 9000, "secure" => secure))
     yield()
 
-    proc = from("edge_broker.broker")
-    router = proc.args[1]
-
     if secure
         cli_url = "wss://:8000/client"
         broker_url = "wss://:8000/combo"
@@ -58,8 +51,7 @@ function run(exposer_url, secure=false)
         broker_url = "ws://:8000/combo"
     end
 
-    twin = Rembus.broker_twin(router, broker_url)
-    router.context = Ctx(twin)
+    Rembus.egress(broker_url, "edge_broker")
 
     @component exposer_url
     @expose foo
@@ -71,21 +63,19 @@ function run(exposer_url, secure=false)
     @test res == 2
 
     publish(cli, "subscriber", 2.0)
-    sleep(2)
 
     @terminate
     close(cli)
-
-    return twin
 end
 
-ENV["REMBUS_CONNECT_TIMEOUT"] = 20
+ENV["REMBUS_CONNECT_TIMEOUT"] = 10
 
 run("ws://:9000/server")
 shutdown()
+Visor.dump()
 
 if Base.Sys.iswindows()
-    @info "Windows platform detected: skipping test_combo"
+    @info "Windows platform detected: skipping test_multiplexer"
 else
     # create keystore
     test_keystore = "/tmp/keystore"
@@ -96,13 +86,14 @@ else
         Base.run(`$script -k $test_keystore`)
         run("wss://:9000/server", true)
         shutdown()
-
+        Visor.dump()
         # unsetting HTTP_CA_BUNDLE implies that ws_connect throws an error
         delete!(ENV, "HTTP_CA_BUNDLE")
         run("wss://:9000/server", true)
 
     catch e
-        @error "[test_combo]: $e"
+        @error "[test_multiplexer]: $e"
+        showerror(stdout, e, stacktrace())
     finally
         shutdown()
         delete!(ENV, "REMBUS_KEYSTORE")

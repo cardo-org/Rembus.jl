@@ -227,8 +227,11 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "error_plugin" begin
             include("broker_plugin/test_error_plugin.jl")
         end
-        @time @safetestset "combo" begin
-            include("broker_plugin/test_combo.jl")
+        @time @safetestset "multiplexer" begin
+            include("broker_plugin/test_multiplexer.jl")
+        end
+        @time @safetestset "multiplexer_fault" begin
+            include("broker_plugin/test_multiplexer_fault.jl")
         end
         @time @safetestset "broker_plugin" begin
             include("broker_plugin/test_plugin.jl")

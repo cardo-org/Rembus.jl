@@ -492,7 +492,7 @@ function rpc_response(router, twin, msg)
 
         delete!(twin.sent, msg.id)
     else
-        @error "[$twin] unexpected response: $msg"
+        @debug "[$twin] unexpected response: $msg"
     end
 end
 
@@ -916,7 +916,7 @@ function twin_task(self, twin)
         end
     catch e
         @error "twin_task: $e" exception = (e, catch_backtrace())
-        #### rethrow()
+        rethrow()
     finally
         cleanup(twin, twin.router)
         if isa(twin.socket, WebSockets.WebSocket)
@@ -1073,7 +1073,7 @@ function caronte_reset(broker_name="caronte")
 end
 
 """
-    caronte(; wait=true, args=Dict())
+    caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
 
 Start the broker.
 
@@ -1920,7 +1920,7 @@ function broker(self, router)
             # process control messages
             !isshutdown(msg) || break
 
-            @debug "[broker] recv $(typeof(msg)): $msg"
+            @debug "[broker] recv [type=$(msg.ptype)]: $msg"
             if isa(msg, Msg)
                 if msg.ptype == TYPE_PUB
                     if !caronte_embedded_method(router, msg.twchannel, msg.content)
@@ -2036,7 +2036,9 @@ function init(router)
     return nothing
 end
 
-function ws_connect(twin::Twin, broker::Component, isconnected::Condition)
+function ws_connect(
+    egress::Visor.Process, twin::Twin, broker::Component, isconnected::Condition
+)
     try
         url = brokerurl(broker)
         uri = URI(url)
@@ -2051,12 +2053,14 @@ function ws_connect(twin::Twin, broker::Component, isconnected::Condition)
                     twin.socket = socket
                     notify(isconnected)
                     twin_receiver(twin.router, twin)
+                    put!(egress.inbox, "connection closed")
                 end, url)
         elseif uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     twin.socket = socket
                     notify(isconnected)
                     twin_receiver(twin.router, twin)
+                    put!(egress.inbox, "connection closed")
                 end, url, idle_timeout=1, forcenew=true)
         else
             error("ws endpoint: wrong $(uri.scheme) scheme")
@@ -2067,12 +2071,12 @@ function ws_connect(twin::Twin, broker::Component, isconnected::Condition)
     end
 end
 
-function wait_response(twin::Twin, msg::RembusMsg, timeout)
-    mid::UInt128 = msg.id
+function wait_response(twin::Twin, msg::Msg, timeout)
+    mid::UInt128 = msg.content.id
     resp_cond = Threads.Condition()
     twin.out[mid] = resp_cond
-    t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
-    signal!(twin, Msg(TYPE_RPC, msg, twin))
+    t = Timer((tim) -> response_timeout(resp_cond, msg.content), timeout)
+    signal!(twin, msg)
     lock(resp_cond)
     res = wait(resp_cond)
     unlock(resp_cond)
@@ -2081,20 +2085,53 @@ function wait_response(twin::Twin, msg::RembusMsg, timeout)
     return res
 end
 
-function broker_twin(router::Router, broker_url::AbstractString)
-    broker = Component(broker_url)
-    twin = create_twin(broker.id, router)
-    twin.hasname = true
-    twin.pager = Pager(twin)
+function egress_task(proc, twin::Twin, broker::Component)
     isconnected = Condition()
     t = Timer((tim) -> connect_timeout(twin, isconnected), connect_request_timeout())
-    @async ws_connect(twin, broker, isconnected)
+    @async ws_connect(proc, twin, broker, isconnected)
     wait(isconnected)
     close(t)
     msg = IdentityMsg(broker.id)
-    wait_response(twin, msg, request_timeout())
+    wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
 
-    return twin
+    # The context to pass to the plugin callbacks.
+    twin.router.context = twin.socket
+
+    for msg in proc.inbox
+        if isshutdown(msg)
+            # close the connection
+            close(twin.socket)
+            break
+        else
+            # the only message is an error condition
+            error(msg)
+        end
+    end
+    @debug "[$proc] egress done"
+end
+
+#=
+Connect this broker as a component to broker extracted from remote_url.
+=#
+function egress(
+    remote_url::AbstractString, broker_name::AbstractString="caronte"
+)
+    proc = from("$broker_name.broker")
+
+    # setup the twin
+    router = proc.args[1]
+    broker = Component(remote_url)
+    twin = create_twin(broker.id, router)
+    twin.hasname = true
+    twin.pager = Pager(twin)
+
+    # start the egress process
+    startup(
+        proc.supervisor.supervisor,
+        process(remote_url, egress_task, args=(twin, broker), debounce_time=6)
+    )
+
+    return nothing
 end
 
 #=

@@ -18,6 +18,4 @@ unsubscribe(ctx, router, component, msg) = @info "[$component] unsubscribing $(m
 
 end
 
-Rembus.set_broker_plugin(CarontePlugin)
-
-caronte()
+caronte(plugin=CarontePlugin)

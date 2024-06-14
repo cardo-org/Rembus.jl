@@ -71,8 +71,4 @@ end
 
 end
 
-
-Rembus.set_context(Ctx())
-Rembus.set_broker_plugin(CarontePlugin)
-
-caronte(args=Dict("ws" => 8000))
+caronte(plugin=CarontePlugin, context=Ctx(), args=Dict("ws" => 8000))
