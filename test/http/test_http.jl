@@ -21,9 +21,15 @@ function run()
 
     x = 1
     y = 2
+
     response = HTTP.post("http://localhost:9000/mytopic", [], JSON3.write([x, y]))
     @info "[test_http] POST response=$(body(response))"
+    @test body(response) == "ok"
 
+
+    response = HTTP.get("http://localhost:9000/myservice", [], JSON3.write([x, y]))
+    @info "[test_http] GET response=$(body(response))"
+    @test body(response) == 3
     @terminate
 end
 

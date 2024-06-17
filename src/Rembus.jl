@@ -2222,6 +2222,8 @@ end
 @setup_workload begin
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
+    ENV["REMBUS_TIMEOUT"] = "20"
+    ENV["REMBUS_CONNECT_TIMEOUT"] = "20"
     @compile_workload begin
         sv = Rembus.caronte(
             wait=false,

@@ -77,20 +77,18 @@ function run()
         "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
     )
     @test response.status == 200
-    @test body(response) == Dict("status" => 0, "value" => x + y)
+    @test body(response) == x + y
 
     response = HTTP.get(
         "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
     )
     @test response.status == 200
-    @test body(response) == Dict("status" => 0, "value" => x + y)
+    @test body(response) == x + y
 
     # send an unknown service
-    response = HTTP.get(
+    @test_throws HTTP.Exceptions.StatusError HTTP.get(
         "https://127.0.0.1:9000/unknown", ["Authorization" => auth], JSON3.write([x, y])
     )
-    @test response.status == 200
-    @test body(response) == Dict("status" => 42, "value" => nothing)
 
     # send the wrong password
     auth = basic_auth("$authenticated_component:wrong_pwd")

@@ -47,6 +47,8 @@ function run(exposer_url)
     broker_url = "ws://:8000/combo"
 
     Rembus.egress(broker_url, "edge_broker")
+    sleep(1)
+    @info "shutting down main broker"
 
     # shutting down the main_broker triggers an error on the edge_broker
     # and the supervisor

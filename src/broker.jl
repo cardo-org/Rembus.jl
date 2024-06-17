@@ -431,7 +431,7 @@ function register(router, twin, msg)
     token = get_token(router, msg.userid, msg.id)
     if token === nothing
         sts = STS_GENERIC_ERROR
-        reason = "wrong pin"
+        reason = "wrong uid/pin"
     elseif isregistered(router, msg.cid)
         sts = STS_NAME_ALREADY_TAKEN
         reason = "name $(msg.cid) not available for registration"
@@ -1430,14 +1430,22 @@ function http_rpc(router::Router, req::HTTP.Request)
         msg = RpcReqMsg(topic, content)
         rpc_request(router, twin, msg)
         response = wait(twin.socket)
-        retval = Dict{String,Any}("status" => response.status)
         if isa(response.data, IOBuffer)
-            retval["value"] = decode(response.data)
+            retval = decode(response.data)
         else
-            retval["value"] = response.data
+            retval = response.data
+        end
+        if response.status == 0
+            sts = 200
+        else
+            sts = 403
         end
 
-        return HTTP.Response(200, JSON3.write(retval))
+        return HTTP.Response(
+            sts,
+            ["Content_type" => "application/json"],
+            JSON3.write(retval)
+        )
     catch e
         @error "http::rpc: $e"
         return HTTP.Response(403, JSON3.write("error"))
@@ -1938,18 +1946,18 @@ function broker(self, router)
                             target = select_twin(router, topic, implementors)
                             @debug "[broker] exposer for $topic: [$target]"
                             if target === nothing
-                                msg.content = ResMsg(msg.content, STS_METHOD_UNAVAILABLE)
+                                msg.content = ResMsg(msg.content, STS_METHOD_UNAVAILABLE, "$topic: method unavailable")
                                 put!(msg.twchannel.process.inbox, msg)
                             elseif target.process.inbox === msg.twchannel.process.inbox
                                 @warn "[$(target.id)]: loopback detected"
-                                msg.content = ResMsg(msg.content, STS_METHOD_LOOPBACK)
+                                msg.content = ResMsg(msg.content, STS_METHOD_LOOPBACK, "$topic: method loopback")
                                 put!(msg.twchannel.process.inbox, msg)
                             elseif target !== nothing
                                 put!(target.process.inbox, msg)
                             end
                         else
                             # remote method not found
-                            msg.content = ResMsg(msg.content, STS_METHOD_NOT_FOUND)
+                            msg.content = ResMsg(msg.content, STS_METHOD_NOT_FOUND, "$topic: method unknown")
                             put!(msg.twchannel.process.inbox, msg)
                         end
                     end
@@ -2097,15 +2105,13 @@ function egress_task(proc, twin::Twin, broker::Component)
     # The context to pass to the plugin callbacks.
     twin.router.context = twin.socket
 
-    for msg in proc.inbox
-        if isshutdown(msg)
-            # close the connection
-            close(twin.socket)
-            break
-        else
-            # the only message is an error condition
-            error(msg)
-        end
+    msg = take!(proc.inbox)
+    if isshutdown(msg)
+        # close the connection
+        close(twin.socket)
+    else
+        # the only message is an error condition
+        error(msg)
     end
     @debug "[$proc] egress done"
 end
