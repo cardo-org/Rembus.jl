@@ -9,8 +9,13 @@ function myservice(x, y)
     return x + y
 end
 
-
-body(response::HTTP.Response) = JSON3.read(response.body, Any)
+function body(response::HTTP.Response)
+    if isempty(response.body)
+        return nothing
+    else
+        return JSON3.read(response.body, Any)
+    end
+end
 
 function run()
     @component "myapp"
@@ -24,7 +29,7 @@ function run()
 
     response = HTTP.post("http://localhost:9000/mytopic", [], JSON3.write([x, y]))
     @info "[test_http] POST response=$(body(response))"
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
 
     response = HTTP.get("http://localhost:9000/myservice", [], JSON3.write([x, y]))

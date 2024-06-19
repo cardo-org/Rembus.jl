@@ -11,8 +11,13 @@ function myservice(x, y)
     return x + y
 end
 
-
-body(response::HTTP.Response) = JSON3.read(response.body, Any)
+function body(response::HTTP.Response)
+    if isempty(response.body)
+        return nothing
+    else
+        return JSON3.read(response.body, Any)
+    end
+end
 
 basic_auth(str::String) = Base64.base64encode(str)
 
@@ -36,7 +41,6 @@ function init(cid, password)
     end
 end
 
-
 function run()
     authenticated_component = "bar"
     password = "aaa"
@@ -57,7 +61,7 @@ function run()
     )
     @info "[test_http] POST response=$(body(response))"
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
     # send a password for a component not registered
     auth = basic_auth("mycomponent:mysecret")
@@ -71,7 +75,7 @@ function run()
         "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
     )
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
     response = HTTP.get(
         "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])

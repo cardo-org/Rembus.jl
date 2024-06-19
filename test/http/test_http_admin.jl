@@ -2,7 +2,13 @@ include("../utils.jl")
 
 using Base64
 
-body(response::HTTP.Response) = JSON3.read(response.body, Any)
+function body(response::HTTP.Response)
+    if isempty(response.body)
+        return nothing
+    else
+        return JSON3.read(response.body, Any)
+    end
+end
 
 basic_auth(str::String) = Base64.base64encode(str)
 
@@ -58,28 +64,46 @@ function run()
         ["Authorization" => auth]
     )
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/authorize/mycomponent/foo",
         ["Authorization" => auth]
     )
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/unauthorize/mycomponent/foo",
         ["Authorization" => auth]
     )
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/public_topic/foo",
         ["Authorization" => auth]
     )
     @test response.status == 200
-    @test body(response) == "ok"
+    @test body(response) === nothing
+
+    response = HTTP.get(
+        "https://127.0.0.1:9000/admin/broker_config",
+        ["Authorization" => auth]
+    )
+    @test response.status == 200
+    @test body(response) == Dict("subscribers" => Dict(), "exposers" => Dict())
+
+    @test_throws HTTP.Exceptions.StatusError HTTP.get(
+        "https://127.0.0.1:9000/admin/wrong_command",
+        ["Authorization" => auth]
+    )
+
+    auth = basic_auth("user")
+    @test_throws HTTP.Exceptions.StatusError HTTP.get(
+        "https://127.0.0.1:9000/admin/broker_config",
+        ["Authorization" => auth]
+    )
 
     #@terminate
     remove_keys(admin)

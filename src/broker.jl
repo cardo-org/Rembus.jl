@@ -45,7 +45,7 @@ mutable struct Twin
     ack_cond::Dict{UInt128,Threads.Condition}
     process::Visor.Process
 
-    Twin(router, id, out_channel) = new(
+    Twin(router, id) = new(
         router,
         id,
         Dict(),
@@ -190,7 +190,7 @@ function create_twin(id, router::Embedded, queue=Queue{PubSubMsg}())
     if haskey(router.id_twin, id)
         return router.id_twin[id]
     else
-        twin = Twin(router, id, Channel())
+        twin = Twin(router, id)
         spec = process(id, twin_task, args=(twin,))
         sv = router.process
         startup(Visor.from_supervisor(sv, "twins"), spec)
@@ -205,7 +205,7 @@ function create_twin(id, router)
     if haskey(router.id_twin, id)
         return router.id_twin[id]
     else
-        twin = Twin(router, id, router.process.inbox)
+        twin = Twin(router, id)
         spec = process(id, twin_task, args=(twin,))
         sv = router.process.supervisor
         startup(Visor.from_supervisor(sv, "twins"), spec)
@@ -571,6 +571,15 @@ function msg_payload(io::IOBuffer)
     return payload
 end
 
+function get_router(broker="caronte")::Router
+    p = from("$broker.broker")
+    if p === nothing
+        error("unknown broker: $broker")
+    end
+
+    return p.args[1]
+end
+
 #=
 Publish data on topic. Used by broker plugin module to republish messages
 after transforming them.
@@ -580,6 +589,11 @@ The routing is performed by the broker
 function republish(twin, topic, data)
     new_msg = PubSubMsg(topic, data)
     put!(twin.router.process.inbox, Msg(TYPE_PUB, new_msg, twin))
+end
+
+function publish(router::Router, topic, data)
+    new_msg = PubSubMsg(topic, data)
+    put!(router.process.inbox, Msg(TYPE_PUB, new_msg, Twin(router, "tmp")))
 end
 
 #=
@@ -592,7 +606,6 @@ function publish(twin, topic, data)
     new_msg = PubSubMsg(topic, data)
     put!(twin.process.inbox, Msg(TYPE_PUB, new_msg, twin))
 end
-
 
 function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
@@ -1399,7 +1412,7 @@ end
 function authenticate_admin(router::Router, req::HTTP.Request)
     cid = authenticate(router, req)
     if !(cid in router.admins)
-        error("admin authentication failed")
+        error("$cid authentication failed")
     end
 
     return cid
@@ -1413,10 +1426,10 @@ function http_publish(router::Router, req::HTTP.Request)
         twin = create_twin(cid, router)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
-        return HTTP.Response(200, JSON3.write("ok"))
+        return HTTP.Response(200, [])
     catch e
         @error "http::publish: $e"
-        return HTTP.Response(403, JSON3.write("error"))
+        return HTTP.Response(403, [])
     end
 end
 
@@ -1448,48 +1461,77 @@ function http_rpc(router::Router, req::HTTP.Request)
         )
     catch e
         @error "http::rpc: $e"
-        return HTTP.Response(403, JSON3.write("error"))
+        return HTTP.Response(403, [])
     end
 end
 
-function http_admin_command(router::Router, req::HTTP.Request, cmd)
+function http_admin_command(
+    router::Router, req::HTTP.Request, cmd::Dict, topic="__config__"
+)
     try
         cid = authenticate_admin(router, req)
-        topic = HTTP.getparams(req)["topic"]
         twin = create_twin(cid, router)
         twin.socket = Condition()
         msg = AdminReqMsg(topic, cmd)
         admin_msg(router, twin, msg)
         response = wait(twin.socket)
         if response.status === STS_SUCCESS
-            return HTTP.Response(200, JSON3.write("ok"))
+            if response.data !== nothing
+                return HTTP.Response(200, JSON3.write(response.data))
+            else
+                return HTTP.Response(200, [])
+            end
         else
-            return HTTP.Response(403, JSON3.write("error"))
+            return HTTP.Response(403, [])
         end
     catch e
         @error "http::admin: $e"
         #showerror(stdout, e, stacktrace())
-        return HTTP.Response(403, JSON3.write("error"))
+        return HTTP.Response(403, [])
     end
 end
 
+function http_admin_command(router::Router, req::HTTP.Request)
+    try
+        authenticate_admin(router, req)
+        cmd = HTTP.getparams(req)["cmd"]
+        return http_admin_command(
+            router, req, Dict(COMMAND => cmd)
+        )
+    catch e
+        @error "http::admin: $e"
+        return HTTP.Response(403, [])
+    end
+
+end
+
 function http_private_topic(router::Router, req::HTTP.Request)
-    return http_admin_command(router, req, Dict(COMMAND => PRIVATE_TOPIC_CMD))
+    topic = HTTP.getparams(req)["topic"]
+    return http_admin_command(router, req, Dict(COMMAND => PRIVATE_TOPIC_CMD), topic)
 end
 
 function http_public_topic(router::Router, req::HTTP.Request)
-    return http_admin_command(router, req, Dict(COMMAND => PUBLIC_TOPIC_CMD))
+    topic = HTTP.getparams(req)["topic"]
+    return http_admin_command(router, req, Dict(COMMAND => PUBLIC_TOPIC_CMD), topic)
 end
 
 function http_authorize(router::Router, req::HTTP.Request)
+    topic = HTTP.getparams(req)["topic"]
     return http_admin_command(
-        router, req, Dict(COMMAND => AUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"])
+        router,
+        req,
+        Dict(COMMAND => AUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"]),
+        topic
     )
 end
 
 function http_unauthorize(router::Router, req::HTTP.Request)
+    topic = HTTP.getparams(req)["topic"]
     return http_admin_command(
-        router, req, Dict(COMMAND => UNAUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"])
+        router,
+        req,
+        Dict(COMMAND => UNAUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"]),
+        topic
     )
 end
 
@@ -1502,6 +1544,8 @@ function serve_http(td, router, port, issecure=false)
     HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
     # rpc
     HTTP.register!(http_router, "GET", "{topic}", req -> http_rpc(router, req))
+    # admin
+    HTTP.register!(http_router, "GET", "admin/{cmd}", req -> http_admin_command(router, req))
 
     HTTP.register!(
         http_router,
@@ -1771,7 +1815,7 @@ function broadcast!(router, msg)
     union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
     newmsg = Msg(TYPE_PUB, bmsg, msg.twchannel)
 
-    for tw in filter(t -> t.process.inbox != msg.twchannel.process.inbox, authtwins)
+    for tw in authtwins
         @debug "broadcasting $topic to $(tw.id): [$newmsg]"
         put!(tw.process.inbox, newmsg)
     end
@@ -1931,10 +1975,8 @@ function broker(self, router)
             @debug "[broker] recv [type=$(msg.ptype)]: $msg"
             if isa(msg, Msg)
                 if msg.ptype == TYPE_PUB
-                    if !caronte_embedded_method(router, msg.twchannel, msg.content)
-                        # publish to interested twins
-                        broadcast!(router, msg)
-                    end
+                    # publish to interested twins
+                    broadcast!(router, msg)
                 elseif msg.ptype == TYPE_RPC
                     topic = msg.content.topic
                     if caronte_embedded_method(router, msg.twchannel, msg.content)

@@ -27,7 +27,7 @@ function verify(cid, wrong_challenge=nothing)
     router = Rembus.Router()
     proc = process("router", task, args=(router,))
 
-    twin = Rembus.Twin(router, "twin", Channel())
+    twin = Rembus.Twin(router, "twin")
     twin.session["challenge"] = server_challenge
 
     supervise([
