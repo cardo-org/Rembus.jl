@@ -33,6 +33,16 @@ function publish_interceptor(ctx, component, msg)
     # publish directly
     publish(ctx.subscriber, "direct_message", 999)
 
+    # publish using router
+    router = Rembus.get_router()
+    publish(router, "some_topic", "some_data")
+
+    try
+        Rembus.get_router("unknown_broker")
+    catch e
+        @info "expected error: $e"
+    end
+
     return false
 end
 
