@@ -879,7 +879,7 @@ function close_is_ok(ws::WebSockets.WebSocket, e)
 end
 
 function close_is_ok(ws::TCPSocket, e)
-    isa(e, ConnectionClosed)
+    isa(e, WrongTcpPacket)
 end
 
 close_is_ok(::Nothing, e) = true
@@ -2049,7 +2049,11 @@ function boot(router)
     return nothing
 end
 
-init_log() = logging()
+function init_log()
+    if !haskey(ENV, "JULIA_DEBUG")
+        logging()
+    end
+end
 
 function init(router)
     init_log()

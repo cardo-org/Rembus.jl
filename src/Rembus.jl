@@ -190,7 +190,8 @@ end
 
 struct CloseConnection end
 
-struct ConnectionClosed <: Exception
+# Wrong tcp packet received.
+struct WrongTcpPacket <: Exception
 end
 
 # A message error received from the broker.
@@ -999,11 +1000,6 @@ function rembus_task(pd, rb, protocol=:ws)
             if isshutdown(msg)
                 return
             elseif isa(msg, Exception)
-                if isa(msg, ConnectionClosed) && isconnected(rb)
-                    @debug "[$pd] ignoring connection closed message"
-                    continue
-                end
-                @info "[$pd] rembus task: $msg"
                 throw(msg)
             elseif isrequest(msg)
                 req = msg.request
@@ -1057,7 +1053,7 @@ function rembus_task(pd, rb, protocol=:ws)
         if isa(e, HTTP.Exceptions.ConnectError)
             msg = "[$pd]: $(e.url) connection error"
         else
-            msg = "[$pd]: $e"
+            msg = "[$pd] component: $e"
         end
 
         if last_error.msg !== msg

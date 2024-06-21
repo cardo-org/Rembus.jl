@@ -219,8 +219,11 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "tcp"
-        @time @safetestset "zmq" begin
+        @time @safetestset "tcp" begin
             include("tcp/test_tcp.jl")
+        end
+        @time @safetestset "wrong_response" begin
+            include("tcp/test_wrong_response.jl")
         end
     end
     if GROUP == "all" || GROUP == "broker_plugin"

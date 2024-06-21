@@ -938,7 +938,7 @@ function transport_read(sock)
         len = Int(lb[1]) << 24 + Int(lb[2]) << 16 + Int(lb[3]) << 8 + lb[4]
     else
         @error "tcp channel invalid header value [$type]"
-        throw(ConnectionClosed())
+        throw(WrongTcpPacket())
     end
     payload = read(sock, len)
     @rawlog("in: $payload")
@@ -958,7 +958,7 @@ function isconnectionerror(ws::WebSockets.WebSocket, e)
 end
 
 function isconnectionerror(ws, e)
-    return isa(e, EOFError) || isa(e, Base.IOError) || isa(e, ConnectionClosed)
+    return isa(e, EOFError) || isa(e, Base.IOError) || isa(e, WrongTcpPacket)
 end
 
 Base.isopen(ws::WebSockets.WebSocket) = Base.isopen(ws.io)

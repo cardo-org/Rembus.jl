@@ -7,7 +7,7 @@ function run()
 
     proc = from("rembus")
 
-    Rembus.processput!(proc, Rembus.ConnectionClosed())
+    Rembus.processput!(proc, Rembus.WrongTcpPacket())
     sleep(0.1)
     Rembus.processput!(proc, ErrorException("boom"))
     sleep(1)

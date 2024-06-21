@@ -71,4 +71,5 @@ end
 
 end
 
-caronte(plugin=CarontePlugin, context=Ctx(), args=Dict("ws" => 8000))
+#caronte(plugin=CarontePlugin, context=Ctx(), args=Dict("ws" => 8000))
+caronte(plugin=CarontePlugin, context=Ctx())
