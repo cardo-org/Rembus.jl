@@ -14,7 +14,7 @@ end
 
 function Rembus.transport_send(::Rembus.RBConnection, socket::ZMQ.Socket, msg::InvalidMsg)
     send(socket, Message(), more=true)
-    send(socket, encode([63]), more=true)
+    send(socket, encode([104]), more=true)
     send(socket, "aaaa", more=true)
     send(socket, Rembus.MESSAGE_END, more=false)
 end
@@ -45,7 +45,7 @@ function run()
         @debug "expected error: $(e.msg)" _group = :test
         @test isa(e, Rembus.RembusTimeout)
     end
-
+    @test isopen(rb.socket)
     version = Rembus.rpc(rb, "version")
     @test version === Rembus.VERSION
 

@@ -74,6 +74,7 @@ function execute(
         fn()
     catch e
         @error "[$testname] failed: $e"
+        @test false
         #showerror(stdout, e, catch_backtrace())
     finally
         shutdown()

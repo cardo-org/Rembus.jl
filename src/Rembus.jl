@@ -45,6 +45,7 @@ export @forever
 export @terminate
 
 # rembus client api
+export component
 export connect
 export isauthenticated
 export server
@@ -65,6 +66,7 @@ export rembus
 export shared
 export set_balancer
 export forever
+export terminate
 
 # broker api
 export caronte, session, republish, msg_payload
@@ -919,20 +921,37 @@ struct SetHolder
 end
 
 struct AddImpl
+    topic::String
     fn::Function
+    AddImpl(fn::Function) = new(string(fn), fn)
+    AddImpl(topic::AbstractString, fn::Function) = new(topic, fn)
 end
 
 struct RemoveImpl
-    fn::Function
+    fn::String
+    RemoveImpl(fn::AbstractString) = new(fn)
+    RemoveImpl(fn::Function) = new(string(fn))
 end
 
 struct AddInterest
+    topic::String
     fn::Function
     retroactive::Bool
+    AddInterest(
+        topic::AbstractString,
+        fn::Function,
+        retroactive::Bool
+    ) = new(topic, fn, retroactive)
+    AddInterest(
+        fn::Function,
+        retroactive::Bool
+    ) = new(string(fn), fn, retroactive)
 end
 
 struct RemoveInterest
-    fn::Function
+    fn::String
+    RemoveInterest(fn::AbstractString) = new(fn)
+    RemoveInterest(fn::Function) = new(string(fn))
 end
 
 struct Reactive
@@ -1007,20 +1026,20 @@ function rembus_task(pd, rb, protocol=:ws)
                     result = shared(rb, msg.request.shared)
                 elseif isa(req, AddImpl)
                     result = expose(
-                        rb, string(msg.request.fn), msg.request.fn, exceptionerror=false
+                        rb, msg.request.topic, msg.request.fn, exceptionerror=false
                     )
                 elseif isa(req, RemoveImpl)
-                    result = unexpose(rb, string(msg.request.fn), exceptionerror=false)
+                    result = unexpose(rb, msg.request.fn, exceptionerror=false)
                 elseif isa(req, AddInterest)
                     result = subscribe(
                         rb,
-                        string(msg.request.fn),
+                        msg.request.topic,
                         msg.request.fn,
                         msg.request.retroactive,
                         exceptionerror=false
                     )
                 elseif isa(req, RemoveInterest)
-                    result = unsubscribe(rb, string(msg.request.fn), exceptionerror=false)
+                    result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
                 elseif isa(req, EnableAck)
                     if req.status
                         result = enable_ack(rb, exceptionerror=false)
@@ -1871,6 +1890,74 @@ function subscribe(
 end
 
 """
+    component(url)
+
+Connect rembus component defined by `url`.
+
+The connection is supervised and network faults starts connection retries attempts
+until successful outcome.
+"""
+function component(url=getcomponent())
+    rb = Rembus.RBConnection(url)
+
+    p = process(rb.client.id, Rembus.rembus_task,
+        args=(rb,), debounce_time=2, restart=:transient)
+
+    supervise(
+        p, intensity=3, wait=false
+    )
+    return p
+end
+
+terminate(proc::Visor.Process) = shutdown(proc)
+
+function expose(proc::Visor.Process, fn::Function)
+    return call(proc, Rembus.AddImpl(fn), timeout=request_timeout())
+end
+
+function expose(proc::Visor.Process, topic::AbstractString, fn::Function)
+    return call(proc, Rembus.AddImpl(topic, fn), timeout=request_timeout())
+end
+
+function unexpose(proc::Visor.Process, fn)
+    return call(proc, Rembus.RemoveImpl(fn), timeout=request_timeout())
+end
+
+function subscribe(proc::Visor.Process, fn::Function, retroactive::Bool=false)
+    return call(proc, Rembus.AddInterest(fn, retroactive), timeout=request_timeout())
+end
+
+function unsubscribe(proc::Visor.Process, fn)
+    return call(proc, Rembus.RemoveInterest(fn), timeout=request_timeout())
+end
+
+function subscribe(
+    proc::Visor.Process, topic::AbstractString, fn::Function, retroactive::Bool=false
+)
+    return call(proc, Rembus.AddInterest(topic, fn, retroactive), timeout=request_timeout())
+end
+
+function reactive(proc::Visor.Process)
+    return call(proc, Reactive(true), timeout=request_timeout())
+end
+
+function unreactive(proc::Visor.Process)
+    return call(proc, Reactive(false), timeout=request_timeout())
+end
+
+function shared(proc::Visor.Process, ctx)
+    return call(proc, SetHolder(ctx), timeout=request_timeout())
+end
+
+function publish(proc::Visor.Process, topic::AbstractString, data=[])
+    cast(proc, PubSubMsg(topic, data))
+end
+
+function rpc(proc::Visor.Process, topic::AbstractString, data=[])
+    return call(proc, RpcReqMsg(topic, data), timeout=request_timeout())
+end
+
+"""
     unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true)
 
@@ -2185,6 +2272,18 @@ function waiter(pd)
     # the only message may be a shutdown request
     take!(pd.inbox)
     @info "forever done"
+end
+
+"""
+    forever(rb::Visor.Process)
+
+    Start the event loop awaiting to execute exposed and subscribed methods.
+"""
+function forever(rb::Visor.Process)
+    reactive(rb)
+    if !isinteractive()
+        wait(Visor.root_supervisor(rb))
+    end
 end
 
 """
