@@ -351,6 +351,8 @@ request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "10"))
 
 connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "10"))
 
+call_timeout() = request_timeout() + 0.5
+
 getcomponent() = Component(Rembus.CONFIG.cid)
 
 function name2proc(name::AbstractString, startproc=false, setanonymous=false)
@@ -434,7 +436,7 @@ function holder_expr(shared, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid", true, true),
         Rembus.SetHolder(aaa),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = shared
     ex.args[2].args[2] = cid
@@ -541,7 +543,7 @@ function rpc_expr(topic, cid=nothing)
     ext = :(call(
         Rembus.name2proc("cid", true, true),
         Rembus.CastCall(t, []),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     fn = string(topic.args[1])
     ext.args[2].args[2] = cid
@@ -613,7 +615,7 @@ function expose_expr(fn, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid", true, true),
         Rembus.AddImpl(aaa),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = fnname(fn)
     ex.args[2].args[2] = cid
@@ -633,7 +635,7 @@ function subscribe_expr(fn, mode::Symbol, cid=nothing)
     ex = :(call(
         Rembus.name2proc(cid, true, true),
         Rembus.AddInterest(aaa, $sts),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = fnname(fn)
     ex.args[2].args[2] = cid
@@ -802,7 +804,7 @@ macro unexpose(cid, fn)
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.RemoveImpl(aaa),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = fn
     ex.args[2].args[2] = cid
@@ -826,7 +828,7 @@ macro unsubscribe(cid, fn)
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.RemoveInterest(aaa),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = fn
     ex.args[2].args[2] = cid
@@ -840,7 +842,7 @@ function reactive_expr(reactive, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.Reactive($reactive),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[2].args[2] = cid
     return ex
@@ -850,7 +852,7 @@ function enable_ack_expr(enable, cid=nothing)
     ex = :(call(
         Rembus.name2proc("cid"),
         Rembus.EnableAck($enable),
-        timeout=Rembus.request_timeout()
+        timeout=Rembus.call_timeout()
     ))
     ex.args[2].args[2] = cid
     return ex
@@ -1912,41 +1914,41 @@ end
 terminate(proc::Visor.Process) = shutdown(proc)
 
 function expose(proc::Visor.Process, fn::Function)
-    return call(proc, Rembus.AddImpl(fn), timeout=request_timeout())
+    return call(proc, Rembus.AddImpl(fn), timeout=call_timeout())
 end
 
 function expose(proc::Visor.Process, topic::AbstractString, fn::Function)
-    return call(proc, Rembus.AddImpl(topic, fn), timeout=request_timeout())
+    return call(proc, Rembus.AddImpl(topic, fn), timeout=call_timeout())
 end
 
 function unexpose(proc::Visor.Process, fn)
-    return call(proc, Rembus.RemoveImpl(fn), timeout=request_timeout())
+    return call(proc, Rembus.RemoveImpl(fn), timeout=call_timeout())
 end
 
 function subscribe(proc::Visor.Process, fn::Function, retroactive::Bool=false)
-    return call(proc, Rembus.AddInterest(fn, retroactive), timeout=request_timeout())
+    return call(proc, Rembus.AddInterest(fn, retroactive), timeout=call_timeout())
 end
 
 function unsubscribe(proc::Visor.Process, fn)
-    return call(proc, Rembus.RemoveInterest(fn), timeout=request_timeout())
+    return call(proc, Rembus.RemoveInterest(fn), timeout=call_timeout())
 end
 
 function subscribe(
     proc::Visor.Process, topic::AbstractString, fn::Function, retroactive::Bool=false
 )
-    return call(proc, Rembus.AddInterest(topic, fn, retroactive), timeout=request_timeout())
+    return call(proc, Rembus.AddInterest(topic, fn, retroactive), timeout=call_timeout())
 end
 
 function reactive(proc::Visor.Process)
-    return call(proc, Reactive(true), timeout=request_timeout())
+    return call(proc, Reactive(true), timeout=call_timeout())
 end
 
 function unreactive(proc::Visor.Process)
-    return call(proc, Reactive(false), timeout=request_timeout())
+    return call(proc, Reactive(false), timeout=call_timeout())
 end
 
 function shared(proc::Visor.Process, ctx)
-    return call(proc, SetHolder(ctx), timeout=request_timeout())
+    return call(proc, SetHolder(ctx), timeout=call_timeout())
 end
 
 function publish(proc::Visor.Process, topic::AbstractString, data=[])
@@ -1954,7 +1956,7 @@ function publish(proc::Visor.Process, topic::AbstractString, data=[])
 end
 
 function rpc(proc::Visor.Process, topic::AbstractString, data=[])
-    return call(proc, RpcReqMsg(topic, data), timeout=request_timeout())
+    return call(proc, RpcReqMsg(topic, data), timeout=call_timeout())
 end
 
 """
