@@ -2203,7 +2203,7 @@ function direct(
     return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
 end
 
-function response_timeout(condition::Distributed.Future, msg::RembusMsg)
+function response_timeout(rb, condition::Distributed.Future, msg::RembusMsg)
     if hasproperty(msg, :topic)
         descr = "[$(msg.topic)]: request timeout"
     else
@@ -2211,6 +2211,7 @@ function response_timeout(condition::Distributed.Future, msg::RembusMsg)
     end
 
     put!(condition, RembusTimeout(descr))
+    delete!(rb.out, msg.id)
 
     return nothing
 end
@@ -2236,7 +2237,7 @@ end
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     resp_cond = send_request(rb, msg)
-    t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
+    t = Timer((tim) -> response_timeout(rb, resp_cond, msg), timeout)
     res = fetch(resp_cond)
     close(t)
     return res
