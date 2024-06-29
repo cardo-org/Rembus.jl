@@ -566,9 +566,7 @@ function client_ack_timeout(tim, rb, msg, msgid)
     end
 
     if haskey(rb.out, msgid)
-        lock(rb.out[msgid]) do
-            notify(rb.out[msgid])
-        end
+        put!(rb.out[msgid], nothing)
     end
 end
 
@@ -576,16 +574,14 @@ function transport_send(rb::RBConnection, ws, msg::PubSubMsg)
     content = tagvalue_if_dataframe(msg.data)
     if (msg.flags & ACK_FLAG) == ACK_FLAG
         msgid = id()
-        ack_cond = Threads.Condition()
+        ack_cond = Distributed.Future()
         rb.out[msgid] = ack_cond
         rb.acktimer[msgid] = Timer((tim) -> client_ack_timeout(
                 tim, rb, msg, msgid
             ), ACK_WAIT_TIME)
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
         transport_write(ws, pkt)
-        lock(ack_cond) do
-            wait(ack_cond)
-        end
+        fetch(ack_cond)
         close(rb.acktimer[msgid])
         delete!(rb.acktimer, msgid)
         delete!(rb.out, msgid)

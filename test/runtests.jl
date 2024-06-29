@@ -144,6 +144,11 @@ const GROUP = get(ENV, "GROUP", "all")
             include("integration/test_forever.jl")
         end
     end
+    if GROUP == "all" || GROUP == "future"
+        @time @safetestset "future" begin
+            include("future/test_future.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "supervised_api" begin
             include("api/test_supervised_api.jl")

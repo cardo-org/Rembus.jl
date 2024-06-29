@@ -6,6 +6,8 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 module Rembus
 
+import Distributed
+
 using ArgParse
 using Arrow
 using Base64
@@ -54,6 +56,8 @@ export expose, unexpose
 export subscribe, unsubscribe
 export direct
 export rpc
+export rpc_future
+export fetch_response
 export publish
 export reactive, unreactive
 export enable_ack, disable_ack
@@ -130,7 +134,7 @@ mutable struct RBConnection <: RBHandle
     client::Component
     receiver::Dict{String,Function}
     subinfo::Dict{String,Bool}
-    out::Dict{UInt128,Threads.Condition}
+    out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
     RBConnection(name::String) = new(
@@ -1210,12 +1214,8 @@ function handle_input(rb, msg)
             # prevent requests timeouts because when jit compiling
             # notify() may be called before wait()
             yield()
-            lock(rb.out[msg.id]) do
-                notify(rb.out[msg.id], msg)
-            end
-            #while notify(rb.out[msg.id], msg) == 0
-            #    sleep(0.001)
-            #end
+            put!(rb.out[msg.id], msg)
+            delete!(rb.out, msg.id)
         else
             # it is a response without a waiting Condition
             if msg.status == STS_CHALLENGE
@@ -2176,6 +2176,29 @@ function rpc(rb::RBHandle, topic::AbstractString, data=[];
     rpcreq(rb, RpcReqMsg(topic, data), exceptionerror=exceptionerror, timeout=timeout)
 end
 
+function rpc_future(rb::RBHandle, topic::AbstractString, data=[];
+    exceptionerror=true, timeout=request_timeout())
+    rpcreq(
+        rb,
+        RpcReqMsg(topic, data),
+        exceptionerror=exceptionerror,
+        timeout=timeout,
+        wait=false
+    )
+end
+
+function fetch_response(f::Distributed.Future)
+    response = fetch(f)
+    if response.status == STS_SUCCESS
+        return response.data
+    else
+        rembuserror(
+            true, # raise an exception
+            code=response.status,
+            reason=response.data)
+    end
+end
+
 function direct(
     rb::RBHandle, target::AbstractString, topic::AbstractString, data=nothing;
     exceptionerror=true
@@ -2183,16 +2206,14 @@ function direct(
     return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
 end
 
-function response_timeout(condition::Threads.Condition, msg::RembusMsg)
+function response_timeout(condition::Distributed.Future, msg::RembusMsg)
     if hasproperty(msg, :topic)
         descr = "[$(msg.topic)]: request timeout"
     else
         descr = "[$msg]: request timeout"
     end
 
-    lock(condition) do
-        notify(condition, RembusTimeout(descr), error=false)
-    end
+    put!(condition, RembusTimeout(descr))
 
     return nothing
 end
@@ -2207,24 +2228,28 @@ function response_or_timeout(rb::RBHandle, msg::RembusMsg, timeout)
     return response
 end
 
+function send_request(rb::RBHandle, msg::RembusMsg)
+    mid::UInt128 = msg.id
+    resp_cond = Distributed.Future()
+    rb.out[mid] = resp_cond
+    put!(rb.msgch, msg)
+    return resp_cond
+end
+
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
-    mid::UInt128 = msg.id
-    resp_cond = Threads.Condition()
-    rb.out[mid] = resp_cond
+    resp_cond = send_request(rb, msg)
     t = Timer((tim) -> response_timeout(resp_cond, msg), timeout)
-    put!(rb.msgch, msg)
-    lock(resp_cond)
-    res = wait(resp_cond)
-    unlock(resp_cond)
+    res = fetch(resp_cond)
     close(t)
-    delete!(rb.out, mid)
     return res
 end
 
 # Send a RpcReqMsg message to rembus and return the response.
-function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_timeout())
-    outcome = nothing
+function rpcreq(
+    handle::RBHandle, msg;
+    exceptionerror=true, timeout=request_timeout(), wait=true
+)
     !isconnected(handle) && error("connection is down")
 
     if isa(handle, RBPool)
@@ -2239,7 +2264,16 @@ function rpcreq(handle::RBHandle, msg; exceptionerror=true, timeout=request_time
         rb = handle
     end
 
-    response = wait_response(rb, msg, timeout)
+    if wait
+        response = wait_response(rb, msg, timeout)
+        return get_response(rb, msg, response, exceptionerror=exceptionerror)
+    else
+        return send_request(rb, msg)
+    end
+end
+
+function get_response(rb, msg, response; exceptionerror=true)
+    outcome = nothing
     if isa(response, RembusTimeout)
         outcome = response
         if exceptionerror
