@@ -40,7 +40,7 @@ To get back all published announcements invoke the RPC service `all_announcement
 df = @rpc all_announcements()
 ```
 
-Oh yes! The returned value is a `DataFrame`.
+The returned value is a `DataFrame`.
 
 Below there are some more details just for exposing the core concepts of Rembus.
 
@@ -111,7 +111,7 @@ end
 
 ```
 
-## data_hierarchy.jl
+## hierarchy_broker.jl
 
 This example shows how to extends the broker with custom logic.
 
@@ -121,7 +121,7 @@ a topic expression language on the same lines of [zenoh](https://zenoh.io/docs/m
 Start the broker:
 
 ```shell
-> j examples/data_hierarchy.jl
+> j examples/hierarchy_broker.jl
 ```
 
 Start a component that uses a topic expression to subscribe to a space of topics:
@@ -155,4 +155,37 @@ publish(rb, "b/b/c", "NOT RECEIVED")
 # The sealed topic
 publish(rb, "a/@v1/c", "NOT RECEIVED")
 
+```
+
+## rocket.jl
+
+This simple example show how to integrate Rembus with
+[Rocket](https://github.com/ReactiveBayes/Rocket.jl), a reactive extensions library for Julia.
+
+The integration is easily obtained using the `@shared` macro: the first argument of method to be
+subscribed to `my_topic` is a `Subject` object.
+
+The method body simply consists in a `next!()` call: feeding the value received from the topic
+to the Subject make it observabled to all actors subscribed to the Subject.
+
+```julia
+function my_topic(subject, n)
+    next!(subject, n)
+end
+
+subject = Subject(Number)
+@shared subject
+
+@subscribe my_topic before_now
+
+```
+
+For example a function actor may be used to publish a message to topic `alarm`
+if the value received from `my_topic` is greater then 100:
+
+```julia
+subscribe!(
+    subject |> filter((n) -> n > 100),
+    (n) -> @publish alarm("critical value: $n")
+)
 ```
