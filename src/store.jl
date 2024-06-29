@@ -122,7 +122,7 @@ function save_table(router, router_tbl, filename)
 end
 
 function save_impl_table(router)
-    @debug "saving impls table"
+    @debug "saving exposers table"
     save_table(router, router.topic_impls, "exposers.json")
 end
 
@@ -175,7 +175,7 @@ end
 isregistered(router, cid::AbstractString) = isfile(key_file(router, cid))
 
 function load_impl_table(router)
-    @debug "loading impls table"
+    @debug "loading exposers table"
     fn = joinpath(broker_dir(router), "exposers.json")
     if isfile(fn)
         content = read(fn, String)
@@ -221,6 +221,7 @@ end
 Instantiates twins that subscribed to one or more topics.
 =#
 function load_twins(router)
+    @debug "loading subscribers table"
     fn = joinpath(broker_dir(router), "subscribers.json")
     if isfile(fn)
         content = read(fn, String)
@@ -248,30 +249,6 @@ function load_twins(router)
     for (topic, twins) in twins
         router.topic_interests[topic] = twins
     end
-
-    #    twins_dir = joinpath(CONFIG.db, "twins")
-    #    if isdir(twins_dir)
-    #        # each twin has a file with status and setting data
-    #        twin_dirs = readdir(twins_dir, join=true)
-    #        for twin_dir in twin_dirs
-    #            try
-    #                @debug "loading twin [$twin_dir]"
-    #                if isdir(twin_dir)
-    #                    tid = basename(twin_dir)
-    #
-    #                    # delete the unknown twin
-    #                    if !haskey(router.id_twin, tid)
-    #                        @info "deleting [$twin_dir]: unknown twin [$tid]"
-    #                        rm(twin_dir, recursive=true)
-    #                        continue
-    #                    end
-    #                end
-    #            catch e
-    #                @error "[$twin_dir] load failed: $e"
-    #            end
-    #        end
-    #    end
-
 end
 
 #=
@@ -284,6 +261,7 @@ Save twins configuration only if twin has a name.
 Persist undelivered messages if they are queued in memory.
 =#
 function save_twins(router)
+    @debug "saving subscribers table"
     twin_cfg = Dict{String,Dict{String,Bool}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
