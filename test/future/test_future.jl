@@ -10,8 +10,7 @@ function run()
     @test response == Rembus.VERSION
 
     future = rpc_future(rb, "unknow_service")
-    #@test_throws RpcMethodNotFound fetch_response(future)
-    fetch_response(future)
+    @test_throws RembusError fetch_response(future)
 
     close(rb)
 end

@@ -2192,10 +2192,7 @@ function fetch_response(f::Distributed.Future)
     if response.status == STS_SUCCESS
         return response.data
     else
-        rembuserror(
-            true, # raise an exception
-            code=response.status,
-            reason=response.data)
+        throw(RembusError(code=response.status, reason=response.data))
     end
 end
 
