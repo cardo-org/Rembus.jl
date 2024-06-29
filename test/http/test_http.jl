@@ -31,10 +31,26 @@ function run()
     @info "[test_http] POST response=$(body(response))"
     @test body(response) === nothing
 
-
     response = HTTP.get("http://localhost:9000/myservice", [], JSON3.write([x, y]))
     @info "[test_http] GET response=$(body(response))"
     @test body(response) == 3
+
+    response = HTTP.post("http://localhost:9000/subscribe/foo/c1")
+    @test body(response) === nothing
+    @test response.status === Int16(200)
+
+    response = HTTP.post("http://localhost:9000/unsubscribe/foo/c1")
+    @test body(response) === nothing
+    @test response.status === Int16(200)
+
+    response = HTTP.post("http://localhost:9000/expose/foo/c1")
+    @test body(response) === nothing
+    @test response.status === Int16(200)
+
+    response = HTTP.post("http://localhost:9000/unexpose/foo/c1")
+    @test body(response) === nothing
+    @test response.status === Int16(200)
+
     @terminate
 end
 

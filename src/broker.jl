@@ -1418,6 +1418,38 @@ function authenticate_admin(router::Router, req::HTTP.Request)
     return cid
 end
 
+function command(router::Router, req::HTTP.Request, cmd::Dict)
+    sts = 403
+    cid = HTTP.getparams(req)["cid"]
+    topic = HTTP.getparams(req)["topic"]
+    twin = create_twin(cid, router)
+    twin.hasname = true
+    twin.socket = Condition()
+    msg = AdminReqMsg(topic, cmd)
+    admin_msg(router, twin, msg)
+    response = wait(twin.socket)
+    if response.status == 0
+        sts = 200
+    end
+    return HTTP.Response(sts, [])
+end
+
+function http_subscribe(router::Router, req::HTTP.Request)
+    return command(router, req, Dict(COMMAND => SUBSCRIBE_CMD))
+end
+
+function http_unsubscribe(router::Router, req::HTTP.Request)
+    return command(router, req, Dict(COMMAND => UNSUBSCRIBE_CMD))
+end
+
+function http_expose(router::Router, req::HTTP.Request)
+    return command(router, req, Dict(COMMAND => EXPOSE_CMD))
+end
+
+function http_unexpose(router::Router, req::HTTP.Request)
+    return command(router, req, Dict(COMMAND => UNEXPOSE_CMD))
+end
+
 function http_publish(router::Router, req::HTTP.Request)
     try
         cid = authenticate(router, req)
@@ -1545,7 +1577,31 @@ function serve_http(td, router, port, issecure=false)
     # rpc
     HTTP.register!(http_router, "GET", "{topic}", req -> http_rpc(router, req))
     # admin
-    HTTP.register!(http_router, "GET", "admin/{cmd}", req -> http_admin_command(router, req))
+    HTTP.register!(http_router,
+        "GET", "admin/{cmd}",
+        req -> http_admin_command(router, req)
+    )
+
+    HTTP.register!(http_router,
+        "POST",
+        "subscribe/{topic}/{cid}",
+        req -> http_subscribe(router, req)
+    )
+    HTTP.register!(http_router,
+        "POST",
+        "unsubscribe/{topic}/{cid}",
+        req -> http_unsubscribe(router, req)
+    )
+    HTTP.register!(http_router,
+        "POST",
+        "expose/{topic}/{cid}",
+        req -> http_expose(router, req)
+    )
+    HTTP.register!(http_router,
+        "POST",
+        "unexpose/{topic}/{cid}",
+        req -> http_unexpose(router, req)
+    )
 
     HTTP.register!(
         http_router,
