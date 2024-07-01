@@ -172,3 +172,5 @@ for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
         publish_api(publisher, sub1, waittime=waittime)
     end
 end
+
+response = HTTP.get("http://localhost:9000/version", [])

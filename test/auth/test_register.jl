@@ -70,22 +70,6 @@ function run(url)
     @test basename(fname) === cmp.id
 end
 
-function run_embedded()
-    try
-        rb = server()
-        serve(rb, name=BROKER_NAME, wait=false)
-        sleep(1)
-        client = connect(cid)
-        close(client)
-    catch e
-        @error "run_embedded: $e"
-        @test false
-    finally
-        shutdown()
-    end
-
-end
-
 function unregister(url)
     client = tryconnect(url)
 
@@ -140,7 +124,6 @@ try
     url = "zmq://:8002/$cid"
     execute(() -> run(url), "test_register", setup=setup)
     @info "[test_authenticated_embedded] start"
-    run_embedded()
     execute(() -> unregister(url), "test_unregister", setup=setup)
 
     url = cid

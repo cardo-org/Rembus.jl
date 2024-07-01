@@ -83,15 +83,17 @@ mutable struct Embedded <: AbstractRouter
     context::Any
     process::Visor.Supervisor
     ws_server::Sockets.TCPServer
+    owners::DataFrame
+    component_owner::DataFrame
     Embedded(context=nothing) = new(Dict(), Dict(), context)
 end
 
 """
-    server()
+    server(ctx=nothing)
 
-Initialize an server server for brokerless rpc and one way pub/sub.
+Initialize a server for brokerless rpc and one way pub/sub.
 """
-server() = Embedded()
+server(ctx=nothing) = Embedded(ctx)
 
 mutable struct Router <: AbstractRouter
     start_ts::Float64
@@ -387,7 +389,7 @@ function attestation(router::Embedded, twin, msg)
     reason = nothing
     try
         login(router, twin, msg)
-        @debug "[$(msg.cid)] is authenticated"
+        twin.id = msg.cid
         twin.hasname = true
         twin.isauth = true
     catch e
@@ -436,6 +438,11 @@ function register(router, twin, msg)
         sts = STS_NAME_ALREADY_TAKEN
         reason = "name $(msg.cid) not available for registration"
     else
+        kdir = keys_dir(router)
+        if !isdir(kdir)
+            mkdir(kdir)
+        end
+
         save_pubkey(router, msg.cid, msg.pubkey)
         if !(msg.cid in router.component_owner.component)
             push!(router.component_owner, [msg.userid, msg.cid])
@@ -1178,13 +1185,31 @@ end
 Start an embedded server and accept connections.
 """
 function serve(
-    server::Embedded, port=parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000")),
-    ; wait=true, name="server", secure=false
+    server::Embedded; wait=true, args=Dict()
 )
+    if isempty(args)
+        args = command_line()
+    end
+
+    provide(server, "version", (ctx, cmp) -> VERSION)
+
+    name = get(args, "name", "server")
+    port = get(args, "ws", nothing)
+    if port === nothing
+        port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+    end
+
+    secure = get(args, "secure", false)
+
     embedded_sv = from(name)
+
     if embedded_sv === nothing
         # first server process
         setup(CONFIG)
+        if haskey(args, "debug") && args["debug"] === true
+            CONFIG.debug = true
+        end
+
         init_log()
         tasks = [
             supervisor("twins", terminateif=:shutdown),
@@ -1196,7 +1221,7 @@ function serve(
                 stop_waiting_after=2.0
             ),
         ]
-        sv = supervise(
+        supervise(
             [supervisor(name, tasks, strategy=:one_for_one)],
             intensity=5,
             wait=wait
@@ -1213,6 +1238,8 @@ function serve(
         Visor.start(p)
     end
     server.process = from(name)
+    server.owners = load_owners(server)
+    server.component_owner = load_token_app(server)
     return nothing
 end
 
@@ -1308,6 +1335,10 @@ function client_receiver(router::Embedded, ws)
                 rpc_request(router, twin, msg)
             elseif isa(msg, PubSubMsg)
                 pubsub_msg(router, twin, msg)
+            elseif isa(msg, Register)
+                register(router, twin, msg)
+            elseif isa(msg, Unregister)
+                unregister(router, twin, msg)
             elseif isa(msg, IdentityMsg)
                 auth_twin = identity_check(router, twin, msg, paging=false)
                 if auth_twin !== nothing
@@ -1315,6 +1346,8 @@ function client_receiver(router::Embedded, ws)
                 end
             elseif isa(msg, Attestation)
                 twin = attestation(router, twin, msg)
+                # update Visor process id
+                twin.process.id = msg.cid
             end
         catch e
             receiver_exception(router, twin, e)
@@ -1454,7 +1487,11 @@ function http_publish(router::Router, req::HTTP.Request)
     try
         cid = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
-        content = JSON3.read(req.body, Any)
+        if isempty(req.body)
+            content = []
+        else
+            content = JSON3.read(req.body, Any)
+        end
         twin = create_twin(cid, router)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
@@ -1469,7 +1506,11 @@ function http_rpc(router::Router, req::HTTP.Request)
     try
         cid = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
-        content = JSON3.read(req.body, Any)
+        if isempty(req.body)
+            content = []
+        else
+            content = JSON3.read(req.body, Any)
+        end
         twin = create_twin(cid, router)
         twin.socket = Condition()
         msg = RpcReqMsg(topic, content)
@@ -1565,6 +1606,14 @@ function http_unauthorize(router::Router, req::HTTP.Request)
         Dict(COMMAND => UNAUTHORIZE_CMD, CID => HTTP.getparams(req)["cid"]),
         topic
     )
+end
+
+function body(response::HTTP.Response)
+    if isempty(response.body)
+        return nothing
+    else
+        return JSON3.read(response.body, Any)
+    end
 end
 
 function serve_http(td, router, port, issecure=false)
@@ -1961,7 +2010,11 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
         if isa(msg.data, ZMQ.Message)
             payload = msg.data
         else
-            payload = decode(msg.data)
+            if isa(msg.data, Base.GenericIOBuffer)
+                payload = dataframe_if_tagvalue(decode(msg.data))
+            else
+                payload = msg.data
+            end
         end
         try
             result = router.topic_function[msg.topic](router.context, twin, getargs(payload)...)

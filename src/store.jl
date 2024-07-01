@@ -87,6 +87,7 @@ function save_token_app(router, df)
 end
 
 broker_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id)
+broker_dir(router::Embedded) = joinpath(CONFIG.root_dir, router.process.id)
 broker_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name)
 
 keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(router), "keystore"))
@@ -95,6 +96,7 @@ twins_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.
 twins_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "twins")
 
 keys_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys")
+keys_dir(router::Embedded) = joinpath(CONFIG.root_dir, router.process.id, "keys")
 keys_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "keys")
 
 function key_file(router::Router, cid::AbstractString)

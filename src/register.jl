@@ -77,7 +77,7 @@ end
 
 Unregister the client identified by `cid`.
 
-The secret pin is not needed because only an already connected and authtenticated
+The secret pin is not needed because only an already connected and authenticated
 component may execute the unregister command.
 """
 function unregister(rb, cid::AbstractString)
@@ -85,7 +85,9 @@ function unregister(rb, cid::AbstractString)
 
     msg = Unregister(cid)
     response = wait_response(rb, msg, request_timeout())
-    if (response.status != STS_SUCCESS)
+    if isa(response, RembusTimeout)
+        throw(response)
+    elseif (response.status != STS_SUCCESS)
         rembuserror(code=response.status)
     end
 
