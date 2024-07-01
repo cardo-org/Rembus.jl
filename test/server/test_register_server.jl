@@ -35,6 +35,11 @@ function run()
     @test rpc(rb, "version") == Rembus.VERSION
 
     Rembus.unregister(rb, cid)
+
+    ENV["REMBUS_TIMEOUT"] = 0
+    @test_throws RembusTimeout Rembus.unregister(rb, cid)
+    delete!(ENV, "REMBUS_TIMEOUT")
+
     @test !isfile(keyfn)
 
     close(rb)
