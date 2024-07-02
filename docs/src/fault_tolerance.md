@@ -3,8 +3,9 @@
 Beside struggling to provide a simple and lean API one of the main points of Rembus is
 its ability to be fault-tolerant respect to networks and application failures.
 
-The [Supervised API](@ref) provide an automatic reconnection policy in case of network
-faults and try at the best to guarantee message delivery when faults happen.
+The [Macro-based API](@ref) and the [`component`](./api.md#component) method provide
+an automatic reconnection policy in case of network faults and try at the best to
+guarantee message delivery when faults happen.
 
 This mean that the following RPC service will run forever and it will reconnect
 automatically in case of network failures or broker unavailability.

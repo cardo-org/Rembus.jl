@@ -2020,6 +2020,13 @@ function unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
     return unexpose(rb, string(fn), exceptionerror=exceptionerror)
 end
 
+"""
+    private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+
+Set the `topic` to private.
+
+The component must have the admin role for changing the privateness level.
+"""
 function private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => PRIVATE_TOPIC_CMD)),
@@ -2027,6 +2034,13 @@ function private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     )
 end
 
+"""
+    public_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+
+Set the `topic` to public.
+
+The component must have the admin role for changing the privateness level.
+"""
 function public_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => PUBLIC_TOPIC_CMD)),
@@ -2034,6 +2048,16 @@ function public_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     )
 end
 
+"""
+    function authorize(
+        rb::RBHandle, client::AbstractString, topic::AbstractString;
+        exceptionerror=true
+    )
+
+Authorize the `client` component to use the private `topic`.
+
+The component must have the admin role for granting topic accessibility.
+"""
 function authorize(
     rb::RBHandle, client::AbstractString, topic::AbstractString;
     exceptionerror=true
@@ -2044,6 +2068,16 @@ function authorize(
     )
 end
 
+"""
+    function unauthorize(
+        rb::RBHandle, client::AbstractString, topic::AbstractString;
+        exceptionerror=true
+    )
+
+Revoke authorization to the `client` component for use of the private `topic`.
+
+The component must have the admin role for revoking topic accessibility.
+"""
 function unauthorize(
     rb::RBHandle, client::AbstractString, topic::AbstractString;
     exceptionerror=true
@@ -2281,8 +2315,6 @@ function get_response(rb, msg, response; exceptionerror=true)
         outcome = response.data
     elseif response.status == STS_CHALLENGE
         @async resend_attestate(rb, response)
-    elseif (response.status == STS_SHUTDOWN)
-        outcome = "shutting down"
     else
         topic = nothing
         if isa(msg, RembusTopicMsg)

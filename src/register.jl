@@ -73,14 +73,22 @@ end
 
 
 """
-  unregister(cid::AbstractString)
+    unregister(rb)
 
-Unregister the client identified by `cid`.
+Unregister the connected component.
 
-The secret pin is not needed because only an already connected and authenticated
-component may execute the unregister command.
+Only a connected and authenticated component may execute the unregister command.
+
+```
+using Rembus
+
+rb = connect("authenticated_component")
+Rembus.unregister(rb)
+close(rb)
+```
 """
-function unregister(rb, cid::AbstractString)
+function unregister(rb::RBConnection)
+    cid = rb.client.id
     @debug "unregistering $cid"
 
     msg = Unregister(cid)

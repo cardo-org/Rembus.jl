@@ -6,10 +6,9 @@ The broker setup is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
-|`BROKER_DIR`|\$HOME/.config/caronte | Root dir for configuration files and cached messages to be delivered to offline components opting for retroactive mode|
 |`BROKER_WS_PORT`|8000|default port for serving WebSocket protocol|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
-|`REMBUS_KEYSTORE`|\$BROKER\_DIR/keystore| Directory of broker certificate `caronte.crt` and broker secret key `caronte.key`|
+|`REMBUS_KEYSTORE`|\$HOME/.config/caronte/keystore| Directory of broker certificate `caronte.crt` and broker secret key `caronte.key`|
 
 ## Component environment variables
 
@@ -17,7 +16,6 @@ A Rembus component is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
-|`REMBUS_DIR`|\$HOME/.config/rembus| Root dir for component configuration files|
 |`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
 |`REMBUS_TIMEOUT`|5| Maximum number of seconds waiting for rpc responses|
@@ -25,10 +23,10 @@ A Rembus component is affected by the following environment variables.
 
 ## Broker configuration files
 
-The directory `BROKER_DIR` contains broker settings and secret materials.
+The directory `$HOME/.config/caronte` contains broker settings and secret materials.
 
 ```sh
-> cd $BROKER_DIR
+> cd ~/.config/caronte
 > tree .
 
 .
@@ -51,7 +49,15 @@ where `foo` and `bar` files are named after component names.
 
 In case the component are offline the undelivered messages are temporarly persisted into `twins/bar` and `/twins/foo` files.
 
-### Admin privileges
+### Secret material for authenticated components
+
+The "secret" files under the `keys` directory contain the secret material used to authenticate the component named as the file.
+
+The "secret" file may contain a RSA public key or a shared password string.
+
+To create the RSA key pairs and send the public key to the broker the [`Rembus.register`](@ref) method may be employed.
+
+### Components with admin privilege
 
 `admins.json` contains the list of components that have the admin role.
 The element of this list are component names.
@@ -60,6 +66,10 @@ The element of this list are component names.
 > cat admins.json
 ["foo", "bar"]
 ```
+A component with admin privilege may change the privateness level of topics and authorize other components
+to bind to private topics.
+
+See [`private_topic`](@ref), [`public_topic`](@ref), [`authorize`](@ref), [`unauthorize`](@ref) for details.
 
 ### RPC exposers
 
@@ -100,7 +110,7 @@ assert if the topic is retroactive:
 `mycomponent` is subscribed to `mytopic1` and `mytopic2` topics, and `mytopic1` is retroactive,
 namely when it connects it wants to receive messages published when it was offline.
 
-For declaring retroactiveness with [Supervised API](@ref) use the option `before_now`:
+For declaring retroactiveness with [Macro-based API](@ref) use the option `before_now`:
 
 ```julia
 @subscribe mytopic1 before_now
@@ -123,7 +133,7 @@ asserts then only components `myconsumer` and `myproducer` are allowed to bind t
 
 ### Users allowed to register components
 
-Authenticated components may be provisioned with the `register` API method.
+Authenticated components may be provisioned with the [`Rembus.register`](@ref) method.
 
 ```julia
 register(component_name, uid, pin)
@@ -134,8 +144,8 @@ register(component_name, uid, pin)
 ```text
 > cat owners.csv 
 pin,uid,name,enabled
-482dc7eb,paperoga@topolinia.com,Fethry Duck,false
-58e26283,paperino@topolinia.com,Donald Fauntleroy Duck,false
+482dc7eb,paperoga@topolinia.com,Fethry Duck,true
+58e26283,paperino@topolinia.com,Donald Fauntleroy Duck,true
 ```
 
 The `pin` column is the PIN token needed for registration, `uid` column is the username,

@@ -1224,7 +1224,7 @@ function serve(
         supervise(
             [supervisor(name, tasks, strategy=:one_for_one)],
             intensity=5,
-            wait=wait
+            wait=false
         )
     else
         p = process(
@@ -1240,6 +1240,10 @@ function serve(
     server.process = from(name)
     server.owners = load_owners(server)
     server.component_owner = load_token_app(server)
+    if wait
+        supervise()
+    end
+
     return nothing
 end
 

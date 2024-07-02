@@ -5,7 +5,7 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-const VERSION = "0.2.1"
+const VERSION = "0.3.0"
 
 #const Rembus.CONFIG = Rembus.Settings()
 
@@ -92,7 +92,6 @@ const STS_TARGET_NOT_FOUND::UInt8 = 45
 const STS_TARGET_DOWN::UInt8 = 46
 const STS_UNKNOWN_ADMIN_CMD::UInt8 = 47
 const STS_NAME_ALREADY_TAKEN::UInt8 = 60
-const STS_SHUTDOWN::UInt8 = 100
 
 # Rembus timeout
 const STS_TIMEOUT::UInt8 = 70

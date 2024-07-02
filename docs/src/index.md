@@ -48,7 +48,7 @@ exec julia --threads auto --color=no -e "include(popfirst!(ARGS))" \
 =#
 using Rembus
 
-Rembus.caronte()
+caronte()
 ```
 
 `caronte` starts by default a WebSocket server listening on port 8000,
@@ -56,16 +56,17 @@ for enabling `tcp` and/or `zmq` transports use the appropriate arguments:
 
 ```text
 shell> ./caronte
-usage: caronte [-r] [-s] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
+usage: caronte [-r] [-s] [-p HTTP] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
 
 optional arguments:
-  -r, --reset    factory reset, clean up broker configuration
-  -s, --secure   accept wss and tls connections
-  -w, --ws WS    accept WebSocket clients on port WS (type: UInt16)
-  -t, --tcp TCP  accept tcp clients on port TCP (type: UInt16)
-  -z, --zmq ZMQ  accept zmq clients on port ZMQ (type: UInt16)
-  -d, --debug    enable debug logs
-  -h, --help     show this help message and exit
+  -r, --reset      factory reset, clean up broker configuration
+  -s, --secure     accept wss and tls connections
+  -p, --http HTTP  accept HTTP clients on port HTTP (type: UInt16)
+  -w, --ws WS      accept WebSocket clients on port WS (type: UInt16)
+  -t, --tcp TCP    accept tcp clients on port TCP (type: UInt16)
+  -z, --zmq ZMQ    accept zmq clients on port ZMQ (type: UInt16)
+  -d, --debug      enable debug logs
+  -h, --help       show this help message and exit
 ```
 
 See [Broker environment variables](@ref) for customizing the runtime setting.  
@@ -98,7 +99,7 @@ An `Authenticated` component is a named component that own a private key or a sh
 
 Only authenticated components may use Pub/Sub private topics and private RPC methods.
 
-An URL string defines the identity and the connection parameters of a component. The [Supervised API](./supervised_api.md#component) page documents the URL format.
+An URL string defines the identity and the connection parameters of a component. The [Macro-based API](./macro_api.md#component) page documents the URL format.
 
 ## Index
 

@@ -34,10 +34,10 @@ function run()
 
     @test rpc(rb, "version") == Rembus.VERSION
 
-    Rembus.unregister(rb, cid)
+    Rembus.unregister(rb)
 
     ENV["REMBUS_TIMEOUT"] = 0
-    @test_throws RembusTimeout Rembus.unregister(rb, cid)
+    @test_throws RembusTimeout Rembus.unregister(rb)
     delete!(ENV, "REMBUS_TIMEOUT")
 
     @test !isfile(keyfn)

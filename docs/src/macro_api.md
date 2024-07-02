@@ -1,6 +1,7 @@
-# Supervised API
+# Macro-based API
 
-The supervised API uses the metaprogramming features of Julia and provides something similar to a simple language extension.
+The supervised API uses the metaprogramming features of Julia and provides
+an high level interface that make easy to integrate distributed components.
 
 The goal of this API is to make easy developing robust and fault-tolerant distributed applications.
 

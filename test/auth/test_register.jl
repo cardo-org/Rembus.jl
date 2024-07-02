@@ -71,18 +71,21 @@ function run(url)
 end
 
 function unregister(url)
-    client = tryconnect(url)
+    client = tryconnect("zmq://:8002/wrong_cid")
 
     try
-        Rembus.unregister(client, "wrong_cid")
+        Rembus.unregister(client)
         @test false
     catch e
         @info "[test_register#7] unregister expected error: $e"
         @test true
+    finally
+        close(client)
     end
 
+    client = tryconnect(url)
     try
-        Rembus.unregister(client, cid)
+        Rembus.unregister(client)
 
         df = Rembus.load_token_app(BROKER_NAME)
 
@@ -104,7 +107,7 @@ function unregister(url)
 
     client = tryconnect("public_component")
     try
-        Rembus.unregister(client, "some_cid")
+        Rembus.unregister(client)
         @test false
     catch e
         @info "[test_register#10] unregister expected error: $e"

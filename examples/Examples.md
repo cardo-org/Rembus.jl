@@ -189,3 +189,46 @@ subscribe!(
     (n) -> @publish alarm("critical value: $n")
 )
 ```
+
+## server.jl
+
+Rembus may be used in a simpler client-server architecture. Instead of using a broker
+a server accepting connections may be setup with these lines:
+
+```julia
+    rb = server(Ctx(2))
+    
+    # declare exposed methods
+    provide(rb, power)
+    provide(rb, set_exponent)
+    
+    serve(rb, wait=true)
+```
+
+The exposed method have the following signature:
+
+```julia
+function power(ctx, component, df::DataFrame)
+    df.y = df.x .^ ctx.exponent
+    return df
+end
+```
+
+Where:
+
+- `ctx` is a state value used by the `server` constructor and shared
+between all provided methods.
+- `component` is the client component twin object.
+
+The `component` value is useful when the method is made available only to
+authenticated components, for example:
+
+```julia
+function power(ctx, component, df::DataFrame)
+    isauthenticated(component)  || error("unauthorized")
+    df.y = df.x .^ ctx.exponent
+    return df
+end
+
+```
+

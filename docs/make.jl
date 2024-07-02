@@ -27,9 +27,10 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Supervised API" => "supervised_api.md",
-        "Unsupervised API" => "unsupervised_api.md",
-        "Brokerless" => "brokerless.md",
+        "Component API" => "api.md",
+        "Macro-based API" => "macro_api.md",
+        "HTTP Rest API" => "http_api.md",
+        "Client-Server" => "brokerless.md",
         "Fault-tolerance features" => "fault_tolerance.md",
         "Security" => "security.md",
         "Configuration" => "configuration.md",

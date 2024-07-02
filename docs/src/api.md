@@ -1,10 +1,14 @@
-# Unsupervised API
+# Rembus API
 
-This API does not provide automatic reconnection in case of network
-failures, if this happen the exception must be handled explicitly by the application.
+This API provides both approaches to connection handling:
 
-The unsupervised API functions:
+- automatic reconnection in case of network failures
+- exception throwing in case of network errors and reconnection explicitly
+  managed by the application.
 
+Rembus API functions:
+
+- [component](#component)
 - [connect](#connect)
 - [expose](#expose)
 - [unexpose](#unexpose)
@@ -17,19 +21,32 @@ The unsupervised API functions:
 - [forever](#forever)
 - [shared](#shared)
 - [close](#close)
+- [terminate](#terminate)
+
+## component
+
+Connect to the broker and return a Visor process handle used by the other APIs for exchanging data and commands.
+
+In case of connection lost the underlying supervision logic attempts to reconnect
+to the broker until it succeed.
+
+```julia
+rb = component("ws://hostname:8000/mycomponent")
+```
+
+The [Macro-based API](./macro_api.md#component) page documents the URL format.
 
 ## connect
 
 Connect to the broker and return a connection handle used by the other APIs for exchanging data and commands.
 
-The URL string passed to `connect` contains the address of a broker, the transport protocol, the port and
-optionally a persistent unique name for the component.
+The URL string passed to `connect` contains the address of a broker, the transport protocol, the port and optionally a persistent unique name for the component.
 
 ```julia
 rb = connect("ws://hostname:8000/mycomponent")
 ```
 
-The [Supervised API](./supervised_api.md#component) page documents the URL format.
+The [Macro-based API](./macro_api.md#component) page documents the URL format.
 
 ## expose
 
@@ -49,11 +66,11 @@ end
 expose(rb, myservice)
 ```
 
-The exposed function will became available to RPC clients using the [`@rpc`](#rpc) macro.
+The exposed function will became available to RPC clients using the [`@rpc`](./macro_api.md#rpc) macro or the [`rpc`](#rpc) function.
 
 ## unexpose
 
-Stop serving remote requests with [`@rpc`](#rpc) requests.
+Stop serving remote requests via [`rpc`](#rpc) or [`@rpc`](./macro_api.md#rpc).
 
 ```julia
 unexpose(rb, myservice)
@@ -64,15 +81,32 @@ unexpose(rb, myservice)
 Request a remote method and wait for a response.
 
 ```julia
-response = rpc(rb, "myservice", Dict("name"=>"foo", "tickets"=>3))
+response = rpc(rb, "my_service", Dict("name"=>"foo", "tickets"=>3))
 ```
 
-The service name and the arguments are transported to the remote site and `myservice` method expecting a `Dict` as argument is executed. 
+The service name and the arguments are CBOR-encoded and transported to
+the remote site and the method `my_service` that expects a `Dict` as argument is called. 
 
-The return value of `myservice` is transported back to the RPC client calling site
-and `rpc` returns.
+The return value of `my_service` is transported back to the RPC client calling site
+and taken as the return value of `rpc`.
 
 If the remote method throws an Exception then the local RPC client will throw either an Exception reporting the reason of the remote error.
+
+If the exposed method expects many arguments send an array of values, where
+each value is an argument:
+
+```julia
+# exposer side
+function my_service(x,y,z)
+    @assert x == 1
+    @assert y == 2
+    @assert z == 3
+    return x+y+z
+end
+
+# rpc client side
+rpc(rb, "my_service", [1, 2, 3])
+```
 
 ## subscribe
 
@@ -108,9 +142,12 @@ forever() # or until Ctrl-C
 > **NOTE** By design messages are not persisted until a component declares
 interest for a topic. In other words the persistence feature for a topic is enabled at the time of first subscription. If is important not to loose any message the rule is subscribe first and publish after.
 
+The subscribed function will be called each time a component produce a message with the[`@publish`](./macro_api.md#publish) macro or the [`publish`](#publish) function.
+
 ## unsubscribe
 
-Stop the function to receive messages produced with [`publish`](#publish).
+Stop the function to receive messages produced with [`publish`](#publish) or
+[`@publish`](./macro_api.md#publish).
 
 ```julia
 unsubscribe(rb, myservice)
@@ -128,6 +165,23 @@ publish(rb, "metric", Dict("name"=>"trento/castello", "var"=>"T", "value"=>21.0)
 close(rb)
 ```
 
+`metric` is the message topic and the `Dict` value is the message content.
+
+If the subscribed method expects many arguments send an array of values, where
+each value is an argument:
+
+```julia
+# subscriber side
+function my_topic(x,y,z)
+    @assert x == 1
+    @assert y == 2
+    @assert z == 3
+end
+
+# publisher side
+publish(rb, "my_topic", [1, 2, 3])
+```
+
 ## reactive
 
 Enable the reception of published messages from subscribed topics.
@@ -138,7 +192,7 @@ reactive(rb)
 
 Reactiveness is a property of a component and is applied to all subscribed topics.
 
-By default a component starts with reactive mode enabled.
+The [`forever`](#forever) function starts the loop that listen for published messages and by default the reactive mode is enabled.
 
 ## unreactive
 
@@ -150,8 +204,7 @@ unreactive(rb)
 
 ## forever
 
-Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods. Wait forever for rpc
-requests or pub/sub messages.
+Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods. Wait forever for rpc requests or pub/sub messages.
 
 By default `forever` enable component reactiveness, see [reactive](#reactive).
 
@@ -159,7 +212,7 @@ By default `forever` enable component reactiveness, see [reactive](#reactive).
 
 `shared` is handy when a state must be shared between the subscribed methods, the exposed methods and the application.
 
-Using a shared state implies that an additional argument must be passed to the methods.
+Using a shared state implies that an additional argument is passed to the subscribed/exposed methods.
 
 For convention the first argument of a method that [subscribe](#subscribe) or
 [expose](#expose) is the state object. 
@@ -215,3 +268,17 @@ Close the network connection.
 ```julia
 close(rb)
 ```
+
+> NOTE: `close` applies to connections setup by [`connect`](#connect) api.
+
+
+## terminate
+
+Close the network connection and shutdown the supervised process associated with the
+component.   
+
+```julia
+terminate(rb)
+```
+
+> NOTE: `terminate` applies to connections setup by [`component`](#component) api.
