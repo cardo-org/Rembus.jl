@@ -30,13 +30,13 @@ function start_server()
     provide(emb, rpc_service)
     provide(emb, rpc_fault)
     provide(emb, signal)
-    serve(emb, wait=false, args=Dict("debug" => true))
+    serve(emb, wait=true, args=Dict("debug" => true))
 end
 
 
 function run()
     try
-        start_server()
+        @async start_server()
         sleep(2)
         result = @rpc rpc_service(1, 2)
         @test result == 3

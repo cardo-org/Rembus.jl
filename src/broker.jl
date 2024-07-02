@@ -467,9 +467,6 @@ function unregister(router, twin, msg)
     if !twin.isauth
         sts = STS_GENERIC_ERROR
         reason = "invalid operation"
-    elseif twin.id != msg.cid
-        sts = STS_GENERIC_ERROR
-        reason = "invalid cid"
     else
         remove_pubkey(router, msg.cid)
         deleteat!(router.component_owner, router.component_owner.component .== msg.cid)

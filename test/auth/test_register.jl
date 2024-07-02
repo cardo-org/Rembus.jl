@@ -126,7 +126,6 @@ setup() = init(uid, pin)
 try
     url = "zmq://:8002/$cid"
     execute(() -> run(url), "test_register", setup=setup)
-    @info "[test_authenticated_embedded] start"
     execute(() -> unregister(url), "test_unregister", setup=setup)
 
     url = cid
