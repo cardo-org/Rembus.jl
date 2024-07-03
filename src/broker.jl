@@ -1452,20 +1452,23 @@ function authenticate_admin(router::Router, req::HTTP.Request)
     return cid
 end
 
+function http_admin_msg(router, twin, msg)
+    admin_res = admin_command(router, twin, msg)
+    @debug "http admin response: $admin_res"
+    return admin_res
+end
+
 function command(router::Router, req::HTTP.Request, cmd::Dict)
     sts = 403
     cid = HTTP.getparams(req)["cid"]
     topic = HTTP.getparams(req)["topic"]
     twin = create_twin(cid, router)
     twin.hasname = true
-    twin.socket = Condition()
     msg = AdminReqMsg(topic, cmd)
-    admin_msg(router, twin, msg)
-    response = wait(twin.socket)
+    response = http_admin_msg(router, twin, msg)
     if response.status == 0
         sts = 200
     end
-    destroy_twin(twin, router)
     return HTTP.Response(sts, [])
 end
 
@@ -1497,7 +1500,7 @@ function http_publish(router::Router, req::HTTP.Request)
         twin = create_twin(cid, router)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
-        destroy_twin(twin, router)
+        Visor.shutdown(twin.process)
         return HTTP.Response(200, [])
     catch e
         @error "http::publish: $e"
@@ -1514,32 +1517,36 @@ function http_rpc(router::Router, req::HTTP.Request)
         else
             content = JSON3.read(req.body, Any)
         end
-        twin = create_twin(cid, router)
-        twin.socket = Condition()
-        msg = RpcReqMsg(topic, content)
-        rpc_request(router, twin, msg)
-        response = wait(twin.socket)
-        if isa(response.data, IOBuffer)
-            retval = decode(response.data)
+        if haskey(router.id_twin, cid)
+            error("component $cid not available for rpc via http")
         else
-            retval = response.data
-        end
+            twin = create_twin(cid, router)
+            twin.socket = Condition()
+            msg = RpcReqMsg(topic, content)
+            rpc_request(router, twin, msg)
+            response = wait(twin.socket)
+            if isa(response.data, IOBuffer)
+                retval = decode(response.data)
+            else
+                retval = response.data
+            end
 
-        if response.status == 0
-            sts = 200
-        else
-            sts = 403
-        end
+            if response.status == 0
+                sts = 200
+            else
+                sts = 403
+            end
 
-        destroy_twin(twin, router)
-        return HTTP.Response(
-            sts,
-            ["Content_type" => "application/json"],
-            JSON3.write(retval)
-        )
+            Visor.shutdown(twin.process)
+            return HTTP.Response(
+                sts,
+                ["Content_type" => "application/json"],
+                JSON3.write(retval)
+            )
+        end
     catch e
         @error "http::rpc: $e"
-        return HTTP.Response(403, [])
+        return HTTP.Response(404, [])
     end
 end
 
@@ -1549,11 +1556,9 @@ function http_admin_command(
     try
         cid = authenticate_admin(router, req)
         twin = create_twin(cid, router)
-        twin.socket = Condition()
         msg = AdminReqMsg(topic, cmd)
-        admin_msg(router, twin, msg)
-        response = wait(twin.socket)
-        destroy_twin(twin, router)
+        response = http_admin_msg(router, twin, msg)
+        Visor.shutdown(twin.process)
         if response.status === STS_SUCCESS
             if response.data !== nothing
                 return HTTP.Response(200, JSON3.write(response.data))

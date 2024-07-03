@@ -1,6 +1,8 @@
 include("../utils.jl")
 
-# tests: 10
+using Base64
+
+# tests: 11
 
 function mytopic(x, y)
     @info "[test_http] mytopic($x,$y)"
@@ -52,6 +54,14 @@ function run()
     response = HTTP.post("http://localhost:9000/unexpose/foo/c1")
     @test Rembus.body(response) === nothing
     @test response.status === Int16(200)
+
+    # It is not permitted to use a name of a connected component
+    # with HTTP rest api
+    auth = Base64.base64encode("myapp")
+    @test_throws HTTP.Exceptions.StatusError HTTP.get(
+        "http://localhost:9000/version",
+        ["Authorization" => auth]
+    )
 
     @terminate
 end
