@@ -4,13 +4,36 @@ To play with the examples gets the required dependencies:
 
 ```shell
 > alias j='julia --project=. --startup-file=no'
+> cd examples
 > j -e 'using Pkg; Pkg.instantiate()'
 ```
 
 and then starts a broker application:
 
 ```shell
-> j 'using Rembus; caronte()' 
+> j -e 'using Rembus; caronte()' 
+```
+
+## greeter.jl
+
+This is the "hello world" example for Rembus.
+
+A server component that implements the method `say_hello` that expects
+a name and reply with a greeting:
+
+```julia
+using Rembus
+
+@expose say_hello(name) = "hello loving $name"
+@forever
+```
+
+A client component that invoke `say_hello`
+
+```julia
+using Rembus
+
+println(@rpc say_hello("Julia"))
 ```
 
 ## subscriber.jl
@@ -87,11 +110,13 @@ function announcement(username, post)
 end
 ```
 
-What remain to do is elevate such julia method as a consumer of the topic `announcement`
-using the macro `@subscribe`:
+What remain to do is declare the method as a consumer of the topic `announcement`
+using the macro `@subscribe` and wait for messages with `@forever`:
 
 ```julia
 @subscribe announcement
+
+@forever
 ```
 
 The full code for this minimal `organizer` component that you can run in a REPL is then:
@@ -108,7 +133,6 @@ end
 @subscribe announcement
 
 @forever
-
 ```
 
 ## hierarchy_broker.jl
@@ -121,7 +145,7 @@ a topic expression language on the same lines of [zenoh](https://zenoh.io/docs/m
 Start the broker:
 
 ```shell
-> j examples/hierarchy_broker.jl
+> j hierarchy_broker.jl
 ```
 
 Start a component that uses a topic expression to subscribe to a space of topics:
@@ -168,32 +192,70 @@ subscribed to `my_topic` is a `Subject` object.
 The method body simply consists in a `next!()` call: feeding the value received from the topic
 to the Subject make it observabled to all actors subscribed to the Subject.
 
-```julia
-function my_topic(subject, n)
-    next!(subject, n)
-end
-
-subject = Subject(Number)
-@shared subject
-
-@subscribe my_topic before_now
-
-```
-
 For example a function actor may be used to publish a message to topic `alarm`
 if the value received from `my_topic` is greater then 100:
 
 ```julia
+function my_topic(actor, n)
+    next!(actor, n)
+end
+
+subject = Subject(Number)
+
+keeper = keep(Number)
+
+# send an alarm if the number published on value is greater than 100
 subscribe!(
     subject |> filter((n) -> n > 100),
     (n) -> @publish alarm("critical value: $n")
 )
+
+subscribe!(subject, keeper)
+subscribe!(subject, logger())
+
+@component "rocket"
+@shared subject
+@subscribe my_topic before_now
+@forever
+```
+
+To see in action, start the subscriber in a REPL:
+
+```shell
+terminal_1> j -i rocket.jl
+```
+
+the REPL may be useful inspecting all the messaging received using the subscribed
+`KeepActor`:
+
+```julia
+getvalues(keeper)
+```
+
+Start another process to listen for alarms:
+
+```shell
+terminal_2> j -e 'using Rembus; @subscribe alarm(msg) = @info msg; @forever'
+```
+
+In another REPL publish messages:
+
+```julia
+terminal_3> j
+using Rembus
+
+# no alarm is produced
+@publish my_topic(50)
+
+# above threshold, an alarm message is published
+@publish my_topic(150)
 ```
 
 ## server.jl
 
-Rembus may be used in a simpler client-server architecture. Instead of using a broker
-a server accepting connections may be setup with these lines:
+Rembus may be used in a simpler client-server architecture, without a broker.
+
+A server accepting connections may be setup with these lines:
 
 ```julia
     rb = server(Ctx(2))
@@ -216,11 +278,11 @@ end
 
 Where:
 
-- `ctx` is a state value used by the `server` constructor and shared
+- `ctx` is a state value passed to the `server` constructor and shared
 between all provided methods.
-- `component` is the client component twin object.
+- `component` is an object representing the component that made the request.
 
-The `component` value is useful when the method is made available only to
+The `component` value is useful when the method has to be available only to
 authenticated components, for example:
 
 ```julia
@@ -229,6 +291,5 @@ function power(ctx, component, df::DataFrame)
     df.y = df.x .^ ctx.exponent
     return df
 end
-
 ```
 

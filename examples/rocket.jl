@@ -9,20 +9,15 @@ terminal> j -i rocket.jl
 Send numbers with a publisher component:
 
 using Rembus
-@publish value(1)
+@publish my_topic(1)
 
 =#
-
-@component "rocket"
 
 function my_topic(actor, n)
     next!(actor, n)
 end
 
 subject = Subject(Number)
-@shared subject
-
-@subscribe my_topic before_now
 
 keeper = keep(Number)
 
@@ -35,4 +30,7 @@ subscribe!(
 subscribe!(subject, keeper)
 subscribe!(subject, logger())
 
+@component "rocket"
+@shared subject
+@subscribe my_topic before_now
 @forever

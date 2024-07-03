@@ -51,6 +51,9 @@ The GET HTTP method used to make RPC requests has the following url template:
 
 GET `http[s]://broker_host:port/{method_name}`
 
+A RPC uses a GET verb because GET is used by default to request data
+from the server.
+
 The body of the request is the JSON formatted list of arguments expected by the remote method or a JSON formatted value if the remote method expect a single argument.
 
 The return value is JSON encoded in the response body.
@@ -93,6 +96,9 @@ The RPC GET method returns a HTTP status success 200 and the returned value in t
 The POST HTTP method used to publish a message has the following url template:
 
 POST `http[s]://broker_host:port/{method_name}`
+
+The POST verb is used for Pub/Sub because by default its scope it is to send data
+to the server.
 
 The body of the request is the JSON formatted list of arguments expected by the remote method or a JSON formatted value if the remote method expect a single argument, as in the case of RPC
 method.

@@ -43,4 +43,4 @@ all_announcements(ann_db) = return ann_db.df
 @expose all_announcements
 
 # await forever for client requests or Ctrl-C termination command.
-forever()
+@forever
