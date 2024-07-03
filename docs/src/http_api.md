@@ -13,20 +13,20 @@ bin/caronte --http port
 
 ### No Auth and Basic Auth APIs
 
-- GET  http[s]://broker_host:port/{method_name}
-- POST http[s]://broker_host:port/{method_name}
-- POST  http[s]://broker_host:port/subscribe/{topic}/{cid}
-- POST  http[s]://broker_host:port/unsubscribe/{topic}/{cid}
-- POST  http[s]://broker_host:port/expose/{topic}/{cid}
-- POST  http[s]://broker_host:port/unexpose/{topic}/{cid}
+- GET   `http[s]://broker_host:port/{method_name}`
+- POST  `http[s]://broker_host:port/{method_name}`
+- POST  `http[s]://broker_host:port/subscribe/{topic}/{cid}`
+- POST  `http[s]://broker_host:port/unsubscribe/{topic}/{cid}`
+- POST  `http[s]://broker_host:port/expose/{topic}/{cid}`
+- POST  `http[s]://broker_host:port/unexpose/{topic}/{cid}`
 
 ### Basic Auth APIs
 
-- GET   https://broker_host:port/admin/{command}
-- POST  https://broker_host:port/private_topic/{topic}
-- POST  https://broker_host:port/public_topic/{topic}
-- POST  https://broker_host:port/authorize/{cid}/{topic}
-- POST  https://broker_host:port/unauthorize/{cid}/{topic}
+- GET   `https://broker_host:port/admin/{command}`
+- POST  `https://broker_host:port/private_topic/{topic}`
+- POST  `https://broker_host:port/public_topic/{topic}`
+- POST  `https://broker_host:port/authorize/{cid}/{topic}`
+- POST  `https://broker_host:port/unauthorize/{cid}/{topic}`
 
 Basic-Auth is required to invoke a REST endpoint that requires client authentication:
 
