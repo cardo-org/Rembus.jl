@@ -1465,6 +1465,7 @@ function command(router::Router, req::HTTP.Request, cmd::Dict)
     if response.status == 0
         sts = 200
     end
+    destroy_twin(twin, router)
     return HTTP.Response(sts, [])
 end
 
@@ -1496,6 +1497,7 @@ function http_publish(router::Router, req::HTTP.Request)
         twin = create_twin(cid, router)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
+        destroy_twin(twin, router)
         return HTTP.Response(200, [])
     catch e
         @error "http::publish: $e"
@@ -1522,12 +1524,14 @@ function http_rpc(router::Router, req::HTTP.Request)
         else
             retval = response.data
         end
+
         if response.status == 0
             sts = 200
         else
             sts = 403
         end
 
+        destroy_twin(twin, router)
         return HTTP.Response(
             sts,
             ["Content_type" => "application/json"],
@@ -1549,6 +1553,7 @@ function http_admin_command(
         msg = AdminReqMsg(topic, cmd)
         admin_msg(router, twin, msg)
         response = wait(twin.socket)
+        destroy_twin(twin, router)
         if response.status === STS_SUCCESS
             if response.data !== nothing
                 return HTTP.Response(200, JSON3.write(response.data))
@@ -1684,7 +1689,9 @@ function serve_http(td, router, port, issecure=false)
             sslconfig = secure_config(router)
         end
 
-        router.http_server = HTTP.serve!(http_router, ip"0.0.0.0", port, sslconfig=sslconfig)
+        router.http_server = HTTP.serve!(
+            http_router, ip"0.0.0.0", port, sslconfig=sslconfig
+        )
         for msg in td.inbox
             if isshutdown(msg)
                 break
