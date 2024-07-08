@@ -78,6 +78,7 @@ struct SentData
 end
 
 mutable struct Embedded <: AbstractRouter
+    start_ts::Float64
     topic_function::Dict{String,Function}
     id_twin::Dict{String,Twin}
     context::Any
@@ -85,7 +86,7 @@ mutable struct Embedded <: AbstractRouter
     ws_server::Sockets.TCPServer
     owners::DataFrame
     component_owner::DataFrame
-    Embedded(context=nothing) = new(Dict(), Dict(), context)
+    Embedded(context=nothing) = new(time(), Dict(), Dict(), context)
 end
 
 """
@@ -122,7 +123,7 @@ mutable struct Router <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
-        time(),
+        NaN,
         Dict(),
         Dict(),
         Dict(),
@@ -1709,8 +1710,16 @@ function serve_http(td, router, port, issecure=false)
     end
 end
 
+function router_ready(router)
+    while isnan(router.start_ts)
+        sleep(0.05)
+    end
+end
+
 function serve_ws(td, router, port, issecure=false)
     @debug "[serve_ws] starting"
+    router_ready(router)
+
     sslconfig = nothing
     try
         if issecure
@@ -1738,6 +1747,7 @@ end
 
 function serve_zeromq(pd, router, port)
     @debug "[serve_zeromq] starting"
+    router_ready(router)
     context = ZMQ.Context()
     router.zmqsocket = Socket(context, ROUTER)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
@@ -1762,6 +1772,7 @@ function serve_zeromq(pd, router, port)
 end
 
 function serve_tcp(pd, router, caronte_port, issecure=false)
+    router_ready(router)
     proto = "tcp"
     server = nothing
     try

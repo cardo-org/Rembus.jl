@@ -420,6 +420,8 @@ function load_configuration(router)
         router.owners = load_owners(router)
         router.component_owner = load_token_app(router)
     end
+
+    router.start_ts = time()
 end
 
 #=
