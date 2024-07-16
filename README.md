@@ -40,7 +40,6 @@ end
 @expose myservice
 
 # Serve forever until Ctrl-C 
-# in REPL @forever is not needed
 @forever
 ```
 
@@ -67,7 +66,6 @@ end
 @subscribe mytopic
 
 # Receive messages forever until Ctrl-C 
-# in REPL @forever is not needed
 @forever
 ```
 
