@@ -158,6 +158,32 @@ function types()
     @terminate TYPE_LISTENER
 end
 
+function mymethod(ctx, rb, n)
+    return n + 1
+end
+
+function mytopic(ctx, rb, n)
+    nothing
+end
+
+function broker_server()
+    srv = server()
+    expose(srv, mymethod)
+    subscribe(srv, mytopic)
+    serve(srv, wait=false, args=Dict("ws" => 10000))
+
+    p = from("caronte.broker")
+    router = p.args[1]
+
+    add_server(router, "ws://:10000/s1")
+    sleep(3)
+
+    cli = connect()
+    rpc(cli, "mymethod", 1)
+    publish(cli, "mytopic", 1)
+    close(cli)
+end
+
 @rpc version()
 @rpc uptime()
 @terminate
@@ -172,5 +198,7 @@ for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
         publish_api(publisher, sub1, waittime=waittime)
     end
 end
+
+broker_server()
 
 response = HTTP.get("http://localhost:9000/version", [])

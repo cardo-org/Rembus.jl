@@ -73,6 +73,7 @@ export forever
 export terminate
 
 # broker api
+export add_server
 export caronte, session, republish, msg_payload
 
 export RembusError
@@ -80,7 +81,7 @@ export RembusTimeout
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
 
-struct Component
+mutable struct Component
     id::String
     protocol::Symbol
     host::String
@@ -169,11 +170,56 @@ function Base.show(io::IO, rb::RBConnection)
     return print(io, "client [$(rb.client.id)], isconnected: $(isconnected(rb))")
 end
 
+abstract type AbstractRouter end
+
+mutable struct Embedded <: AbstractRouter
+    start_ts::Float64
+    topic_function::Dict{String,Function}
+    subinfo::Dict{String,Bool}
+    id_twin::Dict
+    context::Any
+    process::Visor.Supervisor
+    ws_server::Sockets.TCPServer
+    owners::DataFrame
+    component_owner::DataFrame
+    Embedded(context=nothing) = new(time(), Dict(), Dict(), Dict(), context)
+end
+
+mutable struct RBServerConnection <: RBHandle
+    router::Embedded
+    session::Dict{String,Any}
+    socket::Any
+    msgch::Channel
+    reactive::Bool
+    client::Component
+    isauth::Bool
+    out::Dict{UInt128,Distributed.Future}
+    acktimer::Dict{UInt128,Timer}
+    context::Union{Nothing,ZMQ.Context}
+    RBServerConnection(server::Embedded, name::String) = new(
+        server,
+        Dict(),
+        nothing,
+        Channel(MESSAGE_CHANNEL_SZ),
+        true, # reactive
+        Component(name),
+        false,
+        Dict(),
+        Dict(),
+        nothing
+    )
+end
+
+function Base.show(io::IO, rb::RBServerConnection)
+    return print(io, "srv component [$(rb.client.id)], isconnected: $(isconnected(rb))")
+end
+
 mutable struct RBPool <: RBHandle
     last_invoked::Dict{String,Int} # topic => index of last used connection
     connections::Vector{RBConnection}
     RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
 end
+
 
 include("constants.jl")
 include("configuration.jl")
@@ -967,12 +1013,23 @@ struct EnableAck
     status::Bool
 end
 
-function provide(server::Embedded, name::AbstractString, func::Function)
+#=
+Provide an exposed server method.
+=#
+function expose(server::Embedded, name::AbstractString, func::Function)
     server.topic_function[name] = func
 end
 
-provide(server::Embedded, func::Function) = provide(server, string(func), func)
+expose(server::Embedded, func::Function) = expose(server, string(func), func)
 
+function subscribe(
+    server::Embedded, name::AbstractString, func::Function, retroactive=false
+)
+    server.topic_function[name] = func
+    server.subinfo[name] = retroactive
+end
+
+subscribe(server::Embedded, func::Function) = subscribe(server, string(func), func)
 
 """
     shared(rb::RBHandle, ctx)
@@ -1100,13 +1157,113 @@ function rembus_task(pd, rb, protocol=:ws)
     end
 end
 
+#=
+The process task related to a connection initited by the other side,
+a client or a broker.
+=#
+function connection_task(pd, rb, protocol=:ws)
+    try
+        @debug "starting rembus process: $pd, protocol:$protocol"
+
+        bind(pd, rb)
+        if last_error.msg !== nothing
+            @info "[$pd] reconnected"
+            last_error.msg = nothing
+        end
+
+        for msg in pd.inbox
+            @debug "[$pd] recv: $msg"
+            if isshutdown(msg)
+                return
+            elseif isa(msg, Exception)
+                throw(msg)
+            elseif isrequest(msg)
+                req = msg.request
+                if isa(req, SetHolder)
+                    result = shared(rb, msg.request.shared)
+                elseif isa(req, AddImpl)
+                    result = expose(
+                        rb, msg.request.topic, msg.request.fn, exceptionerror=false
+                    )
+                elseif isa(req, RemoveImpl)
+                    result = unexpose(rb, msg.request.fn, exceptionerror=false)
+                elseif isa(req, AddInterest)
+                    result = subscribe(
+                        rb,
+                        msg.request.topic,
+                        msg.request.fn,
+                        msg.request.retroactive,
+                        exceptionerror=false
+                    )
+                elseif isa(req, RemoveInterest)
+                    result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
+                elseif isa(req, EnableAck)
+                    if req.status
+                        result = enable_ack(rb, exceptionerror=false)
+                    else
+                        result = disable_ack(rb, exceptionerror=false)
+                    end
+                elseif isa(req, Reactive)
+                    if req.status
+                        result = reactive(rb, exceptionerror=false)
+                    else
+                        result = unreactive(rb, exceptionerror=false)
+                    end
+                else
+                    result = rpc(
+                        rb, msg.request.topic, msg.request.data, exceptionerror=false
+                    )
+                end
+                reply(msg, result)
+            else
+                publish(rb, msg.topic, msg.data)
+            end
+        end
+    catch e
+        if isa(e, AlreadyConnected)
+            @error "[$(e.cid)] already connected"
+            Rembus.CONFIG.cid = "rembus"
+            return
+        end
+
+        if isa(e, HTTP.Exceptions.ConnectError)
+            msg = "[$pd]: $(e.url) connection error"
+        else
+            msg = "[$pd] component: $e"
+        end
+
+        if last_error.msg !== msg
+            @error msg
+            last_error.msg = msg
+        end
+        showerror(stdout, e, catch_backtrace())
+        @showerror e
+
+        if isa(e, HTTP.Exceptions.ConnectError) &&
+           isa(e.error.ex, HTTP.OpenSSL.OpenSSLError)
+            @info "unrecoverable error $(e.error.ex): stop connection retry"
+        else
+            rethrow()
+        end
+    finally
+        @debug "[$pd]: terminating"
+        close(rb)
+    end
+end
+
 mutable struct NullProcess <: Visor.Supervised
     id::String
     inbox::Channel
     NullProcess(id) = new(id, Channel(1))
 end
 
-add_receiver(ctx, method_name, impl) = ctx.receiver[method_name] = impl
+add_receiver(rb::RBConnection, method_name, impl) = rb.receiver[method_name] = impl
+
+add_receiver(
+    rb::RBServerConnection,
+    method_name,
+    impl
+) = rb.router.topic_function[method_name] = impl
 
 remove_receiver(ctx, method_name) = delete!(ctx.receiver, method_name)
 
@@ -1140,6 +1297,14 @@ function invoke(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
     end
 end
 
+function invoke(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
+    if isa(msg.data, Vector)
+        return STS_SUCCESS, rb.router.topic_function[topic](rb.router.context, rb, msg.data...)
+    else
+        return STS_SUCCESS, rb.router.topic_function[topic](rb.router.context, rb, msg.data)
+    end
+end
+
 #=
     invoke_latest(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
 
@@ -1160,6 +1325,20 @@ function invoke_latest(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
         else
             return STS_SUCCESS, Base.invokelatest(rb.receiver[topic], rb.shared, msg.data)
         end
+    end
+end
+
+function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
+    if isa(msg.data, Vector)
+        return (
+            STS_SUCCESS, Base.invokelatest(
+                rb.router.topic_function[topic], rb.router.context, rb, msg.data...
+            )
+        )
+    else
+        return STS_SUCCESS, Base.invokelatest(
+            rb.router.topic_function[topic], rb.router.context, rb, msg.data
+        )
     end
 end
 
@@ -1184,7 +1363,19 @@ function invoke_glob(rb::RBConnection, msg::RembusMsg)
     end
 end
 
-function rembus_handler(rb, msg, receiver)
+function invoke_glob(rb::RBServerConnection, msg::RembusMsg)
+    if isa(msg.data, Vector)
+        return STS_SUCCESS, rb.router.topic_function["*"](
+            rb.router.context, rb, msg.topic, msg.data...
+        )
+    else
+        return STS_SUCCESS, rb.router.topic_function["*"](
+            rb.router.context, rb, msg.topic, msg.data
+        )
+    end
+end
+
+function rembus_handler(rb::RBConnection, msg, receiver)
     fn::String = msg.topic
     if haskey(rb.receiver, fn)
         try
@@ -1194,6 +1385,28 @@ function rembus_handler(rb, msg, receiver)
             return STS_METHOD_EXCEPTION, string(e)
         end
     elseif haskey(rb.receiver, "*")
+        try
+            invoke_glob(rb, msg)
+        catch e
+            @error "glob subscriber: $e"
+        finally
+            return STS_SUCCESS, nothing
+        end
+    else
+        return STS_METHOD_NOT_FOUND, "method $fn not found"
+    end
+end
+
+function rembus_handler(rb::RBServerConnection, msg, receiver)
+    fn::String = msg.topic
+    if haskey(rb.router.topic_function, fn)
+        try
+            return receiver(rb, fn, msg)
+        catch e
+            @showerror e
+            return STS_METHOD_EXCEPTION, string(e)
+        end
+    elseif haskey(rb.router.topic_function, "*")
         try
             invoke_glob(rb, msg)
         catch e
@@ -1224,6 +1437,9 @@ function handle_input(rb, msg)
                 @warn "ignoring response: $msg"
             end
         end
+    elseif isa(msg, AdminReqMsg)
+        # currently ignore the message and return a success response
+        put!(rb.msgch, ResMsg(msg.id, STS_SUCCESS, nothing))
     else
         if isinteractive()
             sts, result = rembus_handler(rb, msg, invoke_latest)
@@ -1291,9 +1507,6 @@ function read_socket(socket, process, rb, isconnected::Condition)
         yield()
         # signal to the initiator function _connect that the connection is up.
         notify(isconnected)
-        #while notify(isconnected) == 0
-        #    sleep(0.001)
-        #end
 
         @async keep_alive(rb.socket)
         while isopen(socket)
@@ -1316,8 +1529,57 @@ function read_socket(socket, process, rb, isconnected::Condition)
     end
 end
 
-function write_task(rb::RBConnection)
+#=
+Read from a component that is a server.
+=#
+function read_socket(socket, process, rb)
+    try
+        # @async keep_alive(rb.socket)
+        while isopen(socket)
+            response = transport_read(socket)
+            if !isempty(response)
+                ### parse_msg(rb, response)
+                ## TBD
+                msg = connected_socket_load(response)
 
+                if isa(msg, IdentityMsg)
+                    cmp = identity_check(rb.router, rb, msg, paging=true)
+                    if cmp !== nothing
+                        setname(process, msg.cid)
+                    end
+                elseif isa(msg, Attestation)
+                    sts = attestation(rb.router, rb, msg)
+                    if sts === STS_SUCCESS
+                        setname(process, msg.cid)
+                    end
+                elseif isa(msg, Register)
+                    response = register(rb.router, msg)
+                    put!(rb.msgch, response)
+                elseif isa(msg, Unregister)
+                    response = unregister(rb.router, rb, msg)
+                    put!(rb.msgch, response)
+                else
+                    handle_input(rb, msg)
+                end
+            else
+                @debug "[$(rb.client.id)] connection closed"
+                close(socket)
+            end
+        end
+    catch e
+        @info "[$(rb.client.id)] connection closed: $e"
+        if !isa(e, HTTP.WebSockets.WebSocketError) ||
+           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
+           e.message.status != 1000
+            @showerror e
+            processput!(process, e)
+        end
+    finally
+        shutdown(process)
+    end
+end
+
+function write_task(rb::RBHandle)
     try
         for msg in rb.msgch
             if isa(msg, CloseConnection)
@@ -1553,6 +1815,35 @@ function _connect(rb, process)
     return rb
 end
 
+function _bind(rb, process)
+    # manage reconnections events
+    if !isopen(rb.msgch)
+        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
+    end
+
+    if rb.client.protocol === :ws || rb.client.protocol === :wss
+        #### isconnected = Condition()
+        #### t = Timer((tim) -> connect_timeout(rb, isconnected), connect_request_timeout())
+        #### @async ws_connect(rb, process, isconnected)
+        #### wait(isconnected)
+        #### close(t)
+        #### @async read_socket(socket, process, rb)
+    elseif rb.client.protocol === :tcp || rb.client.protocol === :tls
+        #### isconnected = Condition()
+        #### @async tcp_connect(rb, process, isconnected)
+        #### wait(isconnected)
+    elseif rb.client.protocol === :zmq
+        #### zmq_connect(rb)
+    else
+        throw(ErrorException(
+            "wrong protocol $(rb.client.protocol): must be tcp|tls|zmq|ws|wss"
+        ))
+    end
+
+    @async write_task(rb)
+    return rb
+end
+
 function ping(socket)
     try
         WebSockets.ping(socket)
@@ -1701,6 +1992,26 @@ function connect(process::Visor.Supervised, rb::RBHandle)
     return rb
 end
 
+function bind(process::Visor.Supervised, rb::RBServerConnection)
+    _bind(rb, process)
+    ## authenticate(rb)
+    # register again callbacks
+    server = rb.router
+    for (name, fn) in server.topic_function
+        if haskey(server.subinfo, name)
+            subscribe(rb, name, fn, server.subinfo[name], exceptionerror=false)
+        else
+            expose(rb, name, fn, exceptionerror=false)
+        end
+    end
+
+    if rb.reactive
+        reactive(rb)
+    end
+
+    return rb
+end
+
 function connect(rb::RBPool)
     for c in rb.connections
         try
@@ -1739,7 +2050,7 @@ function Base.close(rb::RBPool)
     end
 end
 
-function Base.close(rb::RBConnection)
+function Base.close(rb::RBHandle)
     if rb.socket !== nothing
         # connection is established
         put!(rb.msgch, CloseConnection())
@@ -1873,11 +2184,22 @@ If `retroactive` is `true` then `rb` component will receive messages published w
 offline.
 """
 function subscribe(
-    rb::RBHandle, topic::AbstractString, fn::Function, retroactive::Bool=false;
+    rb::RBConnection, topic::AbstractString, fn::Function, retroactive::Bool=false;
     exceptionerror=true
 )
     add_receiver(rb, topic, fn)
     rb.subinfo[topic] = retroactive
+    return rpcreq(rb,
+        AdminReqMsg(topic, Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => retroactive)),
+        exceptionerror=exceptionerror
+    )
+end
+
+function subscribe(
+    rb::RBServerConnection, topic::AbstractString, fn::Function, retroactive::Bool=false;
+    exceptionerror=true
+)
+    ### add_receiver(rb, topic, fn)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => retroactive)),
         exceptionerror=exceptionerror
@@ -2388,7 +2710,13 @@ end
     @compile_workload begin
         sv = Rembus.caronte(
             wait=false,
-            args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002, "http" => 9000)
+            args=Dict(
+                "ws" => 8000,
+                "tcp" => 8001,
+                "zmq" => 8002,
+                "http" => 9000,
+                "reset" => true
+            )
         )
         yield()
         Rembus.islistening(20)

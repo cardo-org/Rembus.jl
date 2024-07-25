@@ -9,7 +9,7 @@ myservice2(ctx, session, x) = x * x
 
 function start_server(port, fn)
     emb = server()
-    provide(emb, "myservice", fn)
+    expose(emb, "myservice", fn)
     serve(emb, wait=false, args=Dict("ws" => port))
 end
 

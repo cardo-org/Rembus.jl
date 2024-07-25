@@ -50,6 +50,33 @@ function load_owners(router)
     end
 end
 
+
+#=
+    load_servers(router)
+
+Load from disk the servers to connect.
+=#
+function load_servers(router)
+    fn = joinpath(broker_dir(router), "servers.csv")
+    if isfile(fn)
+        content = read(fn, String)
+        components = JSON3.read(content, Set{String})
+        for cmp in components
+            add_server(router, cmp)
+        end
+    else
+        router.servers = Set()
+    end
+
+end
+
+function save_servers(router)
+    fn = joinpath(broker_dir(router), "servers.csv")
+    open(fn, "w") do io
+        write(io, JSON3.write(router.servers))
+    end
+end
+
 #=
     save_owners(owners_df)
 

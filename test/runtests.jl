@@ -64,6 +64,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "server" begin
             include("server/test_server.jl")
         end
+        @time @safetestset "broker_server" begin
+            include("server/test_broker_server.jl")
+        end
+        @time @safetestset "loopback" begin
+            include("server/test_loopback.jl")
+        end
         @time @safetestset "register_server" begin
             include("server/test_register_server.jl")
         end

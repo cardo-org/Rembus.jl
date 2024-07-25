@@ -11,8 +11,6 @@ struct EnableReactiveMsg
     id::UInt128
 end
 
-abstract type AbstractRouter end
-
 mutable struct Pager
     io::Union{Nothing,IOBuffer}
     ts::Int # epoch time
@@ -77,18 +75,6 @@ struct SentData
     request::Msg
 end
 
-mutable struct Embedded <: AbstractRouter
-    start_ts::Float64
-    topic_function::Dict{String,Function}
-    id_twin::Dict{String,Twin}
-    context::Any
-    process::Visor.Supervisor
-    ws_server::Sockets.TCPServer
-    owners::DataFrame
-    component_owner::DataFrame
-    Embedded(context=nothing) = new(time(), Dict(), Dict(), context)
-end
-
 """
     server(ctx=nothing)
 
@@ -98,6 +84,7 @@ server(ctx=nothing) = Embedded(ctx)
 
 mutable struct Router <: AbstractRouter
     start_ts::Float64
+    servers::Set{String}
     address2twin::Dict{Vector{UInt8},Twin} # zeromq address => twin
     twin2address::Dict{String,Vector{UInt8}} # twin id => zeromq address
     mid2address::Dict{UInt128,Vector{UInt8}} # message.id => zeromq connection address
@@ -124,6 +111,7 @@ mutable struct Router <: AbstractRouter
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
         NaN,
+        Set(),
         Dict(),
         Dict(),
         Dict(),
@@ -186,6 +174,8 @@ twin_finalize(ctx, twin) = (ctx, twin) -> ()
 Base.isopen(c::Condition) = true
 
 offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
+
+offline(::RBServerConnection) = false
 
 session(twin::Twin) = twin.session
 
@@ -340,6 +330,12 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
     return namedtwin
 end
 
+function setidentity(::Embedded, rb::RBServerConnection, msg; isauth=false, paging=true)
+    rb.client.id = msg.cid
+    rb.isauth = isauth
+    return rb
+end
+
 function login(router, twin, msg)
     if haskey(router.topic_function, "login")
         router.topic_function["login"](twin, msg.cid, msg.signature) ||
@@ -384,15 +380,15 @@ function attestation(router, twin, msg, authenticate=true)
     return authtwin
 end
 
-function attestation(router::Embedded, twin, msg)
-    @debug "[$twin] authenticating cid: $(msg.cid)"
+function attestation(router::Embedded, rb::RBServerConnection, msg)
+    @debug "[$rb] authenticating cid: $(msg.cid)"
     sts = STS_SUCCESS
     reason = nothing
     try
-        login(router, twin, msg)
-        twin.id = msg.cid
-        twin.hasname = true
-        twin.isauth = true
+        login(router, rb, msg)
+        ### twin.id = msg.cid
+        ### twin.hasname = true
+        rb.isauth = true
     catch e
         @error "[$(msg.cid)] attestation: $e"
         sts = STS_GENERIC_ERROR
@@ -401,12 +397,12 @@ function attestation(router::Embedded, twin, msg)
 
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    transport_send(twin, twin.socket, response)
+    transport_send(rb, rb.socket, response)
     if sts !== STS_SUCCESS
-        detach(twin)
+        close(rb)
     end
 
-    return twin
+    return sts
 end
 
 function get_token(router, userid, id::UInt128)
@@ -423,12 +419,12 @@ function get_token(router, userid, id::UInt128)
 end
 
 #=
-    register(router, twin, msg)
+    register(router, msg)
 
 Register a component.
 =#
-function register(router, twin, msg)
-    @debug "[$(twin.id)] registering pubkey of $(msg.cid), id: $(msg.id)"
+function register(router, msg)
+    @debug "registering pubkey of $(msg.cid), id: $(msg.id)"
     sts = STS_SUCCESS
     reason = nothing
     token = get_token(router, msg.userid, msg.id)
@@ -450,13 +446,13 @@ function register(router, twin, msg)
         end
         save_token_app(router, router.component_owner)
     end
-    response = ResMsg(msg.id, sts, reason)
-    #@mlog("[$twin] -> $response")
-    put!(twin.process.inbox, response)
+
+    return ResMsg(msg.id, sts, reason)
+    ###put!(twin.process.inbox, response)
 end
 
 #=
-    unregister(twin, msg)
+    unregister(router, twin, msg)
 
 Unregister a component.
 =#
@@ -473,9 +469,8 @@ function unregister(router, twin, msg)
         deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
         save_token_app(router, router.component_owner)
     end
-    response = ResMsg(msg.id, sts, reason)
-    #@mlog("[$twin] -> $response")
-    put!(twin.process.inbox, response)
+    return ResMsg(msg.id, sts, reason)
+    ###put!(twin.process.inbox, response)
 end
 
 function rpc_response(router, twin, msg)
@@ -693,7 +688,8 @@ function twin_receiver(router, twin)
             #@mlog("[$(twin.id)] <- $(prettystr(msg))")
 
             if isa(msg, Unregister)
-                unregister(router, twin, msg)
+                response = unregister(router, twin, msg)
+                put!(twin.process.inbox, response)
             elseif isa(msg, ResMsg)
                 rpc_response(router, twin, msg)
             elseif isa(msg, AdminReqMsg)
@@ -752,7 +748,8 @@ function anonymous_twin_receiver(router, twin)
                     return auth_twin
                 end
             elseif isa(msg, Register)
-                register(router, twin, msg)
+                response = register(router, msg)
+                put!(twin.process.inbox, response)
             elseif isa(msg, Attestation)
                 return attestation(router, twin, msg)
             elseif isa(msg, ResMsg)
@@ -838,9 +835,11 @@ function zeromq_receiver(router::Router)
                     end
                 end
             elseif isa(msg, Register)
-                register(router, twin, msg)
+                response = register(router, msg)
+                put!(twin.process.inbox, response)
             elseif isa(msg, Unregister)
-                unregister(router, twin, msg)
+                response = unregister(router, twin, msg)
+                put!(twin.process.inbox, response)
             elseif isa(msg, Attestation)
                 identity_upgrade(router, twin, msg, id, authenticate=true)
             elseif isa(msg, ResMsg)
@@ -863,6 +862,7 @@ function zeromq_receiver(router::Router)
                 rethrow()
             end
             @warn "[ZMQ] recv error: $e"
+            showerror(stdout, e, catch_backtrace())
             @showerror e
         end
     end
@@ -1165,11 +1165,11 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
         )
     end
 
-    sv = supervise(
+    supervise(
         [supervisor(sv_name, tasks, strategy=:one_for_all, intensity=1)],
         wait=wait
     )
-    return sv
+    return router
 end
 
 function caronted()::Cint
@@ -1189,7 +1189,7 @@ function serve(
         args = command_line()
     end
 
-    provide(server, "version", (ctx, cmp) -> VERSION)
+    expose(server, "version", (ctx, cmp) -> VERSION)
 
     name = get(args, "name", "server")
     port = get(args, "ws", nothing)
@@ -1315,53 +1315,18 @@ function identity_check(router, twin, msg; paging=true)
 end
 
 function client_receiver(router::Embedded, ws)
-    cid = string(uuid4())
-    twin = create_twin(cid, router)
-    @debug "[server] client bound to twin id [$cid]"
-    # start the trusted client task
-    twin.socket = ws
-    while isopen(ws)
-        try
-            payload = transport_read(ws)
-            #=
-            # eventually needed for tcp sockets
-            if isempty(payload)
-                @debug "[$twin]: connection close"
-                break
-            end
-            =#
-            msg::RembusMsg = broker_parse(payload)
-            #@mlog("[$twin] <- $(prettystr(msg))")
-
-            if isa(msg, RpcReqMsg)
-                rpc_request(router, twin, msg)
-            elseif isa(msg, PubSubMsg)
-                pubsub_msg(router, twin, msg)
-            elseif isa(msg, Register)
-                register(router, twin, msg)
-            elseif isa(msg, Unregister)
-                unregister(router, twin, msg)
-            elseif isa(msg, IdentityMsg)
-                auth_twin = identity_check(router, twin, msg, paging=false)
-                if auth_twin !== nothing
-                    twin = auth_twin
-                end
-            elseif isa(msg, Attestation)
-                twin = attestation(router, twin, msg)
-                # update Visor process id
-                twin.process.id = msg.cid
-            end
-        catch e
-            receiver_exception(router, twin, e)
-            if isa(e, EOFError)
-                break
-            end
-        end
-    end
-    end_receiver(twin)
-
-    return nothing
+    id = string(uuid4())
+    rb = RBServerConnection(router, id)
+    rb.socket = ws
+    spec = process(id, connection_task, args=(rb,))
+    sv = router.process
+    p = startup(Visor.from_supervisor(sv, "twins"), spec)
+    read_socket(ws, p, rb)
+    #Needed?
+    #router.id_twin[id] = twin
+    return rb
 end
+
 
 function secure_config(router)
     trust_store = keystore_dir(router)
@@ -2003,9 +1968,11 @@ function respond(router::Router, msg::Msg)
     return nothing
 end
 
-respond(::Embedded, msg::Msg) = put!(msg.twchannel.process.inbox, msg)
+###respond(::Embedded, msg::Msg) = put!(msg.twchannel.process.inbox, msg)
 
 respond(::AbstractRouter, msg::RembusMsg, twin::Twin) = put!(twin.process.inbox, msg)
+
+respond(::Embedded, msg::RembusMsg, rb::RBServerConnection) = put!(rb.msgch, msg)
 
 function uptime(router)
     utime = time() - router.start_ts
@@ -2258,12 +2225,25 @@ function ws_connect(
     end
 end
 
+function response_timeout(condition::Threads.Condition, msg::RembusMsg)
+    if hasproperty(msg, :topic)
+        descr = "[$(msg.topic)]: request timeout"
+    else
+        descr = "[$msg]: request timeout"
+    end
+    lock(condition) do
+        notify(condition, RembusTimeout(descr), error=true)
+    end
+
+    return nothing
+end
+
 function wait_response(twin::Twin, msg::Msg, timeout)
     mid::UInt128 = msg.content.id
     resp_cond = Threads.Condition()
     twin.out[mid] = resp_cond
     t = Timer((tim) -> response_timeout(resp_cond, msg.content), timeout)
-    signal!(twin, msg)
+    push!(twin.process.inbox, msg)
     lock(resp_cond)
     res = wait(resp_cond)
     unlock(resp_cond)
@@ -2272,13 +2252,27 @@ function wait_response(twin::Twin, msg::Msg, timeout)
     return res
 end
 
-function egress_task(proc, twin::Twin, broker::Component)
+#=
+    add_server(components)
+
+Add a server.
+=#
+function add_server(router, url)
+    # connect
+    egress(router, url)
+    push!(router.servers, url)
+end
+
+function egress_task(proc, twin::Twin, remote::Component)
     isconnected = Condition()
     t = Timer((tim) -> connect_timeout(twin, isconnected), connect_request_timeout())
-    @async ws_connect(proc, twin, broker, isconnected)
+    @async ws_connect(proc, twin, remote, isconnected)
     wait(isconnected)
     close(t)
-    msg = IdentityMsg(broker.id)
+
+    # The name of this component is the broker name and it is
+    # communicated to remote component
+    msg = IdentityMsg(twin.router.process.supervisor.id)
     wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
 
     # The context to pass to the plugin callbacks.
@@ -2296,27 +2290,44 @@ function egress_task(proc, twin::Twin, broker::Component)
 end
 
 #=
-Connect this broker as a component to broker extracted from remote_url.
+Connect to server or broker extracted from remote_url.
+
+Loopback connection is not permitted.
 =#
 function egress(
-    remote_url::AbstractString, broker_name::AbstractString="caronte"
+    router::Router, remote_url::AbstractString
 )
-    proc = from("$broker_name.broker")
-
     # setup the twin
-    router = proc.args[1]
-    broker = Component(remote_url)
-    twin = create_twin(broker.id, router)
+    remote = Component(remote_url)
+
+    remote_ip = getaddrinfo(remote.host)
+
+    server = Visor.from_path(router.process.supervisor, "serve_ws")
+    for ip in [getipaddrs(); [ip"127.0.0.1"]]
+        if ip == remote_ip && remote.port == server.args[2]
+            error("remote component $(remote.id): loopback not permitted")
+        end
+    end
+
+    twin = create_twin(remote.id, router)
     twin.hasname = true
     twin.pager = Pager(twin)
 
     # start the egress process
     startup(
-        proc.supervisor.supervisor,
-        process(remote_url, egress_task, args=(twin, broker), debounce_time=6)
+        router.process.supervisor.supervisor,
+        process(remote_url, egress_task, args=(twin, remote), debounce_time=6)
     )
 
     return nothing
+end
+
+function egress(
+    remote_url::AbstractString, broker_name::AbstractString="caronte"
+)
+    proc = from("$broker_name.broker")
+    router = proc.args[1]
+    return egress(router, remote_url)
 end
 
 #=

@@ -26,10 +26,10 @@ end
 
 function start_server()
     emb = server()
-    provide(emb, df_service)
-    provide(emb, rpc_service)
-    provide(emb, rpc_fault)
-    provide(emb, signal)
+    expose(emb, df_service)
+    expose(emb, rpc_service)
+    expose(emb, rpc_fault)
+    expose(emb, signal)
     serve(emb, wait=true, args=Dict("debug" => true))
 end
 
@@ -86,7 +86,7 @@ function run()
         close(rb)
 
         rb = connect()
-        publish(rb, "df_service", nothing)
+        publish(rb, "df_service")
         sleep(0.5)
         close(rb)
     catch e
