@@ -73,6 +73,7 @@ end
 struct SentData
     sending_ts::Float64
     request::Msg
+    timer::Timer
 end
 
 """
@@ -175,22 +176,7 @@ Base.isopen(c::Condition) = true
 
 offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
 
-offline(::RBServerConnection) = false
-
 session(twin::Twin) = twin.session
-
-function create_twin(id, router::Embedded, queue=Queue{PubSubMsg}())
-    if haskey(router.id_twin, id)
-        return router.id_twin[id]
-    else
-        twin = Twin(router, id)
-        spec = process(id, twin_task, args=(twin,))
-        sv = router.process
-        startup(Visor.from_supervisor(sv, "twins"), spec)
-        router.id_twin[id] = twin
-        return twin
-    end
-end
 
 named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothing
 
@@ -248,11 +234,6 @@ function cleanup(twin, router::Router)
     return nothing
 end
 
-function cleanup(twin, router::Embedded)
-    delete!(router.id_twin, twin.id)
-    return nothing
-end
-
 #=
     destroy_twin(twin, router)
 
@@ -265,15 +246,6 @@ function destroy_twin(twin, router)
         Visor.shutdown(twin.process)
     end
     return cleanup(twin, router)
-end
-
-function destroy_twin(twin, router::Embedded)
-    if isdefined(twin, :process)
-        Visor.shutdown(twin.process)
-    end
-
-    delete!(router.id_twin, twin.id)
-    return nothing
 end
 
 function verify_signature(twin, msg)
@@ -489,7 +461,7 @@ function rpc_response(router, twin, msg)
         #if CONFIG.metering
         #    @debug "[$(twin.id)][$(reqdata.topic)] exec elapsed time: $elapsed secs"
         #end
-
+        close(twin.sent[msg.id].timer)
         delete!(twin.sent, msg.id)
     else
         @debug "[$twin] unexpected response: $msg"
@@ -502,29 +474,6 @@ function admin_msg(router, twin, msg)
     push!(twin.process.inbox, admin_res)
     return nothing
 end
-
-function embedded_msg(router::Embedded, twin::Twin, msg::RembusMsg)
-    (found, resmsg) = embedded_eval(router, twin, msg)
-
-    if found
-        if isa(resmsg, ResMsg)
-            response = Msg(TYPE_RESPONSE, resmsg, twin)
-            respond(router, response)
-        end
-    else
-        @debug "[server] no provider for [$(msg.topic)]"
-        if isa(msg, RpcReqMsg)
-            response = Msg(TYPE_RESPONSE, ResMsg(msg, STS_METHOD_NOT_FOUND, nothing), twin)
-            respond(router, response)
-        end
-    end
-
-    return nothing
-end
-
-rpc_request(router::Embedded, twin, msg) = embedded_msg(router, twin, msg)
-
-pubsub_msg(router::Embedded, twin, msg) = embedded_msg(router, twin, msg)
 
 function rpc_request(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
@@ -991,8 +940,11 @@ function signal!(twin, msg)
 
     # current message
     if isa(msg.content, RpcReqMsg)
+        tmr = Timer(request_timeout()) do tmr
+            delete!(twin.sent, msg.content.id)
+        end
         # add to sent table
-        twin.sent[msg.content.id] = SentData(time(), msg)
+        twin.sent[msg.content.id] = SentData(time(), msg, tmr)
     end
 
     pkt = msg.content
@@ -1318,7 +1270,7 @@ function client_receiver(router::Embedded, ws)
     id = string(uuid4())
     rb = RBServerConnection(router, id)
     rb.socket = ws
-    spec = process(id, connection_task, args=(rb,))
+    spec = process(id, server_task, args=(rb,))
     sv = router.process
     p = startup(Visor.from_supervisor(sv, "twins"), spec)
     read_socket(ws, p, rb)
@@ -1536,7 +1488,6 @@ function http_admin_command(
         end
     catch e
         @error "http::admin: $e"
-        #showerror(stdout, e, stacktrace())
         return HTTP.Response(403, [])
     end
 end
@@ -1771,14 +1722,15 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 end
 
 function islistening(
-    wait=5; procs=["caronte.serve_ws", "caronte.serve_tcp", "caronte.serve_zeromq"]
+    ; wait=5, procs=["caronte.serve_ws", "caronte.serve_tcp", "caronte.serve_zeromq"]
 )
     tcount = 0
     while tcount < wait
-        if all(p -> getphase(p) === :listen, from.(procs))
+        if all(p -> (p !== nothing) && (getphase(p) === :listen), from.(procs))
             return true
         end
         tcount += 0.2
+        sleep(0.2)
     end
 
     return false
@@ -2011,23 +1963,23 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             result = router.topic_function[msg.topic](router.context, twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
-            @debug "[$(msg.topic)] server error (method too young?): $e"
+            ##    @debug "[$(msg.topic)] server error (method too young?): $e"
+            ##    result = "$e"
+            ##    sts = STS_METHOD_EXCEPTION
+            ##
+            ##    if isa(e, MethodError)
+            ##        try
+            ##            result = Base.invokelatest(
+            ##                router.topic_function[msg.topic],
+            ##                router.context,
+            ##                twin,
+            ##                getargs(payload)...
+            ##            )
+            ##            sts = STS_SUCCESS
+            ##        catch e
             result = "$e"
-            sts = STS_METHOD_EXCEPTION
-
-            if isa(e, MethodError)
-                try
-                    result = Base.invokelatest(
-                        router.topic_function[msg.topic],
-                        router.context,
-                        twin,
-                        getargs(payload)...
-                    )
-                    sts = STS_SUCCESS
-                catch e
-                    result = "$e"
-                end
-            end
+            ##        end
+            ##    end
         end
 
         if sts != STS_SUCCESS
@@ -2226,11 +2178,7 @@ function ws_connect(
 end
 
 function response_timeout(condition::Threads.Condition, msg::RembusMsg)
-    if hasproperty(msg, :topic)
-        descr = "[$(msg.topic)]: request timeout"
-    else
-        descr = "[$msg]: request timeout"
-    end
+    descr = "[$msg]: request timeout"
     lock(condition) do
         notify(condition, RembusTimeout(descr), error=true)
     end
@@ -2238,6 +2186,13 @@ function response_timeout(condition::Threads.Condition, msg::RembusMsg)
     return nothing
 end
 
+#=
+Send a request to a remote component.
+
+For example the IdentityMsg request is initiated by the twin
+when a broker connects to a component acting like a server (accepting
+connections)
+=#
 function wait_response(twin::Twin, msg::Msg, timeout)
     mid::UInt128 = msg.content.id
     resp_cond = Threads.Condition()
@@ -2328,12 +2283,4 @@ function egress(
     proc = from("$broker_name.broker")
     router = proc.args[1]
     return egress(router, remote_url)
-end
-
-#=
-The twin send an admin request to the peer broker.
-=#
-function transport_send(::Twin, ws, msg::AdminReqMsg)
-    pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, msg.data]
-    transport_write(ws, pkt)
 end

@@ -780,6 +780,14 @@ function transport_send(::Twin, ws, msg::AckMsg)
     broker_transport_write(ws, pkt)
 end
 
+#=
+The twin send an admin request to the peer broker.
+=#
+function transport_send(::Twin, ws, msg::AdminReqMsg)
+    pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, msg.data]
+    transport_write(ws, pkt)
+end
+
 function transport_send(::RBHandle, ws, msg::AckMsg)
     pkt = [TYPE_ACK, id2bytes(msg.id)]
     transport_write(ws, pkt)

@@ -253,7 +253,7 @@ using Rembus
 
 ## server.jl
 
-Rembus may be used in a simpler client-server architecture, without a broker.
+Rembus may be used in a simpler client-server architecture, without a decoupling broker.
 
 A server accepting connections may be setup with these lines:
 
@@ -261,8 +261,8 @@ A server accepting connections may be setup with these lines:
     rb = server(Ctx(2))
     
     # declare exposed methods
-    provide(rb, power)
-    provide(rb, set_exponent)
+    expose(rb, power)
+    expose(rb, set_exponent)
     
     serve(rb, wait=true)
 ```

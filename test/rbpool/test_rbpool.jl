@@ -16,7 +16,7 @@ end
 function run()
     server_1 = start_server(9000, myservice1)
     server_2 = start_server(9001, myservice2)
-    Rembus.islistening(20, procs=["server.serve:9000", "server.serve:9001"])
+    Rembus.islistening(wait=20, procs=["server.serve:9000", "server.serve:9001"])
     #sleep(10)
 
     Visor.dump()

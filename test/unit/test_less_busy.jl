@@ -11,7 +11,7 @@ mutable struct FakeSocket
 end
 
 sentdata(t) = Rembus.SentData(
-    ts, Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg(topic), t))
+    ts, Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg(topic), t), Timer(0))
 
 Base.isopen(socket::FakeSocket) = socket.connected
 

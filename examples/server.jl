@@ -18,8 +18,8 @@ set_exponent(ctx, component, value) = ctx.exponent = value
 
 function start_server()
     rb = server(Ctx(2))
-    provide(rb, power)
-    provide(rb, set_exponent)
+    expose(rb, power)
+    expose(rb, set_exponent)
     serve(rb, wait=false)
 end
 

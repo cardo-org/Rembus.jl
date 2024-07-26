@@ -61,11 +61,14 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "server"
+        @time @safetestset "broker_server" begin
+            include("server/test_broker_server.jl")
+        end
         @time @safetestset "server" begin
             include("server/test_server.jl")
         end
-        @time @safetestset "broker_server" begin
-            include("server/test_broker_server.jl")
+        @time @safetestset "broker_server_timeout" begin
+            include("server/test_broker_server_timeout.jl")
         end
         @time @safetestset "loopback" begin
             include("server/test_loopback.jl")

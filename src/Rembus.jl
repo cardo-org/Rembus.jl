@@ -1054,7 +1054,7 @@ function rembus(cid=nothing)
     rb = RBConnection(cmp)
     process(
         cmp.id,
-        rembus_task,
+        client_task,
         args=(rb, cmp.protocol),
         debounce_time=CONFIG.connection_retry_period,
         force_interrupt_after=3.0)
@@ -1067,11 +1067,10 @@ end
 
 const last_error = LastErrorLog()
 
-function rembus_task(pd, rb, protocol=:ws)
+function rembus_task(pd, rb, init_fn, protocol=:ws)
     try
         @debug "starting rembus process: $pd, protocol:$protocol"
-
-        connect(pd, rb)
+        init_fn(pd, rb)
         if last_error.msg !== nothing
             @info "[$pd] reconnected"
             last_error.msg = nothing
@@ -1158,97 +1157,20 @@ function rembus_task(pd, rb, protocol=:ws)
 end
 
 #=
-The process task related to a connection initited by the other side,
+The rembus process task when the connection is initiated by this component.
+=#
+function client_task(pd, rb, protocol=:ws)
+    @debug "starting rembus process: $pd, protocol:$protocol"
+    rembus_task(pd, rb, connect, protocol)
+end
+
+#=
+The rembus process task related to a connection initiated by the other side:
 a client or a broker.
 =#
-function connection_task(pd, rb, protocol=:ws)
-    try
-        @debug "starting rembus process: $pd, protocol:$protocol"
-
-        bind(pd, rb)
-        if last_error.msg !== nothing
-            @info "[$pd] reconnected"
-            last_error.msg = nothing
-        end
-
-        for msg in pd.inbox
-            @debug "[$pd] recv: $msg"
-            if isshutdown(msg)
-                return
-            elseif isa(msg, Exception)
-                throw(msg)
-            elseif isrequest(msg)
-                req = msg.request
-                if isa(req, SetHolder)
-                    result = shared(rb, msg.request.shared)
-                elseif isa(req, AddImpl)
-                    result = expose(
-                        rb, msg.request.topic, msg.request.fn, exceptionerror=false
-                    )
-                elseif isa(req, RemoveImpl)
-                    result = unexpose(rb, msg.request.fn, exceptionerror=false)
-                elseif isa(req, AddInterest)
-                    result = subscribe(
-                        rb,
-                        msg.request.topic,
-                        msg.request.fn,
-                        msg.request.retroactive,
-                        exceptionerror=false
-                    )
-                elseif isa(req, RemoveInterest)
-                    result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
-                elseif isa(req, EnableAck)
-                    if req.status
-                        result = enable_ack(rb, exceptionerror=false)
-                    else
-                        result = disable_ack(rb, exceptionerror=false)
-                    end
-                elseif isa(req, Reactive)
-                    if req.status
-                        result = reactive(rb, exceptionerror=false)
-                    else
-                        result = unreactive(rb, exceptionerror=false)
-                    end
-                else
-                    result = rpc(
-                        rb, msg.request.topic, msg.request.data, exceptionerror=false
-                    )
-                end
-                reply(msg, result)
-            else
-                publish(rb, msg.topic, msg.data)
-            end
-        end
-    catch e
-        if isa(e, AlreadyConnected)
-            @error "[$(e.cid)] already connected"
-            Rembus.CONFIG.cid = "rembus"
-            return
-        end
-
-        if isa(e, HTTP.Exceptions.ConnectError)
-            msg = "[$pd]: $(e.url) connection error"
-        else
-            msg = "[$pd] component: $e"
-        end
-
-        if last_error.msg !== msg
-            @error msg
-            last_error.msg = msg
-        end
-        showerror(stdout, e, catch_backtrace())
-        @showerror e
-
-        if isa(e, HTTP.Exceptions.ConnectError) &&
-           isa(e.error.ex, HTTP.OpenSSL.OpenSSLError)
-            @info "unrecoverable error $(e.error.ex): stop connection retry"
-        else
-            rethrow()
-        end
-    finally
-        @debug "[$pd]: terminating"
-        close(rb)
-    end
+function server_task(pd, rb, protocol=:ws)
+    @debug "starting rembus process: $pd, protocol:$protocol"
+    rembus_task(pd, rb, bind, protocol)
 end
 
 mutable struct NullProcess <: Visor.Supervised
@@ -1276,32 +1198,40 @@ function when_connected(fn, rb)
 end
 =#
 
+get_callback(rb::RBConnection, topic) = rb.receiver[topic]
+
+get_callback(rb::RBServerConnection, topic) = rb.router.topic_function[topic]
+
+has_callback(rb::RBConnection, fn) = haskey(rb.receiver, fn)
+
+has_callback(rb::RBServerConnection, fn) = haskey(rb.router.topic_function, fn)
+
 #=
     invoke(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
 
 Invoke the method registered with `topic` name.
 =#
-function invoke(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
+function invoke(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
     if isa(msg.data, Vector)
         if rb.shared === missing
-            return STS_SUCCESS, rb.receiver[topic](msg.data...)
+            return STS_SUCCESS, get_callback(rb, topic)(msg.data...)
         else
-            return STS_SUCCESS, rb.receiver[topic](rb.shared, msg.data...)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, msg.data...)
         end
     else
         if rb.shared === missing
-            return STS_SUCCESS, rb.receiver[topic](msg.data)
+            return STS_SUCCESS, get_callback(rb, topic)(msg.data)
         else
-            return STS_SUCCESS, rb.receiver[topic](rb.shared, msg.data)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, msg.data)
         end
     end
 end
 
 function invoke(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
     if isa(msg.data, Vector)
-        return STS_SUCCESS, rb.router.topic_function[topic](rb.router.context, rb, msg.data...)
+        return STS_SUCCESS, get_callback(rb, topic)(rb.router.context, rb, msg.data...)
     else
-        return STS_SUCCESS, rb.router.topic_function[topic](rb.router.context, rb, msg.data)
+        return STS_SUCCESS, get_callback(rb, topic)(rb.router.context, rb, msg.data)
     end
 end
 
@@ -1310,35 +1240,25 @@ end
 
 Invoke the method registered with `topic` name using `Base.invokelatest`.
 =#
-function invoke_latest(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
+function invoke_latest(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
     if isa(msg.data, Vector)
         if rb.shared === missing
-            return STS_SUCCESS, Base.invokelatest(rb.receiver[topic], msg.data...)
+            return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data...)
         else
             return (
-                STS_SUCCESS, Base.invokelatest(rb.receiver[topic], rb.shared, msg.data...)
+                STS_SUCCESS, Base.invokelatest(
+                    get_callback(rb, topic), rb.shared, msg.data...
+                )
             )
         end
     else
         if rb.shared === missing
-            return STS_SUCCESS, Base.invokelatest(rb.receiver[topic], msg.data)
+            return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data)
         else
-            return STS_SUCCESS, Base.invokelatest(rb.receiver[topic], rb.shared, msg.data)
-        end
-    end
-end
-
-function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
-    if isa(msg.data, Vector)
-        return (
-            STS_SUCCESS, Base.invokelatest(
-                rb.router.topic_function[topic], rb.router.context, rb, msg.data...
+            return STS_SUCCESS, Base.invokelatest(
+                get_callback(rb, topic), rb.shared, msg.data
             )
-        )
-    else
-        return STS_SUCCESS, Base.invokelatest(
-            rb.router.topic_function[topic], rb.router.context, rb, msg.data
-        )
+        end
     end
 end
 
@@ -1347,66 +1267,32 @@ end
 
 Invoke the method registered with `*` name for received messages with any topic.
 =#
-function invoke_glob(rb::RBConnection, msg::RembusMsg)
+function invoke_glob(rb::RBHandle, msg::RembusMsg)
     if isa(msg.data, Vector)
         if rb.shared === missing
-            return STS_SUCCESS, rb.receiver["*"](msg.topic, msg.data...)
+            return STS_SUCCESS, get_callback(rb, "*")(msg.topic, msg.data...)
         else
-            return STS_SUCCESS, rb.receiver["*"](rb.shared, msg.topic, msg.data...)
+            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, msg.topic, msg.data...)
         end
     else
         if rb.shared === missing
-            return STS_SUCCESS, rb.receiver["*"](msg.topic, msg.data)
+            return STS_SUCCESS, get_callback(rb, "*")(msg.topic, msg.data)
         else
-            return STS_SUCCESS, rb.receiver["*"](rb.shared, msg.topic, msg.data)
+            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, msg.topic, msg.data)
         end
     end
 end
 
-function invoke_glob(rb::RBServerConnection, msg::RembusMsg)
-    if isa(msg.data, Vector)
-        return STS_SUCCESS, rb.router.topic_function["*"](
-            rb.router.context, rb, msg.topic, msg.data...
-        )
-    else
-        return STS_SUCCESS, rb.router.topic_function["*"](
-            rb.router.context, rb, msg.topic, msg.data
-        )
-    end
-end
-
-function rembus_handler(rb::RBConnection, msg, receiver)
+function rembus_handler(rb::RBHandle, msg, receiver)
     fn::String = msg.topic
-    if haskey(rb.receiver, fn)
+    if has_callback(rb, fn)
         try
             return receiver(rb, fn, msg)
         catch e
             @showerror e
             return STS_METHOD_EXCEPTION, string(e)
         end
-    elseif haskey(rb.receiver, "*")
-        try
-            invoke_glob(rb, msg)
-        catch e
-            @error "glob subscriber: $e"
-        finally
-            return STS_SUCCESS, nothing
-        end
-    else
-        return STS_METHOD_NOT_FOUND, "method $fn not found"
-    end
-end
-
-function rembus_handler(rb::RBServerConnection, msg, receiver)
-    fn::String = msg.topic
-    if haskey(rb.router.topic_function, fn)
-        try
-            return receiver(rb, fn, msg)
-        catch e
-            @showerror e
-            return STS_METHOD_EXCEPTION, string(e)
-        end
-    elseif haskey(rb.router.topic_function, "*")
+    elseif has_callback(rb, "*")
         try
             invoke_glob(rb, msg)
         catch e
@@ -1530,47 +1416,43 @@ function read_socket(socket, process, rb, isconnected::Condition)
 end
 
 #=
-Read from a component that is a server.
+Read from the socket when a component is a server.
 =#
 function read_socket(socket, process, rb)
     try
-        # @async keep_alive(rb.socket)
         while isopen(socket)
             response = transport_read(socket)
-            if !isempty(response)
-                ### parse_msg(rb, response)
-                ## TBD
-                msg = connected_socket_load(response)
+            msg = connected_socket_load(response)
 
-                if isa(msg, IdentityMsg)
-                    cmp = identity_check(rb.router, rb, msg, paging=true)
-                    if cmp !== nothing
-                        setname(process, msg.cid)
-                    end
-                elseif isa(msg, Attestation)
-                    sts = attestation(rb.router, rb, msg)
-                    if sts === STS_SUCCESS
-                        setname(process, msg.cid)
-                    end
-                elseif isa(msg, Register)
-                    response = register(rb.router, msg)
-                    put!(rb.msgch, response)
-                elseif isa(msg, Unregister)
-                    response = unregister(rb.router, rb, msg)
-                    put!(rb.msgch, response)
-                else
-                    handle_input(rb, msg)
+            if isa(msg, IdentityMsg)
+                cmp = identity_check(rb.router, rb, msg, paging=true)
+                if cmp !== nothing
+                    setname(process, msg.cid)
                 end
+            elseif isa(msg, Attestation)
+                sts = attestation(rb.router, rb, msg)
+                if sts === STS_SUCCESS
+                    setname(process, msg.cid)
+                end
+            elseif isa(msg, Register)
+                response = register(rb.router, msg)
+                put!(rb.msgch, response)
+            elseif isa(msg, Unregister)
+                response = unregister(rb.router, rb, msg)
+                put!(rb.msgch, response)
             else
-                @debug "[$(rb.client.id)] connection closed"
-                close(socket)
+                handle_input(rb, msg)
             end
         end
     catch e
         @info "[$(rb.client.id)] connection closed: $e"
-        if !isa(e, HTTP.WebSockets.WebSocketError) ||
-           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
-           e.message.status != 1000
+        if isa(e, EOFError) ||
+           (
+            isa(e, HTTP.WebSockets.WebSocketError) &&
+            isa(e.message, HTTP.WebSockets.CloseFrameBody) &&
+            e.message.status == 1000
+        )
+        else
             @showerror e
             processput!(process, e)
         end
@@ -1815,35 +1697,6 @@ function _connect(rb, process)
     return rb
 end
 
-function _bind(rb, process)
-    # manage reconnections events
-    if !isopen(rb.msgch)
-        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
-    end
-
-    if rb.client.protocol === :ws || rb.client.protocol === :wss
-        #### isconnected = Condition()
-        #### t = Timer((tim) -> connect_timeout(rb, isconnected), connect_request_timeout())
-        #### @async ws_connect(rb, process, isconnected)
-        #### wait(isconnected)
-        #### close(t)
-        #### @async read_socket(socket, process, rb)
-    elseif rb.client.protocol === :tcp || rb.client.protocol === :tls
-        #### isconnected = Condition()
-        #### @async tcp_connect(rb, process, isconnected)
-        #### wait(isconnected)
-    elseif rb.client.protocol === :zmq
-        #### zmq_connect(rb)
-    else
-        throw(ErrorException(
-            "wrong protocol $(rb.client.protocol): must be tcp|tls|zmq|ws|wss"
-        ))
-    end
-
-    @async write_task(rb)
-    return rb
-end
-
 function ping(socket)
     try
         WebSockets.ping(socket)
@@ -1859,22 +1712,6 @@ function rembus_write(rb::RBHandle, msg)
     transport_send(rb, rb.socket, msg)
     return nothing
 end
-
-#=
-function configure(rb::RBHandle, retroactives=Dict(), interests=Dict(), impls=Dict())
-    for (topic, fn) in retroactives
-        subscribe(rb, topic, fn, true)
-    end
-    for (topic, fn) in interests
-        subscribe(rb, topic, fn, false)
-    end
-    for (topic, fn) in impls
-        expose(rb, topic, fn)
-    end
-
-    return rb
-end
-=#
 
 function isconnected(rb::RBConnection)
     if rb.socket === nothing
@@ -1975,31 +1812,22 @@ The `process` supervisor try to auto-reconnect if an exception occurs.
 function connect(process::Visor.Supervised, rb::RBHandle)
     _connect(rb, process)
     authenticate(rb)
-
-    # register again callbacks
-    for (name, fn) in rb.receiver
-        if haskey(rb.subinfo, name)
-            subscribe(rb, name, fn, rb.subinfo[name], exceptionerror=false)
-        else
-            expose(rb, name, fn, exceptionerror=false)
-        end
-    end
-
-    if rb.reactive
-        reactive(rb)
-    end
-
+    callbacks(rb, rb.receiver, rb.subinfo)
     return rb
 end
 
 function bind(process::Visor.Supervised, rb::RBServerConnection)
-    _bind(rb, process)
-    ## authenticate(rb)
-    # register again callbacks
+    @async write_task(rb)
     server = rb.router
-    for (name, fn) in server.topic_function
-        if haskey(server.subinfo, name)
-            subscribe(rb, name, fn, server.subinfo[name], exceptionerror=false)
+    callbacks(rb, server.topic_function, server.subinfo)
+    return rb
+end
+
+function callbacks(rb::RBHandle, fnmap, submap)
+    # register again callbacks
+    for (name, fn) in fnmap
+        if haskey(submap, name)
+            subscribe(rb, name, fn, submap[name], exceptionerror=false)
         else
             expose(rb, name, fn, exceptionerror=false)
         end
@@ -2008,8 +1836,6 @@ function bind(process::Visor.Supervised, rb::RBServerConnection)
     if rb.reactive
         reactive(rb)
     end
-
-    return rb
 end
 
 function connect(rb::RBPool)
@@ -2060,14 +1886,6 @@ function Base.close(rb::RBHandle)
     end
     return nothing
 end
-
-#=
-function assert_rembus(process::Visor.Process)
-    if length(process.args) == 0 || !isa(process.args[1], RBHandle)
-        throw(ErrorException("invalid $process process: not a rembus process"))
-    end
-end
-=#
 
 function enable_debug(rb::RBHandle; exceptionerror=true)
     return rpcreq(
@@ -2224,7 +2042,7 @@ until successful outcome.
 function component(url=getcomponent())
     rb = Rembus.RBConnection(url)
 
-    p = process(rb.client.id, Rembus.rembus_task,
+    p = process(rb.client.id, Rembus.client_task,
         args=(rb,), debounce_time=2, restart=:transient)
 
     supervise(
@@ -2719,7 +2537,7 @@ end
             )
         )
         yield()
-        Rembus.islistening(20)
+        Rembus.islistening(wait=20)
         include("precompile.jl")
         shutdown()
     end

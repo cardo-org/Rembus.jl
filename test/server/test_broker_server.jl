@@ -13,16 +13,29 @@ mutable struct TestBag
     TestBag() = new(nothing)
 end
 
+function init()
+    d = Rembus.broker_dir(BROKER_NAME)
+    if !isdir(d)
+        @info "[test_broker_server]: making dir $d"
+        mkdir(d)
+    end
+
+    fn = joinpath(d, "servers.json")
+    open(fn, "w") do io
+        write(io, JSON3.write(["ws://:9000/s1"]))
+    end
+end
+
 function run()
     ctx = TestBag()
     srv = server(ctx)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
     serve(srv, wait=false, args=Dict("ws" => 9000))
-    router = caronte(wait=false, args=Dict("reset" => true))
-    add_server(router, "ws://:9000/s1")
+    caronte(wait=false, args=Dict("broker" => BROKER_NAME))
 
-    sleep(1)
+    Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
+
     cli = connect()
     n = 1
     response = rpc(cli, "mymethod", n)
@@ -38,5 +51,6 @@ function run()
 end
 
 @info "[test_broker_server] start"
+init()
 run()
 @info "[test_broker_server] stop"

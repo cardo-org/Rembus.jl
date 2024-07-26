@@ -1,12 +1,12 @@
 # Client-Server architecture
 
-It is possible to use Rembus protocol to setup a simple architecture without a decoupling broker.
+It is possible to use Rembus protocol to setup a simple client-server architecture without a decoupling broker.
 
 In this scenario one component plays the role of a server that handles RPC requests and
 receives messages published by others components that play the role of clients.
 
 > **NOTE** Without a broker a pub/sub is a one-to-one communication pattern: components publish
-> messages that are received by the server  by the server but they are not broadcasted to anyone else.
+> messages that are received by the server but they are not broadcasted to anyone else.
 
 Below a minimal example of a component that exposes a service and accepts connections
 for others components and respond only to authenticated components:
@@ -22,7 +22,7 @@ end
 
 function start_server()
     rb = server()
-    provide(rb, my_service)
+    expose(rb, my_service)
     serve(rb)
 end
 
@@ -39,21 +39,14 @@ The component that plays the server role is initialized as:
 rb = server()
 ```
 
-`provide` binds methods implementations to the server:
+`expose`, as usual,  make methods available to RPC clients:
 
 ```julia
-provide(rb, my_service)
+expose(rb, my_service)
 ```
 
-Only the `provide` method is required in a brokeless context because the only difference
-between a RPC exposed method and a pub/sub subscribed method is that the first one expects
-a return value.
-
-This means that one `provide` API works in place of `expose` and `subscribe` APIs required
-for configuring a broker.
-
-The signature of `my_service` must have a `ctx` value as first argument and a `component`
-value as second argument:
+The signature of `my_service` must have a `ctx` value as first argument
+and a `component` value as second argument:
 
 ```julia
 function mymethod(ctx, component, x, y)
@@ -77,7 +70,7 @@ If a global state is not needed by default ctx is set to `nothing`:
 
 ```julia
 rb = server()
-provide(rb, "my_service")
+expose(rb, "my_service")
 
 #implies that ctx is nothing:
 function my_function(ctx, component, x, y)

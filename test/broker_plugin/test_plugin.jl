@@ -36,9 +36,18 @@ export login
 
 export myfunction
 
-function myfunction(ctx, twin)
+function myfunction(ctx, twin, arg)
     @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
     return "hello from caronte plugin"
+end
+
+function myfunction(ctx, twin, arg1, arg2)
+    error("myfunction error")
+end
+
+function myfunction(ctx, twin)
+    @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
+    return "no args"
 end
 
 function challenge(twin)
@@ -116,8 +125,21 @@ function run(ok_cid, ko_cid)
     subscribe(rb, test_plugin_topic)
 
     # invoke myfunction defined by CarontePlugin module
-    response = rpc(rb, "myfunction")
+    response = rpc(rb, "myfunction", "arg_1")
     @test response == "hello from caronte plugin"
+
+    response = rpc(rb, "myfunction", ["arg_1"])
+    @test response == "hello from caronte plugin"
+
+    response = rpc(rb, "myfunction", nothing)
+    @test response == "no args"
+
+    try
+        rpc(rb, "myfunction", ["arg_1", "arg_2"])
+    catch e
+        @info "expected error: $e"
+        @test true
+    end
 
     okcid = from("$BROKER_NAME.twins.ok_cid")
     twin = okcid.args[1]

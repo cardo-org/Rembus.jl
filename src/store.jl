@@ -57,7 +57,7 @@ end
 Load from disk the servers to connect.
 =#
 function load_servers(router)
-    fn = joinpath(broker_dir(router), "servers.csv")
+    fn = joinpath(broker_dir(router), "servers.json")
     if isfile(fn)
         content = read(fn, String)
         components = JSON3.read(content, Set{String})
@@ -71,7 +71,7 @@ function load_servers(router)
 end
 
 function save_servers(router)
-    fn = joinpath(broker_dir(router), "servers.csv")
+    fn = joinpath(broker_dir(router), "servers.json")
     open(fn, "w") do io
         write(io, JSON3.write(router.servers))
     end
@@ -433,6 +433,7 @@ function save_configuration(router::Router)
         save_topic_auth_table(router)
         save_admins(router)
         save_twins(router)
+        save_servers(router)
     end
 end
 
@@ -443,9 +444,9 @@ function load_configuration(router)
         load_impl_table(router)
         load_topic_auth_table(router)
         load_admins(router)
-
         router.owners = load_owners(router)
         router.component_owner = load_token_app(router)
+        load_servers(router)
     end
 
     router.start_ts = time()

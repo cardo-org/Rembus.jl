@@ -1,6 +1,7 @@
 include("../utils.jl")
 
 using DataFrames
+using HTTP
 
 function df_service(ctx, session)
     DataFrame(x=1:10)
@@ -88,7 +89,11 @@ function run()
         rb = connect()
         publish(rb, "df_service")
         sleep(0.5)
-        close(rb)
+
+        # an invalid packet triggers a read_socket error on server
+        HTTP.WebSockets.send(rb.socket, [0x01])
+        sleep(0.5)
+        @test !isopen(rb.socket)
     catch e
         @error "[test_embedded] error: $e"
         @test false

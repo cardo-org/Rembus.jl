@@ -11,7 +11,7 @@ function run()
 
     topic = "mytopic"
     @test Rembus.islistening(
-        30,
+        wait=30,
         procs=[
             "$(BROKER_NAME).serve_ws",
             "$(BROKER_NAME).serve_tcp",
