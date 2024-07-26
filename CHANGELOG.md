@@ -1,8 +1,22 @@
 # Change Log
 
-## 0.1.0 (25 March, 2024)
+## 0.4.0
 
-- First Release.
+- Improve server api.
+
+## 0.3.0 (2 July, 2024)
+
+- HTTP api (GET for RPC, POST for Pub/Sub).
+
+- Fault-tolerant api: component(name) and api methods that talk to supervised task.
+
+- Broker to broker routing (WebSocket only, experimental).
+
+- rpc_future() and fetch_response(): APIs for asynchronous RPC.
+
+## 0.2.1 (21 May, 2024)
+
+- Add publish_interceptor method for extract and transform published messages.
 
 ## 0.2.0 (18 May, 2024)
 
@@ -14,16 +28,6 @@
 
 - Full test coverage.
 
-## 0.2.1 (21 May, 2024)
+## 0.1.0 (25 March, 2024)
 
-- Add publish_interceptor method for extract and transform published messages.
-
-## 0.3.0 (2 July, 2024)
-
-- HTTP api (GET for RPC, POST for Pub/Sub).
-
-- Fault-tolerant api: component(name) and api methods that talk to supervised task.
-
-- Broker to broker routing (WebSocket only, experimental).
-
-- rpc_future() and fetch_response(): APIs for asynchronous RPC.
+- First Release.
