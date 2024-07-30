@@ -14,3 +14,5 @@ catch e
 end
 EOF
 
+gcc ${PKG_DIR}/src/sv.c -o ${PKG_DIR}/build/bin/sv
+

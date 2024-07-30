@@ -10,6 +10,6 @@ EXPOSE 8002
 
 ENV BROKER_DIR="/db"
 
-ENTRYPOINT ["bin/caronte"]
+ENTRYPOINT ["bin/sv", "bin/caronte"]
 
 
