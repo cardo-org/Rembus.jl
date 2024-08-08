@@ -17,14 +17,12 @@ function run()
 
     shared(sub, ctx)
     subscribe(sub, mytopic, true)
-    enable_ack(sub)
     reactive(sub)
 
     publish(pub, "mytopic", 1)
     publish(pub, "mytopic", 2)
 
     sleep(0.5)
-    disable_ack(sub)
     unreactive(sub)
     publish(pub, "mytopic", 3)
 

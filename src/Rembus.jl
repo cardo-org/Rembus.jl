@@ -16,6 +16,7 @@ using DocStringExtensions
 using DataFrames
 using Dates
 using DataStructures
+using DuckDB
 using FileWatching
 using HTTP
 using JSON3
@@ -35,7 +36,6 @@ using UUIDs
 using ZMQ
 
 export @component
-export @enable_ack, @disable_ack
 export @expose, @unexpose
 export @subscribe, @unsubscribe
 export @rpc
@@ -60,7 +60,6 @@ export rpc_future
 export fetch_response
 export publish
 export reactive, unreactive
-export enable_ack, disable_ack
 export authorize, unauthorize
 export private_topic, public_topic
 export provide
@@ -71,15 +70,17 @@ export shared
 export set_balancer
 export forever
 export terminate
+export egress_interceptor, ingress_interceptor
 
 # broker api
-export add_server
+export add_server, remove_server
 export caronte, session, republish, msg_payload
 
 export RembusError
 export RembusTimeout
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
+export QOS_0, QOS_1, QOS_2
 
 mutable struct Component
     id::String
@@ -125,10 +126,34 @@ end
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
+struct DBHandler
+    db::DuckDB.DB
+    msg_stmt::DuckDB.Stmt
+end
+
+function rembus_db(cid::AbstractString)
+    db = DuckDB.DB(joinpath(rembus_dir(), "$cid.db"))
+    stmts = [
+        "CREATE TABLE IF NOT EXISTS received (ts UBIGINT, uid UBIGINT)"
+    ]
+    for stmt in stmts
+        DBInterface.execute(db, stmt)
+    end
+    stmt = DBInterface.prepare(
+        db,
+        "INSERT INTO received (ts, uid) VALUES (?, ?)"
+    )
+    return DBHandler(db, stmt)
+end
+
+
 abstract type RBHandle end
 
 mutable struct RBConnection <: RBHandle
+    duck::Union{Nothing,DBHandler}
     shared::Any
+    egress::Union{Nothing,Function}
+    ingress::Union{Nothing,Function}
     socket::Any
     msgch::Channel
     reactive::Bool
@@ -139,7 +164,10 @@ mutable struct RBConnection <: RBHandle
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
     RBConnection(name::String) = new(
+        nothing,
         missing,
+        nothing,
+        nothing,
         nothing,
         Channel(MESSAGE_CHANNEL_SZ),
         false,
@@ -151,7 +179,10 @@ mutable struct RBConnection <: RBHandle
         nothing
     )
     RBConnection(client=getcomponent()) = new(
+        nothing,
         missing,
+        nothing,
+        nothing,
         nothing,
         Channel(MESSAGE_CHANNEL_SZ),
         false,
@@ -167,7 +198,17 @@ end
 Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
 
 function Base.show(io::IO, rb::RBConnection)
-    return print(io, "client [$(rb.client.id)], isconnected: $(isconnected(rb))")
+    return print(io, "$(rb.client.id)*")
+end
+
+function egress_interceptor(rb::RBConnection, func)
+    @debug "[$rb] setting egress: $func"
+    rb.egress = func
+end
+
+function ingress_interceptor(rb::RBConnection, func)
+    @debug "[$rb] setting ingress: $func"
+    rb.ingress = func
 end
 
 abstract type AbstractRouter end
@@ -186,8 +227,11 @@ mutable struct Embedded <: AbstractRouter
 end
 
 mutable struct RBServerConnection <: RBHandle
+    duck::Union{Nothing,DBHandler}
     router::Embedded
     session::Dict{String,Any}
+    egress::Union{Nothing,Function}
+    ingress::Union{Nothing,Function}
     socket::Any
     msgch::Channel
     reactive::Bool
@@ -197,8 +241,11 @@ mutable struct RBServerConnection <: RBHandle
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
     RBServerConnection(server::Embedded, name::String) = new(
+        nothing,
         server,
         Dict(),
+        nothing,
+        nothing,
         nothing,
         Channel(MESSAGE_CHANNEL_SZ),
         true, # reactive
@@ -934,40 +981,6 @@ macro unreactive(cid=nothing)
     end
 end
 
-#=
-    @enable_ack
-
-Enable acknowledge receipt of published messages.
-
-This feature assure that messages get delivered at least one time to the
-subscribed component.
-
-For default the acknowledge is disabled.
-=#
-macro enable_ack(cid=nothing)
-    ex = enable_ack_expr(true, cid)
-    quote
-        $(esc(ex))
-        nothing
-    end
-end
-
-#=
-    @disable_ack
-
-Disable acknowledge receipt of published messages.
-
-This feature assure that messages get delivered at least one to the
-subscribed component.
-=#
-macro disable_ack(cid=nothing)
-    ex = enable_ack_expr(false, cid)
-    quote
-        $(esc(ex))
-        nothing
-    end
-end
-
 struct SetHolder
     shared::Any
 end
@@ -1307,13 +1320,24 @@ end
 
 function handle_input(rb, msg)
     #@debug "<< [$(rb.client.id)] <- $msg"
+    if rb.ingress !== nothing
+        msg = rb.ingress(rb, msg)
+        if msg === nothing
+            return nothing
+        end
+    end
 
+    # True for AckMsg and ResMsg
     if isresponse(msg)
         if haskey(rb.out, msg.id)
             # prevent requests timeouts because when jit compiling
             # notify() may be called before wait()
             yield()
-            put!(rb.out[msg.id], msg)
+            if isa(msg, AckMsg)
+                put!(rb.out[msg.id], true)
+            else
+                put!(rb.out[msg.id], msg)
+            end
             delete!(rb.out, msg.id)
         else
             # it is a response without a waiting Condition
@@ -1326,11 +1350,20 @@ function handle_input(rb, msg)
     elseif isa(msg, AdminReqMsg)
         # currently ignore the message and return a success response
         put!(rb.msgch, ResMsg(msg.id, STS_SUCCESS, nothing))
+    elseif isa(msg, Ack2Msg)
+        # remove message from already received cache
+        remove_message(rb, msg)
     else
-        if isinteractive()
-            sts, result = rembus_handler(rb, msg, invoke_latest)
+        # check for duplicates
+        if isa(msg, PubSubMsg) && msg.flags == QOS_2 && already_received(rb, msg)
+            @info "skipping already received message $msg"
+            sts = STS_SUCCESS
         else
-            sts, result = rembus_handler(rb, msg, invoke)
+            if isinteractive()
+                sts, result = rembus_handler(rb, msg, invoke_latest)
+            else
+                sts, result = rembus_handler(rb, msg, invoke)
+            end
         end
 
         if sts === STS_METHOD_EXCEPTION
@@ -1340,14 +1373,54 @@ function handle_input(rb, msg)
             response = ResMsg(msg.id, sts, result)
             @debug "response: $response"
             put!(rb.msgch, response)
-        elseif isa(msg, PubSubMsg) && (msg.flags & ACK_FLAG) == ACK_FLAG
-            # check if ack is enabled
-            # @debug "$msg sending Ack with hash=$(msg.id)"
-            put!(rb.msgch, AckMsg(msg.id))
+        elseif isa(msg, PubSubMsg)
+            if msg.flags > QOS_0
+                put!(rb.msgch, AckMsg(msg.id))
+                if msg.flags == QOS_2
+                    save_message_mark(rb, msg)
+                end
+            end
         end
     end
 
     return nothing
+end
+
+function save_message_mark(rb, msg)
+    DBInterface.execute(
+        rb.duck.msg_stmt,
+        (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
+    )
+end
+
+function already_received(rb, msg)
+    if rb.duck === nothing
+        rb.duck = rembus_db(rb.client.id)
+    end
+
+    result = DBInterface.execute(
+        rb.duck.db,
+        "SELECT uid FROM received WHERE ts=? AND uid=?",
+        (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
+    )
+    return !isempty(result)
+end
+
+function remove_message(rb, msg)
+    if rb.duck !== nothing
+        DBInterface.execute(
+            rb.duck.db,
+            "DELETE FROM received WHERE ts=? AND uid=?",
+            (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
+        )
+    end
+end
+
+function awaiting_ack2(rb)
+    if rb.duck === nothing
+        error("ack database unavailable")
+    end
+    DataFrame(DBInterface.execute(rb.duck.db, "SELECT * from received"))
 end
 
 #=
@@ -1357,7 +1430,7 @@ Handle a received message.
 =#
 function parse_msg(rb, response)
     try
-        msg = connected_socket_load(response)
+        msg = from_cbor(response)
         handle_input(rb, msg)
     catch e
         @error "message decoding: $e"
@@ -1422,7 +1495,7 @@ function read_socket(socket, process, rb)
     try
         while isopen(socket)
             response = transport_read(socket)
-            msg = connected_socket_load(response)
+            msg = from_cbor(response)
 
             if isa(msg, IdentityMsg)
                 cmp = identity_check(rb.router, rb, msg, paging=true)
@@ -1476,7 +1549,17 @@ function write_task(rb::RBHandle)
 
                 break
             else
-                rembus_write(rb, msg)
+                if rb.egress !== nothing
+                    msg = rb.egress(rb, msg)
+                end
+                if msg !== nothing
+                    outcome = false
+                    while !outcome
+                        # in the case of pubsub message
+                        # retry until the ack message is received
+                        outcome = rembus_write(rb, msg)
+                    end
+                end
             end
         end
     catch e
@@ -1663,7 +1746,7 @@ function authenticate(rb)
 end
 
 function connect_timeout(rb, isconnected)
-    @debug "[$(rb.client.id)] socket: $(rb.socket)"
+    @debug "[$(rb.client.id)] connect timeout, socket: $(rb.socket)"
     if rb.socket === nothing
         notify(isconnected, ErrorException("connection failed"), error=true)
     end
@@ -1709,8 +1792,7 @@ end
 
 function rembus_write(rb::RBHandle, msg)
     @debug ">> [$(rb.client.id)] -> $msg"
-    transport_send(rb, rb.socket, msg)
-    return nothing
+    return transport_send(rb, rb.socket, msg)
 end
 
 function isconnected(rb::RBConnection)
@@ -1931,22 +2013,6 @@ function save_config(rb::RBHandle; exceptionerror=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => SAVE_CONFIG_CMD)),
-        exceptionerror=exceptionerror
-    )
-end
-
-function disable_ack(rb::RBHandle; exceptionerror=true)
-    return rpcreq(
-        rb,
-        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => DISABLE_ACK_CMD)),
-        exceptionerror=exceptionerror
-    )
-end
-
-function enable_ack(rb::RBHandle; exceptionerror=true)
-    return rpcreq(
-        rb,
-        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_ACK_CMD)),
         exceptionerror=exceptionerror
     )
 end
@@ -2292,16 +2358,10 @@ publish(rb, "mytopic")
 languages then data has to be a DataFrame or a primitive type that is
 [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
-function publish(rb::RBHandle, topic::AbstractString, data=[])
-    put!(rb.msgch, PubSubMsg(topic, data))
+function publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS_0)
+    put!(rb.msgch, PubSubMsg(topic, data, qos))
     return nothing
 end
-
-function publish_ack(rb::RBHandle, topic::AbstractString, data=[])
-    put!(rb.msgch, PubSubMsg(topic, data, ACK_FLAG))
-    return nothing
-end
-
 
 """
     rpc(rb::RBHandle,
@@ -2521,6 +2581,7 @@ macro forever()
 end
 
 @setup_workload begin
+    ENV["REMBUS_ROOT_DIR"] = "/tmp"
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     ENV["REMBUS_TIMEOUT"] = "20"

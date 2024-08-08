@@ -4,9 +4,15 @@ mutable struct Ctx
     count::UInt
 end
 
-const MESSAGES = 100000
+const MESSAGES = 100_000
 
-mytopic(ctx) = ctx.count += 1
+function mytopic(ctx)
+    ctx.count += 1
+    if (ctx.count % 20000) == 0
+        @info "received $(ctx.count) messages"
+    end
+end
+
 myservice(x) = x
 
 function first_run()

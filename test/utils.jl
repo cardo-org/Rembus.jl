@@ -1,3 +1,4 @@
+using DataFrames
 using JSON3
 using HTTP
 using Logging
@@ -126,5 +127,18 @@ function remove_keys(cid)
     for fn in [Rembus.pkfile(cid), Rembus.key_file(BROKER_NAME, cid)]
         @info "removing $fn"
         rm(fn, force=true)
+    end
+end
+
+function verify_counters(; total::Int, components::Dict)
+    fn = joinpath(Rembus.broker_dir(BROKER_NAME), "twins.json")
+    if isfile(fn)
+        content = read(fn, String)
+        twinid_mark = JSON3.read(content, Dict{String,UInt64})
+        counter = pop!(twinid_mark, "__counter__")
+        @test counter == total
+        for (id, expected_mark) in components
+            @test Int(twinid_mark[id]) == expected_mark
+        end
     end
 end

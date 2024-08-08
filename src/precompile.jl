@@ -174,14 +174,15 @@ function broker_server()
 
     p = from("caronte.broker")
     router = p.args[1]
-
-    add_server(router, "ws://:10000/s1")
+    server_url = "ws://:10000/s1"
+    add_server(router, server_url)
     sleep(3)
 
     cli = connect()
     rpc(cli, "mymethod", 1)
     publish(cli, "mytopic", 1)
     close(cli)
+    remove_server(router, server_url)
 end
 
 @rpc version()

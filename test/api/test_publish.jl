@@ -111,6 +111,7 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
 end
 
 function run()
+    # send 4 pubsub messages
     publish_workflow("pub", "tcp://:8001/sub1", "tcp://:8001/sub2", "sub3", true)
     @info "starting real test"
     for sub1 in ["tcp://:8001/sub1", "zmq://:8002/sub1"]
@@ -118,6 +119,7 @@ function run()
             for sub3 in ["sub3", "zmq://:8002/sub3"]
                 for publisher in ["pub", "zmq://:8002/pub"]
                     @debug "test_publish endpoints: $sub1, $sub2, $sub3, $publisher, " _group = :test
+                    # send a grand total of 64 pubsub messages
                     publish_workflow(publisher, sub1, sub2, sub3)
                 end
             end
@@ -126,3 +128,8 @@ function run()
 end
 
 execute(run, "test_publish")
+
+# expect 68 messages published (received and stored by broker)
+# the mark of sub1 and sub3 is 67 because they not subscribed to
+# noarg_topic.
+verify_counters(total=68, components=Dict("sub2" => 68, "sub1" => 67, "sub3" => 67))

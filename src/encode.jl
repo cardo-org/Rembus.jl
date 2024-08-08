@@ -247,7 +247,7 @@ function encode(io::IO, struct_type::T) where {T}
     )
 end
 
-function encode_partial(data)
+function encode_partial(data::Vector)
     io = IOBuffer()
     encode_partial(io, data)
     return take!(io)
@@ -268,13 +268,13 @@ end
 function encode_partial(io, data::Vector)
     type = data[1] & 0x0f
     if type == TYPE_PUB
-        if (data[1] & ACK_FLAG) == ACK_FLAG
+        if (data[1] & QOS_1) == QOS_1
             write(io, 0x84)
         else
             write(io, 0x83)
         end
         encode(io, data[1]) # type
-        if (data[1] & ACK_FLAG) == ACK_FLAG
+        if (data[1] & QOS_1) == QOS_1
             encode(io, data[2]) # msgid
             encode(io, data[3]) # topic
             add_payload(io, data[4])
@@ -296,6 +296,10 @@ function encode_partial(io, data::Vector)
         encode(io, data[3]) # status
         add_payload(io, data[4])
     elseif type == TYPE_ACK
+        write(io, 0x82)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+    elseif type == TYPE_ACK2
         write(io, 0x82)
         encode(io, data[1]) # type
         encode(io, data[2]) # id

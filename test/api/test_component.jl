@@ -59,3 +59,7 @@ function run()
 end
 
 execute(run, "test_component")
+# expect 2 messages published (received and stored by broker)
+# and 1 message delivered because unreactive is executed before sending
+# the second pubsub message.
+verify_counters(total=2, components=Dict("mycomponent" => 1))

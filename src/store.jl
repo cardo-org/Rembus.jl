@@ -5,36 +5,6 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-function load_pages(twin::Twin)
-    tdir = joinpath(twins_dir(twin.router), twin.id)
-    pages = []
-    if !isdir(tdir)
-        mkdir(tdir)
-    end
-    # Load the latest page if any
-    pages = readdir(tdir, join=true, sort=true)
-    @debug "[$tdir] files pages: $pages"
-    return pages
-end
-
-function Pager(twin::Twin)
-    if twin.pager !== nothing
-        return twin.pager
-    end
-
-    pages = load_pages(twin)
-    if isempty(pages)
-        return Pager()
-    else
-        # load the latest page in memory
-        fn = last(pages)
-        ts = parse(Int, basename(fn))
-        pager = Pager(IOBuffer(read(fn); read=true, write=true, append=true), ts)
-        rm(fn)
-        return pager
-    end
-end
-
 #=
     load_owners()
 
@@ -119,12 +89,12 @@ broker_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name)
 
 keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(router), "keystore"))
 
-twins_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "twins")
-twins_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "twins")
-
 keys_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys")
 keys_dir(router::Embedded) = joinpath(CONFIG.root_dir, router.process.id, "keys")
 keys_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "keys")
+
+messages_dir(r::Router) = joinpath(CONFIG.root_dir, r.process.supervisor.id, "messages")
+messages_dir(broker::AbstractString) = joinpath(CONFIG.root_dir, broker, "messages")
 
 function key_file(router::Router, cid::AbstractString)
     return joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys", cid)
@@ -263,7 +233,6 @@ function load_twins(router)
     for (cid, topicsdict) in twin_topicsdict
         twin = create_twin(cid, router)
         twin.hasname = true
-        twin.pager = Pager(twin)
         twin.retroactive = topicsdict
 
         for topic in keys(topicsdict)
@@ -277,6 +246,32 @@ function load_twins(router)
 
     for (topic, twins) in twins
         router.topic_interests[topic] = twins
+    end
+end
+
+function save_marks(router)
+    @debug "saving twin marks"
+    fn = joinpath(broker_dir(router), "twins.json")
+    twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
+    for twin in values(router.id_twin)
+
+        twin_mark[twin.id] = twin.mark
+    end
+    JSON3.write(fn, twin_mark)
+end
+
+function load_marks(router)
+    @debug "loading twin marks"
+    fn = joinpath(broker_dir(router), "twins.json")
+    if isfile(fn)
+        content = read(fn, String)
+        twinid_mark = JSON3.read(content, Dict{String,UInt64})
+        router.mcounter = pop!(twinid_mark, "__counter__")
+        for (id, mark) in twinid_mark
+            if haskey(router.id_twin, id)
+                router.id_twin[id].mark = mark
+            end
+        end
     end
 end
 
@@ -295,7 +290,7 @@ function save_twins(router)
     for (twin_id, twin) in router.id_twin
         if twin.hasname
             twin_finalize(router.context, twin)
-            delete!(router.id_twin, twin_id)
+            # ??? delete!(router.id_twin, twin_id)
             twin_cfg[twin_id] = twin.retroactive
         end
     end
@@ -303,43 +298,6 @@ function save_twins(router)
     open(fn, "w") do io
         write(io, JSON3.write(twin_cfg))
     end
-end
-
-function save_page(twin)
-    if twin.pager !== nothing && twin.pager.io !== nothing
-        seekstart(twin.pager.io)
-        open(page_file(twin), create=true, write=true) do f
-            write(f, twin.pager.io)
-            seekstart(twin.pager.io)
-        end
-    else
-        @debug "[$twin]: no page to save"
-    end
-end
-
-function park(ctx::Any, twin::Twin, msg::PubSubMsg)
-    if !twin.hasname
-        # do not persist messages addressed to anonymous components
-        return
-    end
-
-    pager_io = twin.pager.io
-    if pager_io === nothing
-        @debug "[$twin] creating new Page"
-        twin.pager = Pager(IOBuffer(; write=true, read=true))
-        pager_io = twin.pager.io
-    end
-
-    io = transport_file_io(msg)
-    psize = pager_io.size
-    if psize >= REMBUS_PAGE_SIZE
-        @debug "[$twin]: saving page on disk"
-        save_page(twin)
-        twin.pager = Pager(IOBuffer(; write=true, read=true))
-        pager_io = twin.pager.io
-    end
-
-    write(pager_io, io.data)
 end
 
 function getmsg(f)
@@ -373,24 +331,6 @@ function unpark_file(twin::Twin, fn::AbstractString)
     end
 end
 
-function unpark_page(twin::Twin)
-    io = twin.pager.io
-    io === nothing && return
-    @debug "[$twin] unparking page"
-    try
-        send_cached(twin, io)
-        twin.pager.io = nothing
-    catch e
-        reset(io)
-        @error "[$twin] unparking page: $e"
-        # write back the remaining messages
-        newio = IOBuffer(write=true, read=true)
-        write(newio, io)
-        twin.pager.io = newio
-        rethrow()
-    end
-end
-
 function send_cached(twin, io)
     count = 0
     seekstart(io)
@@ -407,20 +347,6 @@ function send_cached(twin, io)
     end
 end
 
-function unpark(ctx::Any, twin::Twin)
-    if twin.hasname
-        @debug "[$twin]: unparking"
-        files = load_pages(twin)
-        for fn in files
-            unpark_file(twin, fn)
-        end
-
-        # send the in-memory paged messages
-        unpark_page(twin)
-        twin.pager.io = nothing
-    end
-end
-
 #=
     save_configuration(router::Router)
 
@@ -434,6 +360,7 @@ function save_configuration(router::Router)
         save_admins(router)
         save_twins(router)
         save_servers(router)
+        save_marks(router)
     end
 end
 
@@ -447,52 +374,8 @@ function load_configuration(router)
         router.owners = load_owners(router)
         router.component_owner = load_token_app(router)
         load_servers(router)
+        load_marks(router)
     end
 
     router.start_ts = time()
 end
-
-#=
-function test_file(file::String)
-    count = 0
-    tdir = twins_dir()
-    fn = joinpath(tdir, file)
-    if isfile(fn)
-        open(fn, "r") do f
-            while !eof(f)
-                msg = getmsg(f)
-                count += 1
-            end
-        end
-    end
-    @info "messages: $count"
-end
-
-function debug_unpark(ctx::Any, twin::Twin)
-    if twin.hasname
-        @debug "[$twin]: unparking"
-        files = load_pages(twin)
-        for fn in files
-            debug_unpark_file(twin, fn)
-        end
-    end
-end
-
-function debug_cached(twin, io)
-    count = 0
-    seekstart(io)
-    while !eof(io)
-        msg = getmsg(io)
-        count += 1
-        @info "[$twin]: $msg: $(msg.data)"
-    end
-    @info "tot messages: $count"
-end
-
-function debug_unpark_file(twin::Twin, fn::AbstractString)
-    @debug "unparking $fn"
-    content = read(fn)
-    io = IOBuffer(content)
-    debug_cached(twin, io)
-end
-=#

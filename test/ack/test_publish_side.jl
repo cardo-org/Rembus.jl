@@ -8,7 +8,7 @@ function run()
     pub_twin = from("$BROKER_NAME.twins.publisher")
 
     for i in 1:MSG_COUNT
-        Rembus.publish_ack(pub, "my_topic", [i])
+        Rembus.publish(pub, "my_topic", [i], qos=QOS_1)
         sleep(0.1)
         if i == 3
             schedule(pub_twin.task, ErrorException("fatal"), error=true)

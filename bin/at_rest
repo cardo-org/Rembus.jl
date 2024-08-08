@@ -1,0 +1,26 @@
+#!/bin/bash
+#=
+BINDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+exec julia --threads auto --color=no -e "include(popfirst!(ARGS))" \
+ --project=$BINDIR/.. --startup-file=no "${BASH_SOURCE[0]}" "$@"
+=#
+using Rembus
+using DuckDB
+using DataFrames
+
+function data(df, rownum)
+    if df[rownum, :msg][1] === 0x01
+        idx = 3
+    else
+        idx = 4
+    end
+    Rembus.dataframe_if_tagvalue(df[rownum, :msg][idx])
+end
+
+fn = ARGS[1]
+
+db = DuckDB.DB()
+df = select(Rembus.data_at_rest(fn), Not(:pkt))
+if !isinteractive()
+    show(df, truncate=200)
+end
