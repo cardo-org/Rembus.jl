@@ -20,6 +20,10 @@ const REMBUS_PAGE_SIZE = 1_000_000
 
 const MESSAGE_CHANNEL_SZ = 1000
 
+const QOS_0 = UInt8(0x00) # at most once
+const QOS_1 = UInt8(0x10) # at least once
+const QOS_2 = UInt8(0x30) # exactly once
+
 const BROKER_CONFIG = "__config__"
 const CID = "cid"
 const COMMAND = "cmd"
@@ -28,8 +32,6 @@ const RETROACTIVE = "retroactive"
 const STATUS = "status"
 
 const REACTIVE_CMD = "reactive"
-const ENABLE_ACK_CMD = "enable_ack"
-const DISABLE_ACK_CMD = "disable_ack"
 const RESET_ROUTER_CMD = "reset_router"
 const SHUTDOWN_CMD = "shutdown"
 const ENABLE_DEBUG_CMD = "enable_debug"
@@ -64,9 +66,12 @@ const TYPE_RPC::UInt8 = 2
 const TYPE_ADMIN::UInt8 = 3
 const TYPE_RESPONSE::UInt8 = 4
 const TYPE_ACK::UInt8 = 5
+const TYPE_ACK2::UInt8 = 6
 const TYPE_UNREGISTER::UInt8 = 9
 const TYPE_REGISTER::UInt8 = 10
 const TYPE_ATTESTATION::UInt8 = 11
+
+const REACTIVE_MESSAGE::UInt8 = 100
 
 # ZeroMQ periodic ping
 const TYPE_PING::UInt8 = 12
@@ -78,7 +83,7 @@ const TYPE_CLOSE::UInt8 = 15
 const REACTIVE_DISABLE::Bool = false
 const REACTIVE_ENABLE::Bool = true
 
-const ACK_WAIT_TIME = 0.5
+const ACK_WAIT_TIME = 1
 
 const STS_SUCCESS::UInt8 = 0
 const STS_GENERIC_ERROR::UInt8 = 10
@@ -95,8 +100,6 @@ const STS_NAME_ALREADY_TAKEN::UInt8 = 60
 
 # Rembus timeout
 const STS_TIMEOUT::UInt8 = 70
-
-const ACK_FLAG = 0x10
 
 const TYPE_0 = zero(UInt8)
 const TYPE_1 = one(UInt8) << 5

@@ -13,6 +13,7 @@ function Rembus.transport_send(
         error("I dont like packet number five")
     end
     Rembus.broker_transport_write(ws, pkt)
+    return true
 end
 
 mutable struct TestContext
@@ -71,8 +72,3 @@ end
 counter = 0
 execute(() -> park_messages(100000), "test_unpark_file::park_message")
 execute(() -> unpark(100000), "test_unpark_file::unpark_file", reset=false)
-
-# only one park file implies all messages fit in page memory
-counter = 0
-execute(() -> park_messages(10), "test_unpark_file::park_message")
-execute(() -> unpark(10), "test_unpark_file::unpark_file", reset=false)

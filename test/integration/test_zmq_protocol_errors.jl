@@ -17,12 +17,14 @@ function Rembus.transport_send(::Rembus.RBConnection, socket::ZMQ.Socket, msg::I
     send(socket, encode([104]), more=true)
     send(socket, "aaaa", more=true)
     send(socket, Rembus.MESSAGE_END, more=false)
+    return true
 end
 
 function Rembus.transport_send(::Rembus.RBConnection, socket::ZMQ.Socket, msg::PartialMsg)
     send(socket, Message(), more=true)
     send(socket, encode([Rembus.TYPE_PUB, "mytopic"]), more=true)
     send(socket, encode("my_value"), more=false)
+    return true
 end
 
 function mymethod(arg)

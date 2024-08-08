@@ -199,10 +199,6 @@ function admin_command(router, twin, msg::AdminReqMsg)
         if outcome !== nothing
             return outcome
         end
-    elseif cmd === ENABLE_ACK_CMD
-        twin.qos = with_ack
-    elseif cmd === DISABLE_ACK_CMD
-        twin.qos = fast
     elseif cmd === BROKER_CONFIG_CMD
         if isadmin(router, twin, cmd)
             data = router_configuration(router)

@@ -78,6 +78,15 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "ack"
+        @time @safetestset "qos0" begin
+            include("ack/test_qos0.jl")
+        end
+        @time @safetestset "qos1" begin
+            include("ack/test_qos1.jl")
+        end
+        @time @safetestset "qos2" begin
+            include("ack/test_qos2.jl")
+        end
         @time @safetestset "simple_ack" begin
             include("ack/test_simple_ack.jl")
         end
@@ -89,6 +98,12 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "publish_side" begin
             include("ack/test_publish_side.jl")
+        end
+        @time @safetestset "at_least_once" begin
+            include("ack/test_at_least_once.jl")
+        end
+        @time @safetestset "exactly_once" begin
+            include("ack/test_exactly_once.jl")
         end
     end
     if GROUP == "all" || GROUP == "connect"

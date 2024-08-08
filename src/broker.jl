@@ -7,16 +7,8 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 @enum QoS fast with_ack
 
-struct EnableReactiveMsg
+struct EnableReactiveMsg <: RembusMsg
     id::UInt128
-end
-
-mutable struct Pager
-    io::Union{Nothing,IOBuffer}
-    ts::Int # epoch time
-    size::UInt # approximate page size
-    Pager() = new(nothing, Libc.TimeVal().sec, CONFIG.page_size)
-    Pager(io::IOBuffer, ts=Libc.TimeVal().sec) = new(io, ts, CONFIG.page_size)
 end
 
 #=
@@ -32,13 +24,13 @@ mutable struct Twin
     session::Dict{String,Any}
     hasname::Bool
     isauth::Bool
+    mark::UInt64
     socket::Any
     retroactive::Dict{String,Bool}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
     out::Dict{UInt128,Threads.Condition}
     acktimer::Dict{UInt128,Timer}
     qos::QoS
-    pager::Union{Nothing,Pager}
     reactive::Bool
     ack_cond::Dict{UInt128,Threads.Condition}
     process::Visor.Process
@@ -49,13 +41,13 @@ mutable struct Twin
         Dict(),
         false,
         false,
+        0,
         nothing,
         Dict(),
         Dict(),
         Dict(),
         Dict(),
         fast,
-        nothing,
         false,
         Dict()
     )
@@ -65,9 +57,10 @@ mutable struct Msg
     ptype::UInt8
     content::RembusMsg
     twchannel::Twin
+    counter::UInt64
     reqdata::Any
-    Msg(ptype, content, src) = new(ptype, content, src)
-    Msg(ptype, content, src, reqdata) = new(ptype, content, src, reqdata)
+    Msg(ptype, content, src) = new(ptype, content, src, 0)
+    Msg(ptype, content, src, reqdata) = new(ptype, content, src, 0, reqdata)
 end
 
 struct SentData
@@ -84,6 +77,8 @@ Initialize a server for brokerless rpc and one way pub/sub.
 server(ctx=nothing) = Embedded(ctx)
 
 mutable struct Router <: AbstractRouter
+    duck::DBHandler
+    mcounter::UInt64
     start_ts::Float64
     servers::Set{String}
     address2twin::Dict{Vector{UInt8},Twin} # zeromq address => twin
@@ -99,8 +94,6 @@ mutable struct Router <: AbstractRouter
     twin_initialize::Function
     twin_finalize::Function
     pub_handler::Union{Nothing,Function}
-    park::Function
-    unpark::Function
     plugin::Union{Nothing,Module}
     context::Any
     process::Visor.Process
@@ -111,6 +104,8 @@ mutable struct Router <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
+        init_db(),
+        0,
         NaN,
         Set(),
         Dict(),
@@ -126,8 +121,6 @@ mutable struct Router <: AbstractRouter
         twin_initialize,
         twin_finalize,
         nothing,
-        park,
-        unpark,
         plugin, # plugin
         context  # context
     )
@@ -147,6 +140,133 @@ function Base.show(io::IO, msg::Msg)
         print(io, "$(msg.content)")
     end
 end
+
+#=
+Methods related to th epersistence of Pubsub messages.
+=#
+
+function init_db()
+    db = DuckDB.DB()
+    stmts = [
+        """CREATE TABLE IF NOT EXISTS msg
+         (ptr UBIGINT, ts UBIGINT, uid UBIGINT, topic STRING, pkt BLOB)
+        """
+    ]
+    for stmt in stmts
+        DBInterface.execute(db, stmt)
+    end
+    stmt = DBInterface.prepare(
+        db,
+        "INSERT INTO msg (ptr, ts, uid, topic, pkt) VALUES (?, ?, ?, ?, ?)"
+    )
+    return DBHandler(db, stmt)
+end
+
+struct PersistMessages end
+
+messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
+
+#=
+    Save pubsub message to in-memory cache and return the message pointer.
+
+    For QOS_1 or QOS_2 levels the message id is used to match ACK and ACK2 messages.
+=#
+function save_message(router, msg::PubSubMsg)
+    ts::UInt64 = msg.id >> 64
+    uid::UInt64 = msg.id & 0xffffffffffffffff
+    if isa(msg.data, IOBuffer)
+        data = msg.data.data
+    else
+        data = encode_message(msg)
+    end
+    router.mcounter += 1
+    DBInterface.execute(
+        router.duck.msg_stmt,
+        (
+            router.mcounter, ts, uid,
+            msg.topic, data
+        )
+    )
+    return router.mcounter
+end
+
+function data_at_rest(fn, broker="caronte")
+    path = joinpath(messages_dir(broker), fn)
+    db = DuckDB.DB()
+    df = DataFrame(DBInterface.execute(db, "SELECT * FROM read_parquet('$path')"))
+    df.msg = decode.(df.pkt)
+    return df
+end
+
+function send_messages(twin::Twin, db::DuckDB.DB, query::AbstractString)
+    rows = DBInterface.execute(db, query)
+    count = 0
+    for row in rows
+        msgid = UInt128(row.ts) << 64 + row.uid
+        tmark = twin.mark
+        if row.ptr > tmark
+            if haskey(twin.retroactive, row.topic) && twin.retroactive[row.topic]
+                pkt = Rembus.from_cbor(row.pkt)
+                pkt.id = msgid
+                msg = Msg(TYPE_PUB, pkt, twin)
+                msg.counter = row.ptr
+                put!(twin.process.inbox, msg)
+                count += 1
+            end
+        end
+    end
+    @debug "sent messages from cache: $count"
+end
+
+function from_disk_messages(twin::Twin, fn)
+    db = DuckDB.DB()
+    path = joinpath(messages_dir(twin.router), fn)
+    send_messages(twin::Twin, db, "SELECT * FROM read_parquet('$path')")
+end
+
+function from_memory_messages(twin::Twin)
+    send_messages(twin::Twin, twin.router.duck.db, "SELECT * FROM msg")
+end
+
+file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
+
+function msg_files(router)
+    return sort(readdir(Rembus.messages_dir(router)), lt=file_lt)
+end
+
+function save_messages(router)
+    @debug "[broker] persisting messages on disk"
+    fn = messages_fn(router, router.mcounter)
+
+    # do no overwrite file if no messages are published in the interval.
+    if !isfile(fn)
+        DBInterface.execute(
+            router.duck.db,
+            "COPY msg to '$(messages_fn(router, router.mcounter))' (FORMAT 'parquet')"
+        )
+        DBInterface.execute(
+            router.duck.db, "TRUNCATE msg"
+        )
+    end
+end
+
+function start_reactive(twin::Twin)
+    # get the files with never sent messages
+    allfiles = msg_files(twin.router)
+    files = filter(t -> parse(Int, t) > twin.mark, allfiles)
+
+    for fn in files
+        @debug "loading file [$fn]"
+        from_disk_messages(twin, fn)
+    end
+
+    # send the cached in-memory messages
+    from_memory_messages(twin)
+end
+
+#=
+End of methods related to the persistence of Pubsub messages
+=#
 
 #=
 macro mlog(str)
@@ -208,9 +328,6 @@ function offline!(twin)
 end
 
 function cleanup(twin, router::Router)
-    # save the cache
-    save_page(twin)
-
     # Remove from address2twin
     filter!(((k, v),) -> twin != v, router.address2twin)
 
@@ -245,6 +362,7 @@ function destroy_twin(twin, router)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
+    # TBD: remove cleanup
     return cleanup(twin, router)
 end
 
@@ -288,11 +406,6 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
     namedtwin.socket = twin.socket
     if !isa(twin.socket, ZMQ.Socket)
         twin.socket = nothing
-    end
-
-    #create a pager
-    if paging
-        namedtwin.pager = Pager(namedtwin)
     end
 
     # destroy the anonymous process
@@ -471,7 +584,11 @@ end
 function admin_msg(router, twin, msg)
     admin_res = admin_command(router, twin, msg)
     @debug "admin response: $admin_res"
-    push!(twin.process.inbox, admin_res)
+    if isa(admin_res, EnableReactiveMsg)
+        put!(router.process.inbox, Msg(REACTIVE_MESSAGE, admin_res, twin))
+    else
+        put!(twin.process.inbox, admin_res)
+    end
     return nothing
 end
 
@@ -560,7 +677,7 @@ function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
     else
-        if (msg.flags & ACK_FLAG) == ACK_FLAG
+        if msg.flags > QOS_0
             # reply with an ack message
             put!(twin.process.inbox, Msg(TYPE_ACK, AckMsg(msg.id), twin))
         end
@@ -582,14 +699,19 @@ function pubsub_msg(router, twin, msg)
 end
 
 function ack_msg(twin, msg)
-    if twin.qos === with_ack
-        msgid = msg.id
-        if haskey(twin.acktimer, msgid)
-            close(twin.acktimer[msgid])
-            delete!(twin.acktimer, msgid)
-            lock(twin.ack_cond[msgid]) do
-                notify(twin.ack_cond[msgid])
-            end
+    msgid = msg.id
+    if haskey(twin.acktimer, msgid)
+        close(twin.acktimer[msgid])
+        delete!(twin.acktimer, msgid)
+
+        # send the ACK2 message to the component
+        put!(
+            twin.process.inbox,
+            Msg(TYPE_ACK2, Ack2Msg(msgid), twin)
+        )
+
+        lock(twin.ack_cond[msgid]) do
+            notify(twin.ack_cond[msgid], true)
         end
     end
 
@@ -776,11 +898,6 @@ function zeromq_receiver(router::Router)
                 else
                     if twin.socket !== nothing
                         pong(twin.socket, msg.id, id)
-
-                        # check if there are cached messages
-                        if twin.reactive
-                            unpark(router.context, twin)
-                        end
                     end
                 end
             elseif isa(msg, Register)
@@ -837,8 +954,6 @@ function close_is_ok(ws::TCPSocket, e)
 end
 
 close_is_ok(::Nothing, e) = true
-
-page_file(twin) = joinpath(twins_dir(twin.router), twin.id, string(twin.pager.ts))
 
 #=
     detach(twin)
@@ -900,18 +1015,11 @@ end
 Persist a PubSub message in case the acknowledge message is not received.
 =#
 function handle_ack_timeout(tim, twin, msg, msgid)
-    if haskey(twin.acktimer, msgid)
-        try
-            twin.router.park(twin.router.context, twin, msg)
-        catch e
-            @error "[$twin] park (ack timeout): $e"
-        end
-    end
     delete!(twin.acktimer, msgid)
 
     if haskey(twin.ack_cond, msgid)
         lock(twin.ack_cond[msgid]) do
-            notify(twin.ack_cond[msgid])
+            notify(twin.ack_cond[msgid], false)
         end
     end
 end
@@ -927,17 +1035,11 @@ Send `msg` to client or enqueue it if it is offline.
 
 Register the message into Twin.sent table.
 =#
-function signal!(twin, msg)
+function signal!(twin, msg::Msg)
     @debug "[$twin] message>>: $msg, offline:$(offline(twin)), type:$(msg.ptype)"
     if (offline(twin) || notreactive(twin, msg)) && msg.ptype === TYPE_PUB
-        twin.router.park(twin.router.context, twin, msg.content)
         return nothing
-
-    elseif twin.pager !== nothing && twin.pager.io !== nothing
-        # it is online and reactive, send cached messages if any
-        twin.router.unpark(twin.router.context, twin)
     end
-
     # current message
     if isa(msg.content, RpcReqMsg)
         tmr = Timer(request_timeout()) do tmr
@@ -947,19 +1049,31 @@ function signal!(twin, msg)
         twin.sent[msg.content.id] = SentData(time(), msg, tmr)
     end
 
+    if (msg.ptype === TYPE_PUB)
+        msg_tmark = msg.counter
+        twin_tmark = twin.mark
+        if (msg_tmark < twin_tmark)
+            # message already sent
+            @debug "[$twin] msg $msg already sent: $(msg.content.data)"
+            return nothing
+        end
+    end
     pkt = msg.content
     #@mlog "[$twin] -> $pkt"
     try
-        transport_send(twin, twin.socket, pkt)
+        # retry until outcome is true (ack message received)
+        outcome = false
+        while !outcome
+            outcome = transport_send(twin, twin.socket, pkt)
+        end
+        if isa(pkt, PubSubMsg)
+            twin.mark = msg.counter
+        end
     catch e
         @error "[$twin] going offline: $e"
         @showerror e
-        if msg.ptype === TYPE_PUB
-            twin.router.park(twin.router.context, twin, msg.content)
-        end
         detach(twin)
     end
-
     return nothing
 end
 
@@ -1035,7 +1149,7 @@ function command_line()
 end
 
 function caronte_reset(broker_name="caronte")
-    rm(twins_dir(broker_name), force=true, recursive=true)
+    rm(messages_dir(broker_name), force=true, recursive=true)
     bdir = broker_dir(broker_name)
     if isdir(bdir)
         foreach(rm, filter(isfile, readdir(bdir, join=true)))
@@ -1306,7 +1420,7 @@ function listener(proc, caronte_port, router, sslconfig)
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
     router.ws_server = server
     proto = (sslconfig === nothing) ? "ws" : "wss"
-    @info "caronte up and running at port $proto:$caronte_port"
+    @info "$(proc.supervisor) up and running at port $proto:$caronte_port"
 
     setphase(proc, :listen)
 
@@ -1669,7 +1783,7 @@ function serve_zeromq(pd, router, port)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
 
     try
-        @info "caronte up and running at port zmq:$port"
+        @info "$(pd.supervisor) up and running at port zmq:$port"
         setphase(pd, :listen)
         zeromq_receiver(router)
     catch e
@@ -1702,7 +1816,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
         router.server = server
-        @info "caronte up and running at port $proto:$caronte_port"
+        @info "$(pd.supervisor) up and running at port $proto:$caronte_port"
         while true
             sock = accept(server)
             if issecure
@@ -1853,17 +1967,17 @@ function broadcast!(router, msg)
     elseif isdefined(msg, :reqdata)
         topic = msg.reqdata.topic
         bmsg = PubSubMsg(topic, msg.reqdata.data)
+        msg = Msg(TYPE_PUB, bmsg, msg.twchannel, UInt64(1))
     else
         @debug "no broadcast for [$msg]: request data not available or server method"
         return nothing
     end
 
     union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
-    newmsg = Msg(TYPE_PUB, bmsg, msg.twchannel)
 
     for tw in authtwins
-        @debug "broadcasting $topic to $(tw.id): [$newmsg]"
-        put!(tw.process.inbox, newmsg)
+        @debug "broadcasting $topic to $tw"
+        put!(tw.process.inbox, msg)
     end
 
     return nothing
@@ -2005,6 +2119,21 @@ function caronte_embedded_method(router, twin::Twin, msg::RembusMsg)
     return found
 end
 
+function encode_message(msg::PubSubMsg)
+    io = IOBuffer()
+    if isa(msg.data, ZMQ.Message)
+        data = decode(Vector{UInt8}(msg.data))
+    else
+        data = msg.data
+    end
+    if msg.flags > QOS_0
+        encode_partial(io, [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, data])
+    else
+        encode_partial(io, [TYPE_PUB | msg.flags, msg.topic, data])
+    end
+    return take!(io)
+end
+
 #=
     broker(self, router)
 
@@ -2012,6 +2141,9 @@ Rembus broker main task.
 =#
 function broker(self, router)
     @debug "[broker] starting"
+    window = 30
+    db_timer = Timer((tmr) -> put!(self.inbox, PersistMessages()), window, interval=window)
+
     try
         router.process = self
         init(router)
@@ -2021,12 +2153,12 @@ function broker(self, router)
         router.topic_function["version"] = (ctx, session) -> Rembus.VERSION
 
         for msg in self.inbox
-            # process control messages
             !isshutdown(msg) || break
 
-            @debug "[broker] recv [type=$(msg.ptype)]: $msg"
             if isa(msg, Msg)
+                @debug "[broker] recv [type=$(msg.ptype)]: $msg"
                 if msg.ptype == TYPE_PUB
+                    msg.counter = save_message(router, msg.content)
                     # publish to interested twins
                     broadcast!(router, msg)
                 elseif msg.ptype == TYPE_RPC
@@ -2059,19 +2191,28 @@ function broker(self, router)
                     # it is a result from an exposer
                     # reply toward the client that has made the request
                     respond(router, msg)
+                elseif msg.ptype == REACTIVE_MESSAGE
+                    #TBD: manage errors
+                    response = ResMsg(msg.content.id, STS_SUCCESS, nothing)
+                    put!(msg.twchannel.process.inbox, response)
+                    start_reactive(msg.twchannel)
                 end
+            elseif isa(msg, PersistMessages)
+                # save on disk
+                save_messages(router)
             else
                 @warn "unknown message: $msg"
             end
         end
     catch e
         @error "[broker] error: $e"
+        showerror(stdout, e, catch_backtrace())
         rethrow()
     finally
-        for tw in values(router.id_twin)
-            save_page(tw)
-        end
         save_configuration(router)
+        save_messages(router)
+        @debug "closing messages at rest timer"
+        close(db_timer)
     end
     @debug "[broker] done"
 end
@@ -2092,9 +2233,9 @@ function boot(router)
         mkdir(appdir)
     end
 
-    twin_dir = twins_dir(router)
-    if !isdir(twin_dir)
-        mkdir(twin_dir)
+    msg_dir = messages_dir(router)
+    if !isdir(msg_dir)
+        mkdir(msg_dir)
     end
 
     load_configuration(router)
@@ -2113,12 +2254,6 @@ function init(router)
     @debug "broker datadir: $(broker_dir(router))"
 
     if router.plugin !== nothing
-        if isdefined(router.plugin, :park) &&
-           isdefined(router.plugin, :unpark)
-            router.park = getfield(router.plugin, :park)
-            router.unpark = getfield(router.plugin, :unpark)
-        end
-
         if isdefined(router.plugin, :twin_initialize)
             router.twin_initialize = getfield(router.plugin, :twin_initialize)
         end
@@ -2218,6 +2353,19 @@ function add_server(router, url)
     push!(router.servers, url)
 end
 
+#=
+    remove_server(components)
+
+Remove a server.
+=#
+function remove_server(router, url)
+    proc = from(url)
+    if proc !== nothing
+        shutdown(proc)
+    end
+    delete!(router.servers, url)
+end
+
 function egress_task(proc, twin::Twin, remote::Component)
     isconnected = Condition()
     t = Timer((tim) -> connect_timeout(twin, isconnected), connect_request_timeout())
@@ -2266,7 +2414,6 @@ function egress(
 
     twin = create_twin(remote.id, router)
     twin.hasname = true
-    twin.pager = Pager(twin)
 
     # start the egress process
     startup(

@@ -41,7 +41,7 @@ export encode
 export decode, decode_with_iana
 export Undefined
 
-function decode(data::Array{UInt8,1})
+function decode(data)
     return decode_internal(IOBuffer(data))
 end
 

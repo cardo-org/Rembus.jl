@@ -22,8 +22,11 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     flags::UInt8
     id::UInt128
 
-    function PubSubMsg(topic, data=nothing, flags=0x0, id=0)
-        return new{typeof(data)}(topic, data, flags, id)
+    function PubSubMsg(topic, data=nothing, flags=0x0, mid=0)
+        if mid == 0 && flags > QOS_0
+            mid = id()
+        end
+        return new{typeof(data)}(topic, data, flags, mid)
     end
 end
 
@@ -69,6 +72,10 @@ struct AdminReqMsg{T} <: RembusTopicMsg
 end
 
 struct AckMsg <: RembusMsg
+    id::UInt128
+end
+
+struct Ack2Msg <: RembusMsg
     id::UInt128
 end
 
@@ -128,7 +135,10 @@ end
 #struct Remove <: RembusMsg
 #end
 
-id() = uuid4().value  # unique message identifier
+function id()
+    tv = Libc.TimeVal()
+    UInt128(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
+end
 
 #counter = UInt128(0)
 #function id()

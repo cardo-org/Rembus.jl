@@ -23,13 +23,13 @@ function set_subscribers()
 end
 
 function foo(ctx, x)
-    @info "[test_simple_publish] foo=$x"
+    @info "[test_conditional_publish] foo=$x"
     ctx.service_data = x
     return "ok"
 end
 
 function foo_subscriber(ctx, val)
-    @info "foo_subscriber:$val"
+    @info "test_conditional_publish foo_subscriber:$val"
     ctx.subscriber_data = val
 end
 
@@ -44,13 +44,12 @@ function run()
         @reactive
         @expose foo
 
-        rpc(rb, "foo", value)
-        sleep(2)
-
         sub = connect("mysub")
         subscribe(sub, "foo", foo_subscriber, true)
         shared(sub, ctx)
         reactive(sub)
+
+        rpc(rb, "foo", value)
 
         sleep(5)
         @test ctx.service_data == value

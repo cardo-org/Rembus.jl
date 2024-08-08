@@ -47,10 +47,9 @@ function publish_workflow(pub, sub)
     shared(sub, testbag)
 
     subscribe(sub, my_topic, consume)
-    enable_ack(sub)
     reactive(sub)
 
-    publish(publisher, my_topic, 2)
+    publish(publisher, my_topic, 2, qos=QOS_1)
 
     sleep(waittime)
 

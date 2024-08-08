@@ -36,17 +36,11 @@ msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", zeros(UInt8, 11)),
 # encode a wrong Rembus message type value
 @test_throws ErrorException Rembus.broker_parse(encode([0x17, "topic"]))
 
-# park an anonymous twin does nothing
-Rembus.park(nothing, twin, rembusMessage)
-
 twin.id = "mytwin"
 twin.hasname = true
-twin.pager = Rembus.Pager(IOBuffer(; write=true, read=true))
 twin_dir = joinpath(Rembus.broker_dir("broker"), "twins")
 mkpath(joinpath(twin_dir, twin.id))
 
-Rembus.park(nothing, twin, rembusMessage)
-yield()
 Rembus.destroy_twin(twin, router)
 
 @test !isempty(router.topic_impls)
