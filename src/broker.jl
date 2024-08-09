@@ -254,7 +254,7 @@ function start_reactive(twin::Twin)
     # get the files with never sent messages
     allfiles = msg_files(twin.router)
     files = filter(t -> parse(Int, t) > twin.mark, allfiles)
-
+    twin.reactive = true
     for fn in files
         @debug "loading file [$fn]"
         from_disk_messages(twin, fn)
@@ -969,7 +969,7 @@ function detach(twin)
         end
         twin.socket = nothing
     end
-
+    twin.reactive = false
     return nothing
 end
 

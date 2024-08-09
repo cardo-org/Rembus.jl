@@ -189,7 +189,6 @@ function admin_command(router, twin, msg::AdminReqMsg)
         outcome = callback_and(Symbol(REACTIVE_HANDLER), router, twin, msg) do
             enabled = get(msg.data, STATUS, false)
             if enabled
-                twin.reactive = true
                 return EnableReactiveMsg(msg.id)
             else
                 twin.reactive = false

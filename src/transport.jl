@@ -515,10 +515,12 @@ function bytes2zid(buff::Vector{UInt8})
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::PingMsg)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_PING, id2bytes(msg.id), msg.cid]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_PING, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -529,10 +531,12 @@ function transport_send(::RBHandle, ws, msg::IdentityMsg)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::IdentityMsg)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_IDENTITY, id2bytes(msg.id), msg.cid]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_IDENTITY, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -636,11 +640,13 @@ end
 function transport_send(rb::RBHandle, socket::ZMQ.Socket, msg::PubSubMsg)
     content = tagvalue_if_dataframe(msg.data)
     outcome = true
-    send(socket, Message(), more=true)
     if msg.flags == QOS0
-        send(socket, encode([TYPE_PUB | msg.flags, msg.topic]), more=true)
-        send(socket, encode(content), more=true)
-        send(socket, MESSAGE_END, more=false)
+        lock(zmqsocketlock) do
+            send(socket, Message(), more=true)
+            send(socket, encode([TYPE_PUB | msg.flags, msg.topic]), more=true)
+            send(socket, encode(content), more=true)
+            send(socket, MESSAGE_END, more=false)
+        end
     else
         msgid = msg.id
         ack_cond = Distributed.Future()
@@ -648,9 +654,12 @@ function transport_send(rb::RBHandle, socket::ZMQ.Socket, msg::PubSubMsg)
         rb.acktimer[msgid] = Timer((tim) -> client_ack_timeout(
                 tim, rb, msg, msgid
             ), ACK_WAIT_TIME)
-        send(socket, encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic]), more=true)
-        send(socket, encode(content), more=true)
-        send(socket, MESSAGE_END, more=false)
+        lock(zmqsocketlock) do
+            send(socket, Message(), more=true)
+            send(socket, encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic]), more=true)
+            send(socket, encode(content), more=true)
+            send(socket, MESSAGE_END, more=false)
+        end
         outcome = fetch(ack_cond)
         close(rb.acktimer[msgid])
         delete!(rb.acktimer, msgid)
@@ -747,17 +756,19 @@ end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::RpcReqMsg)
     content = tagvalue_if_dataframe(msg.data)
-    send(socket, Message(), more=true)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
 
-    if msg.target === nothing
-        target = nothing
-    else
-        target = msg.target
+        if msg.target === nothing
+            target = nothing
+        else
+            target = msg.target
+        end
+
+        send(socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, target]), more=true)
+        send(socket, encode(content), more=true)
+        send(socket, MESSAGE_END, more=false)
     end
-
-    send(socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, target]), more=true)
-    send(socket, encode(msg.data), more=true)
-    send(socket, MESSAGE_END, more=false)
     return true
 end
 
@@ -780,10 +791,12 @@ function transport_send(twin::Twin, socket::ZMQ.Socket, msg::ResMsg, enc=false)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::ResMsg)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
-    send(socket, encode(msg.data), more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
+        send(socket, encode(msg.data), more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -818,15 +831,13 @@ function transport_send(::RBHandle, ws, msg::AdminReqMsg)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::AdminReqMsg)
-    #    if isa(msg.data, DataFrame)
     content = tagvalue_if_dataframe(msg.data)
-    #    else
-    #        content = msg.data
-    #    end
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
-    send(socket, encode(content), more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
+        send(socket, encode(content), more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -888,10 +899,12 @@ function transport_send(::RBHandle, ws, msg::AckMsg)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::AckMsg)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -904,10 +917,12 @@ function transport_send(::RBHandle, ws, msg::Attestation)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::Attestation)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_ATTESTATION, id2bytes(msg.id), msg.cid]), more=true)
-    send(socket, msg.signature, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ATTESTATION, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, msg.signature, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -918,10 +933,12 @@ function transport_send(::RBHandle, ws, msg::Register)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::Register)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid]), more=true)
-    send(socket, msg.pubkey, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid]), more=true)
+        send(socket, msg.pubkey, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
@@ -932,18 +949,22 @@ function transport_send(::RBHandle, ws, msg::Unregister)
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, msg::Unregister)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 
 function transport_send(::RBHandle, socket::ZMQ.Socket, ::Close)
-    send(socket, Message(), more=true)
-    send(socket, encode([TYPE_CLOSE]), more=true)
-    send(socket, DATA_EMPTY, more=true)
-    send(socket, MESSAGE_END, more=false)
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_CLOSE]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
     return true
 end
 

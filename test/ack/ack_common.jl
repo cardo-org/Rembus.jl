@@ -63,7 +63,7 @@ function run(publisher, consumer)
 
     # close and connect again
     close(sub)
-    sleep(4)
+    sleep(2)
 
     @debug "reopening $consumer" _group = :test
     sub = connect(consumer)
