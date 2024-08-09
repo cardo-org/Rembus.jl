@@ -28,7 +28,7 @@ function pub(topic, num_msg)
     pub = connect("pub")
 
     for i in 1:num_msg
-        publish(pub, topic, i, qos=QOS_2)
+        publish(pub, topic, i, qos=QOS2)
     end
     return pub
 end

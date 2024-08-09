@@ -48,7 +48,7 @@ function pub(topic, ctx)
     shared(pub, ctx)
     egress_interceptor(pub, pub_egress)
     ingress_interceptor(pub, pub_ingress)
-    publish(pub, topic, 1, qos=QOS_0)
+    publish(pub, topic, 1, qos=QOS0)
     return pub
 end
 

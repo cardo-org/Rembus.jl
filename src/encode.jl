@@ -268,13 +268,13 @@ end
 function encode_partial(io, data::Vector)
     type = data[1] & 0x0f
     if type == TYPE_PUB
-        if (data[1] & QOS_1) == QOS_1
+        if (data[1] & QOS1) == QOS1
             write(io, 0x84)
         else
             write(io, 0x83)
         end
         encode(io, data[1]) # type
-        if (data[1] & QOS_1) == QOS_1
+        if (data[1] & QOS1) == QOS1
             encode(io, data[2]) # msgid
             encode(io, data[3]) # topic
             add_payload(io, data[4])

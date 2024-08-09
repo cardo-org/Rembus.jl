@@ -49,7 +49,7 @@ function publish_workflow(pub, sub)
     subscribe(sub, my_topic, consume)
     reactive(sub)
 
-    publish(publisher, my_topic, 2, qos=QOS_1)
+    publish(publisher, my_topic, 2, qos=QOS1)
 
     sleep(waittime)
 

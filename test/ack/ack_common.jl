@@ -36,7 +36,7 @@ function storm(pub)
         if (i % 5000) == 0
             sleep(0.01)
         end
-        publish(pub, test_topic, i, qos=QOS_1)
+        publish(pub, test_topic, i, qos=QOS1)
     end
     @info "[storm] done"
 end
@@ -63,13 +63,13 @@ function run(publisher, consumer)
 
     # close and connect again
     close(sub)
-    sleep(2)
+    sleep(4)
 
     @debug "reopening $consumer" _group = :test
     sub = connect(consumer)
 
-    subscribe(sub, test_topic, consume, true)
     shared(sub, ctx)
+    subscribe(sub, test_topic, consume, true)
     reactive(sub)
 
     @info "sleeping"

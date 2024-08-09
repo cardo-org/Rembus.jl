@@ -21,6 +21,15 @@ function component_id(cfg)
     return startswith(uri.path, "/") ? uri.path[2:end] : uri.path
 end
 
+function root_dir()
+    if Sys.iswindows()
+        home = get(ENV, "USERPROFILE", ".")
+    else
+        home = get(ENV, "HOME", ".")
+    end
+    return joinpath(home, ".config")
+end
+
 mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
@@ -38,16 +47,11 @@ mutable struct Settings
     context::Any
     page_size::UInt
     Settings() = begin
-        if Sys.iswindows()
-            home = get(ENV, "USERPROFILE", ".")
-        else
-            home = get(ENV, "HOME", ".")
-        end
 
         zmq_ping_interval = 0
         ws_ping_interval = 0
         balancer = "first_up"
-        root_dir = joinpath(home, ".config")
+        rdir = root_dir()
         log = "stdout"
         overwrite_connection = true
         stacktrace = false
@@ -57,7 +61,7 @@ mutable struct Settings
         connection_retry_period = 2.0
         debug = false
         page_size = get(ENV, "REMBUS_PAGE_SIZE", REMBUS_PAGE_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, root_dir, log, debug,
+        new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log, debug,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, nothing, page_size)
     end
@@ -83,7 +87,7 @@ function setup(setting)
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "120")))
 
-    setting.root_dir = get(cfg, "root_dir", get(ENV, "REMBUS_ROOT_DIR", setting.root_dir))
+    setting.root_dir = get(cfg, "root_dir", get(ENV, "REMBUS_ROOT_DIR", root_dir()))
     setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)

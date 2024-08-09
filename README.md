@@ -74,5 +74,15 @@ end
 ```julia
 df = DataFrame(a=1:1_000_000, b=rand(1_000_000))
 
+# Fire and forget is the fastest publishing mechanism.
+# at most once delivery guarantee.
 @publish mytopic(df)
+
+# Messages are acknowledged and eventually retransmitted.
+# at least once delivery guarantee.
+@publish mytopic(df) QOS1
+
+# Exactly once delivery guarantee.
+@publish mytopic(df) QOS2
+
 ```

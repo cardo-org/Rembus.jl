@@ -71,6 +71,7 @@ export set_balancer
 export forever
 export terminate
 export egress_interceptor, ingress_interceptor
+export rbinfo
 
 # broker api
 export add_server, remove_server
@@ -80,7 +81,7 @@ export RembusError
 export RembusTimeout
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
-export QOS_0, QOS_1, QOS_2
+export QOS0, QOS1, QOS2
 
 mutable struct Component
     id::String
@@ -197,8 +198,12 @@ end
 
 Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
 
+opstatus(rb::RBHandle) = isconnected(rb) ? '👍' : '👎'
+rbinfo(rb::RBHandle) = "$(rb.client.id)$(opstatus(rb))"
+rbinfo(rb::Visor.Process) = "$rb$(opstatus(rb.args[1]))"
+
 function Base.show(io::IO, rb::RBConnection)
-    return print(io, "$(rb.client.id)*")
+    return print(io, rbinfo(rb))
 end
 
 function egress_interceptor(rb::RBConnection, func)
@@ -438,6 +443,8 @@ end
 struct CastCall
     topic::String
     data::Any
+    qos::UInt8
+    CastCall(topic, data, qos=QOS0) = new(topic, data, qos)
 end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
@@ -586,14 +593,14 @@ macro shared(cid, container)
     end
 end
 
-function publish_expr(topic, cid=nothing)
-    ext = :(cast(Rembus.name2proc("cid", true, true), Rembus.CastCall(t, [])))
-
+function publish_expr(topic, qos, cid=nothing)
+    ext = :(cast(Rembus.name2proc("cid", true, true), Rembus.CastCall(t, [], QOS0)))
     fn = string(topic.args[1])
     ext.args[2].args[2] = cid
     ext.args[3].args[2] = fn
     args = topic.args[2:end]
     ext.args[3].args[3].args = args
+    ext.args[3].args[4] = qos
     return ext
 end
 
@@ -622,15 +629,15 @@ end
 supervise()
 ```
 """
-macro publish(topic)
-    ext = publish_expr(topic)
+macro publish(topic, qos::Symbol=:QOS0)
+    ext = publish_expr(topic, qos)
     quote
         $(esc(ext))
     end
 end
 
-macro publish(cid, topic)
-    ext = publish_expr(topic, cid)
+macro publish(cid, topic, qos::Symbol=:QOS0)
+    ext = publish_expr(topic, qos, cid)
     quote
         $(esc(ext))
     end
@@ -1134,7 +1141,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                 end
                 reply(msg, result)
             else
-                publish(rb, msg.topic, msg.data)
+                publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
         end
     catch e
@@ -1355,7 +1362,7 @@ function handle_input(rb, msg)
         remove_message(rb, msg)
     else
         # check for duplicates
-        if isa(msg, PubSubMsg) && msg.flags == QOS_2 && already_received(rb, msg)
+        if isa(msg, PubSubMsg) && msg.flags == QOS2 && already_received(rb, msg)
             @info "skipping already received message $msg"
             sts = STS_SUCCESS
         else
@@ -1374,9 +1381,9 @@ function handle_input(rb, msg)
             @debug "response: $response"
             put!(rb.msgch, response)
         elseif isa(msg, PubSubMsg)
-            if msg.flags > QOS_0
+            if msg.flags > QOS0
                 put!(rb.msgch, AckMsg(msg.id))
-                if msg.flags == QOS_2
+                if msg.flags == QOS2
                     save_message_mark(rb, msg)
                 end
             end
@@ -2318,7 +2325,7 @@ function ping(rb::RBConnection)
 end
 
 """
-    publish(rb::RBHandle, topic::AbstractString, data=[])
+    publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS0)
 
 Publish `data` values on `topic`.
 
@@ -2358,7 +2365,7 @@ publish(rb, "mytopic")
 languages then data has to be a DataFrame or a primitive type that is
 [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
-function publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS_0)
+function publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS0)
     put!(rb.msgch, PubSubMsg(topic, data, qos))
     return nothing
 end

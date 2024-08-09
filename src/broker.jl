@@ -169,7 +169,7 @@ messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
 #=
     Save pubsub message to in-memory cache and return the message pointer.
 
-    For QOS_1 or QOS_2 levels the message id is used to match ACK and ACK2 messages.
+    For QOS1 or QOS2 levels the message id is used to match ACK and ACK2 messages.
 =#
 function save_message(router, msg::PubSubMsg)
     ts::UInt64 = msg.id >> 64
@@ -234,9 +234,9 @@ function msg_files(router)
     return sort(readdir(Rembus.messages_dir(router)), lt=file_lt)
 end
 
-function save_messages(router)
-    @debug "[broker] persisting messages on disk"
+function persist_messages(router)
     fn = messages_fn(router, router.mcounter)
+    @debug "[broker] persisting messages on disk: $fn"
 
     # do no overwrite file if no messages are published in the interval.
     if !isfile(fn)
@@ -677,7 +677,7 @@ function pubsub_msg(router, twin, msg)
     if !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
     else
-        if msg.flags > QOS_0
+        if msg.flags > QOS0
             # reply with an ack message
             put!(twin.process.inbox, Msg(TYPE_ACK, AckMsg(msg.id), twin))
         end
@@ -831,6 +831,8 @@ function anonymous_twin_receiver(router, twin)
                 rpc_request(router, twin, msg)
             elseif isa(msg, PubSubMsg)
                 pubsub_msg(router, twin, msg)
+            elseif isa(msg, AckMsg)
+                ack_msg(twin, msg)
             end
         end
     catch e
@@ -2126,7 +2128,7 @@ function encode_message(msg::PubSubMsg)
     else
         data = msg.data
     end
-    if msg.flags > QOS_0
+    if msg.flags > QOS0
         encode_partial(io, [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, data])
     else
         encode_partial(io, [TYPE_PUB | msg.flags, msg.topic, data])
@@ -2199,7 +2201,7 @@ function broker(self, router)
                 end
             elseif isa(msg, PersistMessages)
                 # save on disk
-                save_messages(router)
+                persist_messages(router)
             else
                 @warn "unknown message: $msg"
             end
@@ -2210,7 +2212,7 @@ function broker(self, router)
         rethrow()
     finally
         save_configuration(router)
-        save_messages(router)
+        persist_messages(router)
         @debug "closing messages at rest timer"
         close(db_timer)
     end

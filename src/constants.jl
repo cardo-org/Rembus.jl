@@ -20,9 +20,9 @@ const REMBUS_PAGE_SIZE = 1_000_000
 
 const MESSAGE_CHANNEL_SZ = 1000
 
-const QOS_0 = UInt8(0x00) # at most once
-const QOS_1 = UInt8(0x10) # at least once
-const QOS_2 = UInt8(0x30) # exactly once
+const QOS0 = UInt8(0x00) # at most once
+const QOS1 = UInt8(0x10) # at least once
+const QOS2 = UInt8(0x30) # exactly once
 
 const BROKER_CONFIG = "__config__"
 const CID = "cid"

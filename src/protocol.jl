@@ -23,7 +23,7 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     id::UInt128
 
     function PubSubMsg(topic, data=nothing, flags=0x0, mid=0)
-        if mid == 0 && flags > QOS_0
+        if mid == 0 && flags > QOS0
             mid = id()
         end
         return new{typeof(data)}(topic, data, flags, mid)
