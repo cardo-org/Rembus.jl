@@ -36,6 +36,9 @@ function run()
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
 
+    # it seems that coverage require some sleep time
+    sleep(1)
+
     cli = connect()
     n = 1
     response = rpc(cli, "mymethod", n)
