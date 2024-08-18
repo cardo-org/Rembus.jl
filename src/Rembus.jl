@@ -26,6 +26,7 @@ using Random
 using Reexport
 using Sockets
 using Parameters
+using Parquet
 using PrecompileTools
 using Preferences
 using Printf
@@ -127,7 +128,7 @@ end
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-struct DBHandler
+mutable struct DBHandler
     db::DuckDB.DB
     msg_stmt::DuckDB.Stmt
 end

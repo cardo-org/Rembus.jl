@@ -76,8 +76,12 @@ Initialize a server for brokerless rpc and one way pub/sub.
 """
 server(ctx=nothing) = Embedded(ctx)
 
+msg_dataframe() = DataFrame(
+    ptr=UInt[], ts=UInt[], uid=UInt[], topic=String[], pkt=String[]
+)
+
 mutable struct Router <: AbstractRouter
-    duck::DBHandler
+    msg_df::DataFrame
     mcounter::UInt64
     start_ts::Float64
     servers::Set{String}
@@ -104,7 +108,7 @@ mutable struct Router <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
-        init_db(),
+        msg_dataframe(),
         0,
         NaN,
         Set(),
@@ -145,25 +149,6 @@ end
 Methods related to th epersistence of Pubsub messages.
 =#
 
-function init_db()
-    db = DuckDB.DB()
-    stmts = [
-        """CREATE TABLE IF NOT EXISTS msg
-         (ptr UBIGINT, ts UBIGINT, uid UBIGINT, topic STRING, pkt BLOB)
-        """
-    ]
-    for stmt in stmts
-        DBInterface.execute(db, stmt)
-    end
-    stmt = DBInterface.prepare(
-        db,
-        "INSERT INTO msg (ptr, ts, uid, topic, pkt) VALUES (?, ?, ?, ?, ?)"
-    )
-    return DBHandler(db, stmt)
-end
-
-struct PersistMessages end
-
 messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
 
 #=
@@ -180,28 +165,30 @@ function save_message(router, msg::PubSubMsg)
         data = encode_message(msg)
     end
     router.mcounter += 1
-    DBInterface.execute(
-        router.duck.msg_stmt,
-        (
-            router.mcounter, ts, uid,
-            msg.topic, data
-        )
-    )
+
+    push!(router.msg_df, [router.mcounter, ts, uid, msg.topic, String(data)])
+    if (router.mcounter % 50000) == 0
+        @debug "saved $(router.mcounter) messages"
+    end
+
+    if (router.mcounter % CONFIG.db_max_messages) == 0
+        persist_messages(router)
+        @debug "persisted $(router.mcounter) file"
+        router.msg_df = msg_dataframe()
+    end
+
     return router.mcounter
 end
 
 function data_at_rest(fn, broker="caronte")
     path = joinpath(messages_dir(broker), fn)
-    db = DuckDB.DB()
-    df = DataFrame(DBInterface.execute(db, "SELECT * FROM read_parquet('$path')"))
-    df.msg = decode.(df.pkt)
+    df = DataFrame(read_parquet(path))
+    df.msg = decode.(Vector{UInt8}.(df.pkt))
     return df
 end
 
-function send_messages(twin::Twin, db::DuckDB.DB, query::AbstractString)
-    rows = DBInterface.execute(db, query)
-    count = 0
-    for row in rows
+function send_messages(twin::Twin, df)
+    for row in eachrow(df)
         msgid = UInt128(row.ts) << 64 + row.uid
         tmark = twin.mark
         if row.ptr > tmark
@@ -211,21 +198,21 @@ function send_messages(twin::Twin, db::DuckDB.DB, query::AbstractString)
                 msg = Msg(TYPE_PUB, pkt, twin)
                 msg.counter = row.ptr
                 put!(twin.process.inbox, msg)
-                count += 1
             end
         end
     end
-    @debug "sent messages from cache: $count"
 end
 
 function from_disk_messages(twin::Twin, fn)
     db = DuckDB.DB()
     path = joinpath(messages_dir(twin.router), fn)
-    send_messages(twin::Twin, db, "SELECT * FROM read_parquet('$path')")
+    df = DataFrame(read_parquet(path))
+    df.msg = decode.(Vector{UInt8}.(df.pkt))
+    send_messages(twin, df)
 end
 
 function from_memory_messages(twin::Twin)
-    send_messages(twin::Twin, twin.router.duck.db, "SELECT * FROM msg")
+    send_messages(twin, twin.router.msg_df)
 end
 
 file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
@@ -238,16 +225,17 @@ function persist_messages(router)
     fn = messages_fn(router, router.mcounter)
     @debug "[broker] persisting messages on disk: $fn"
 
+    db = DuckDB.DB()
+    DuckDB.register_data_frame(db, router.msg_df, "df")
     # do no overwrite file if no messages are published in the interval.
     if !isfile(fn)
         DBInterface.execute(
-            router.duck.db,
-            "COPY msg to '$(messages_fn(router, router.mcounter))' (FORMAT 'parquet')"
-        )
-        DBInterface.execute(
-            router.duck.db, "TRUNCATE msg"
+            db,
+            "COPY df to '$(messages_fn(router, router.mcounter))' (FORMAT 'parquet')"
         )
     end
+
+    close(db)
 end
 
 function start_reactive(twin::Twin)
@@ -2144,7 +2132,6 @@ Rembus broker main task.
 function broker(self, router)
     @debug "[broker] starting"
     window = 30
-    db_timer = Timer((tmr) -> put!(self.inbox, PersistMessages()), window, interval=window)
 
     try
         router.process = self
@@ -2199,9 +2186,6 @@ function broker(self, router)
                     put!(msg.twchannel.process.inbox, response)
                     start_reactive(msg.twchannel)
                 end
-            elseif isa(msg, PersistMessages)
-                # save on disk
-                persist_messages(router)
             else
                 @warn "unknown message: $msg"
             end
