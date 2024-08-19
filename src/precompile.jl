@@ -176,11 +176,12 @@ function broker_server()
     router = p.args[1]
     server_url = "ws://:10000/s1"
     add_server(router, server_url)
-    sleep(3)
+    sleep(2)
 
     cli = connect()
     rpc(cli, "mymethod", 1)
     publish(cli, "mytopic", 1)
+    sleep(1)
     close(cli)
     remove_server(router, server_url)
 end

@@ -59,7 +59,7 @@ mutable struct Settings
         cid = DEFAULT_APP_NAME
         connection_retry_period = 2.0
         debug = false
-        db_max_messages = REMBUS_DB_MAX_SIZE
+        db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
         new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log, debug,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, nothing, db_max_messages)
@@ -95,7 +95,9 @@ function setup(setting)
     setting.cid = component_id(cfg)
     setting.connection_retry_period = get(cfg, "connection_retry_period", 2.0)
     setting.db_max_messages = get(
-        cfg, "db_max_messages", get(ENV, "REMBUS_DB_MAX_SIZE", REMBUS_DB_MAX_SIZE)
+        cfg,
+        "db_max_messages",
+        parse(UInt, get(ENV, "REMBUS_DB_MAX_SIZE", REMBUS_DB_MAX_SIZE))
     )
 
     if haskey(ENV, "REMBUS_DEBUG")

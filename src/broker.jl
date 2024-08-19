@@ -727,6 +727,22 @@ function end_receiver(twin)
     end
 end
 
+function common_receiver(router, twin, msg)
+    if isa(msg, ResMsg)
+        rpc_response(router, twin, msg)
+    elseif isa(msg, AdminReqMsg)
+        admin_msg(router, twin, msg)
+    elseif isa(msg, RpcReqMsg)
+        rpc_request(router, twin, msg)
+    elseif isa(msg, PubSubMsg)
+        pubsub_msg(router, twin, msg)
+    elseif isa(msg, AckMsg)
+        ack_msg(twin, msg)
+    else
+        error("unexpected rembus message")
+    end
+end
+
 #=
     twin_receiver(router, twin)
 
@@ -749,18 +765,8 @@ function twin_receiver(router, twin)
             if isa(msg, Unregister)
                 response = unregister(router, twin, msg)
                 put!(twin.process.inbox, response)
-            elseif isa(msg, ResMsg)
-                rpc_response(router, twin, msg)
-            elseif isa(msg, AdminReqMsg)
-                admin_msg(router, twin, msg)
-            elseif isa(msg, RpcReqMsg)
-                rpc_request(router, twin, msg)
-            elseif isa(msg, PubSubMsg)
-                pubsub_msg(router, twin, msg)
-            elseif isa(msg, AckMsg)
-                ack_msg(twin, msg)
             else
-                error("unexpected rembus message")
+                common_receiver(router, twin, msg)
             end
         end
     catch e
@@ -811,16 +817,8 @@ function anonymous_twin_receiver(router, twin)
                 put!(twin.process.inbox, response)
             elseif isa(msg, Attestation)
                 return attestation(router, twin, msg)
-            elseif isa(msg, ResMsg)
-                rpc_response(router, twin, msg)
-            elseif isa(msg, AdminReqMsg)
-                admin_msg(router, twin, msg)
-            elseif isa(msg, RpcReqMsg)
-                rpc_request(router, twin, msg)
-            elseif isa(msg, PubSubMsg)
-                pubsub_msg(router, twin, msg)
-            elseif isa(msg, AckMsg)
-                ack_msg(twin, msg)
+            else
+                common_receiver(router, twin, msg)
             end
         end
     catch e
@@ -978,10 +976,6 @@ function twin_task(self, twin)
             elseif isa(msg, ResMsg)
                 #@mlog("[$(twin.id)] -> $msg")
                 transport_send(twin, twin.socket, msg, true)
-            elseif isa(msg, EnableReactiveMsg)
-                #@mlog("[$(twin.id)] -> $msg")
-                transport_send(twin, twin.socket, ResMsg(msg.id, STS_SUCCESS, nothing), true)
-                twin.router.unpark(twin.router.context, twin)
             else
                 signal!(twin, msg)
             end
@@ -2200,7 +2194,6 @@ function broker(self, router)
         @debug "closing messages at rest timer"
         close(db_timer)
     end
-    @debug "[broker] done"
 end
 
 #=

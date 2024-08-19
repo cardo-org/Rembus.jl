@@ -16,7 +16,7 @@ const REMBUS_CA = "rembus-ca.crt"
 const PING_INTERVAL = 10
 const PONG_STRING = "*_pong_*"
 
-const REMBUS_DB_MAX_SIZE = 1_000_000
+const REMBUS_DB_MAX_SIZE = "1000000"
 
 const MESSAGE_CHANNEL_SZ = 1000
 

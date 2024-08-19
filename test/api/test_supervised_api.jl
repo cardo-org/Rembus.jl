@@ -7,6 +7,7 @@ function run()
     ctx = "mystring"
 
     rb = component("abc")
+    @info "component: $(rbinfo(rb))"
 
     shared(rb, ctx)
     subscribe(rb, my_topic, true)

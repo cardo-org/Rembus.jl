@@ -61,6 +61,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "server"
+        @time @safetestset "broker_add_server" begin
+            include("server/test_broker_add_server.jl")
+        end
         @time @safetestset "broker_server" begin
             include("server/test_broker_server.jl")
         end

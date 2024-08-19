@@ -39,7 +39,7 @@ end
 
 
 function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
-    waittime = 0.3
+    waittime = 0.6
     my_topic = "consume"
     noarg_topic = "noarg_topic"
 

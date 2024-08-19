@@ -50,6 +50,9 @@ function second_run()
     @test ctx.count == MESSAGES
 end
 
+max_size = Rembus.CONFIG.db_max_messages
+ENV["REMBUS_DB_MAX_SIZE"] = "10000"
 execute(first_run, "test_page_file::1")
 sleep(3)
 execute(second_run, "test_page_file::2", reset=false)
+ENV["REMBUS_DB_MAX_SIZE"] = max_size

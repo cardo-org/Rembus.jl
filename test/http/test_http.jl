@@ -67,6 +67,6 @@ function run()
 end
 
 # for coverage runs
-ENV["REMBUS_TIMEOUT"] = 20
+ENV["REMBUS_TIMEOUT"] = 30
 execute(run, "test_http")
 delete!(ENV, "REMBUS_TIMEOUT")

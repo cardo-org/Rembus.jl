@@ -456,50 +456,6 @@ function data2payload(data::IOBuffer)
 end
 =#
 
-# Return data to be sent via ws or tcp from ZMQ
-function data2payload(data::ZMQ.Message)
-    # allocate instead of consuming message
-    decode(Vector{UInt8}(data))
-end
-
-function transport_file_io(msg::PubSubMsg)
-    payload = encode([msg.topic, message2data(msg.data)])
-    len::UInt32 = length(payload)
-    io = IOBuffer(maxsize=4 + len)
-    write(io, len)
-    write(io, payload)
-    return io
-end
-
-function transport_file_io(msg::PubSubMsg{IOBuffer})
-    mark(msg.data)
-    # optimization possible with a dedicated method
-    # for RpcResMessage broadcasting
-    # the commented lines works for PubSubMsg only
-    #seek(msg.data, 2)
-    #payload = read(msg.data)
-    data = read(msg.data)
-    payload = encode([msg.topic, decode(data)])
-    #len::UInt32 = length(payload) + 1
-    len::UInt32 = length(payload)
-    io = IOBuffer(maxsize=4 + len)
-    write(io, len)
-    #write(io, 0x82)
-    write(io, payload)
-    reset(msg.data)
-
-    return io
-end
-
-function transport_file_io(msg::PubSubMsg{ZMQ.Message})
-    payload = encode([msg.topic, data2payload(msg.data)])
-    len::UInt32 = length(payload)
-    io = IOBuffer(maxsize=4 + len)
-    write(io, len)
-    write(io, payload)
-    return io
-end
-
 function id2bytes(id::UInt128)
     io = IOBuffer(maxsize=16)
     write(io, id)
@@ -848,19 +804,13 @@ function transport_send(::Twin, ws, msg::AckMsg)
 end
 
 function transport_send(twin::Twin, socket::ZMQ.Socket, msg::AckMsg)
-    try
-        address = twin.router.mid2address[msg.id]
-        lock(zmqsocketlock) do
-            send(socket, address, more=true)
-            send(socket, Message(), more=true)
-            send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
-            send(socket, DATA_EMPTY, more=true)
-            send(socket, MESSAGE_END, more=false)
-        end
-    catch e
-        @error "ERROR: $e"
-        showerror(stdout, e, catch_backtrace())
-        rethrow()
+    address = twin.router.mid2address[msg.id]
+    lock(zmqsocketlock) do
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end

@@ -300,53 +300,6 @@ function save_twins(router)
     end
 end
 
-function getmsg(f)
-    mark(f)
-    lens = read(f, 4)
-    len::UInt32 = lens[1] + Int(lens[2]) << 8 + Int(lens[3]) << 16 + Int(lens[4]) << 24
-    content = read(f, len)
-    io = IOBuffer(maxsize=len)
-    write(io, content)
-    seekstart(io)
-    llmsg = decode(io)
-    msg = PubSubMsg(llmsg[1], llmsg[2])
-    return msg
-end
-
-function unpark_file(twin::Twin, fn::AbstractString)
-    @debug "[$twin] unparking $fn"
-    content = read(fn)
-    io = IOBuffer(content)
-    try
-        send_cached(twin, io)
-        rm(fn)
-    catch e
-        reset(io)
-        @error "[$twin] unparking $fn: $e"
-        # write back the remaining messages
-        open(fn, write=true) do f
-            write(f, io)
-        end
-        rethrow()
-    end
-end
-
-function send_cached(twin, io)
-    count = 0
-    seekstart(io)
-    while !eof(io)
-        msg = getmsg(io)
-        count += 1
-        retro = get(twin.retroactive, msg.topic, true)
-        if retro
-            #@mlog("[$(twin.id)] <- $(prettystr(msg))")
-            transport_send(twin, twin.socket, msg)
-        else
-            @debug "[$twin] retroactive=$(retro): skipping msg $msg"
-        end
-    end
-end
-
 #=
     save_configuration(router::Router)
 

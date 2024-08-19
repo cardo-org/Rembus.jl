@@ -953,16 +953,6 @@ function reactive_expr(reactive, cid=nothing)
     return ex
 end
 
-function enable_ack_expr(enable, cid=nothing)
-    ex = :(call(
-        Rembus.name2proc("cid"),
-        Rembus.EnableAck($enable),
-        timeout=Rembus.call_timeout()
-    ))
-    ex.args[2].args[2] = cid
-    return ex
-end
-
 """
     @reactive
 
@@ -1123,12 +1113,6 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                     )
                 elseif isa(req, RemoveInterest)
                     result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
-                elseif isa(req, EnableAck)
-                    if req.status
-                        result = enable_ack(rb, exceptionerror=false)
-                    else
-                        result = disable_ack(rb, exceptionerror=false)
-                    end
                 elseif isa(req, Reactive)
                     if req.status
                         result = reactive(rb, exceptionerror=false)
