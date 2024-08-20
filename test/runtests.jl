@@ -285,6 +285,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "repl" begin
             include("repl/test_repl.jl")
         end
+        @time @safetestset "server_repl" begin
+            include("repl/test_server_repl.jl")
+        end
     end
     if GROUP == "all" || GROUP == "errors"
         @time @safetestset "unknown_broker_msg" begin

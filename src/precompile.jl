@@ -162,9 +162,7 @@ function mymethod(ctx, rb, n)
     return n + 1
 end
 
-function mytopic(ctx, rb, n)
-    nothing
-end
+mytopic(ctx, rb, n) = nothing
 
 function broker_server()
     srv = server()

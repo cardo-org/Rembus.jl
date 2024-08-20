@@ -1267,6 +1267,18 @@ function invoke_latest(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
     end
 end
 
+function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
+    if isa(msg.data, Vector)
+        return STS_SUCCESS, Base.invokelatest(
+            get_callback(rb, topic), rb.router.context, rb, msg.data...
+        )
+    else
+        return STS_SUCCESS, Base.invokelatest(
+            get_callback(rb, topic), rb.router.context, rb, msg.data
+        )
+    end
+end
+
 #=
     invoke_glob(rb::RBConnection, topic::AbstractString, msg::RembusMsg)
 
