@@ -2,6 +2,7 @@
 include("../utils.jl")
 
 Rembus.repl_log()
+@info "this is an info message"
 
 Base.isinteractive() = true
 
