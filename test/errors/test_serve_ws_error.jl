@@ -4,6 +4,9 @@ include("../utils.jl")
 
 function run()
     try
+
+        @test_throws ErrorException Rembus.rembus_ca()
+
         # invalid ssl configuration prevent ws_serve process startup
         caronte(wait=false, args=Dict("broker" => BROKER_NAME, "secure" => true))
 
@@ -20,5 +23,8 @@ function run()
 end
 
 @info "[test_serve_ws_error] start"
+# Force a ssl configuration error when starting the broker
+current_dir = Rembus.rembus_dir!("/tmp/rembus")
 run()
+Rembus.rembus_dir!(current_dir)
 @info "[test_serve_ws_error] stop"

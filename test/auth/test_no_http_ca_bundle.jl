@@ -26,8 +26,8 @@ function run(cid)
         connect("wss://:9000/$cid")
     catch e
         @info "[test_no_http_ca_bundle] expected error: $e"
-        @test isa(e, HTTP.Exceptions.ConnectError)
-        @test isa(e.error.ex, HTTP.OpenSSL.OpenSSLError)
+        @test isa(e, ErrorException)
+        @test startswith(e.msg, "unable to get CA file from")
     end
 end
 

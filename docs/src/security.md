@@ -10,8 +10,8 @@ key and the broker knows its public key.
 
 The broker requires that in the directoy `$REMBUS_KEYSTORE` there are:
 
-* The server certificate `caronte.crt`;
-* The private key `caronte.key`;
+* The server certificate `rembus.crt`;
+* The private key `rembus.key`;
 
 The component requires a CA bundle or the CA certificate of the authority that signed the
 broker certificate. The environment variable `HTTP_CA_BUNDLE` may be used to specify the

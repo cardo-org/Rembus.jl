@@ -46,7 +46,7 @@ else
     test_keystore = "/tmp/keystore"
     script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
     ENV["REMBUS_KEYSTORE"] = test_keystore
-    ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, Rembus.REMBUS_CA)
+    ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
         execute(

@@ -1,7 +1,4 @@
-using Rembus
-using Test
-
-const BROKER_NAME = "caronte_test"
+include("../utils.jl")
 
 function task(pd, router)
     router.process = pd

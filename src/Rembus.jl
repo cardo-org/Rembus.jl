@@ -450,8 +450,6 @@ end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
 
-rembus_dir() = joinpath(CONFIG.root_dir, "rembus")
-
 request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "10"))
 
 connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "10"))
@@ -1522,7 +1520,7 @@ function read_socket(socket, process, rb)
             end
         end
     catch e
-        @info "[$(rb.client.id)] connection closed: $e"
+        @debug "[$(rb.client.id)] connection closed: $e"
         if isa(e, EOFError) ||
            (
             isa(e, HTTP.WebSockets.WebSocketError) &&
@@ -1583,7 +1581,7 @@ function ws_connect(rb, process, isconnected::Condition)
         if uri.scheme == "wss"
 
             if !haskey(ENV, "HTTP_CA_BUNDLE")
-                ENV["HTTP_CA_BUNDLE"] = joinpath(rembus_dir(), "ca", REMBUS_CA)
+                ENV["HTTP_CA_BUNDLE"] = rembus_ca()
             end
             @debug "cacert: $(ENV["HTTP_CA_BUNDLE"])"
             HTTP.WebSockets.open(socket -> begin
@@ -1635,9 +1633,14 @@ function tcp_connect(rb, process, isconnected::Condition)
     try
         url = brokerurl(rb.client)
         uri = URI(url)
-        cacert = get(ENV, "HTTP_CA_BUNDLE", joinpath(rembus_dir(), "ca", REMBUS_CA))
         @debug "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
         if uri.scheme == "tls"
+            if haskey(ENV, "HTTP_CA_BUNDLE")
+                cacert = ENV["HTTP_CA_BUNDLE"]
+            else
+                cacert = rembus_ca()
+            end
+
             entropy = MbedTLS.Entropy()
             rng = MbedTLS.CtrDrbg()
             MbedTLS.seed!(rng, entropy)
@@ -1749,8 +1752,27 @@ function authenticate(rb)
     return nothing
 end
 
+#=
+Return the CA certificate full path.
+
+The full path is the concatenation of rembus_dir and the file present in
+rembus_dir/ca
+=#
+function rembus_ca()
+    dir = joinpath(rembus_dir(), "ca")
+
+    if isdir(dir)
+        files = readdir(dir)
+        if length(files) == 1
+            return joinpath(dir, files[1])
+        end
+    end
+
+    error("unable to get CA file from $dir, expected exactly one file")
+end
+
 function connect_timeout(rb, isconnected)
-    @debug "[$(rb.client.id)] connect timeout, socket: $(rb.socket)"
+    @debug "[$rb] connect timeout, socket: $(rb.socket)"
     if rb.socket === nothing
         notify(isconnected, ErrorException("connection failed"), error=true)
     end
@@ -2585,7 +2607,7 @@ macro forever()
 end
 
 @setup_workload begin
-    ENV["REMBUS_ROOT_DIR"] = "/tmp"
+    rembus_dir!("/tmp")
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     ENV["REMBUS_TIMEOUT"] = "20"
@@ -2606,6 +2628,7 @@ end
         include("precompile.jl")
         shutdown()
     end
+    rembus_dir!(default_rembus_dir())
 end
 
 end # module

@@ -6,7 +6,12 @@ using Rembus
 using Visor
 using Test
 
+Rembus.rembus_dir!("/tmp/rembus")
+
 const BROKER_NAME = "caronte_test"
+
+# default ca certificate name
+const REMBUS_CA = "rembus-ca.crt"
 
 results = []
 

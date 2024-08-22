@@ -1,5 +1,4 @@
-using Rembus
-using Test
+include("../utils.jl")
 
 mutable struct PluginCtx
     subscriber::Union{Nothing,Rembus.Twin}
@@ -65,7 +64,12 @@ end
 function run()
     ctx = Ctx()
 
-    caronte(wait=false, plugin=CarontePlugin, context=PluginCtx(nothing))
+    caronte(
+        wait=false,
+        plugin=CarontePlugin,
+        context=PluginCtx(nothing),
+        args=Dict("broker" => BROKER_NAME)
+    )
     sleep(2)
 
     pub = connect()

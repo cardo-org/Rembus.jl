@@ -1386,8 +1386,8 @@ function secure_config(router)
     MbedTLS.seed!(rng, entropy)
 
     sslconfig = MbedTLS.SSLConfig(
-        joinpath(trust_store, "caronte.crt"),
-        joinpath(trust_store, "caronte.key")
+        joinpath(trust_store, "rembus.crt"),
+        joinpath(trust_store, "rembus.key")
     )
     MbedTLS.rng!(sslconfig, rng)
 
@@ -2266,7 +2266,7 @@ function ws_connect(
         if uri.scheme == "wss"
 
             if !haskey(ENV, "HTTP_CA_BUNDLE")
-                ENV["HTTP_CA_BUNDLE"] = joinpath(rembus_dir(), "ca", REMBUS_CA)
+                ENV["HTTP_CA_BUNDLE"] = rembus_ca()
             end
 
             HTTP.WebSockets.open(socket -> begin

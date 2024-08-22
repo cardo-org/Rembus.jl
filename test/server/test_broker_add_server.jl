@@ -4,7 +4,7 @@ function run()
     url = "ws://:9000/s1"
     srv = server()
     serve(srv, wait=false, args=Dict("ws" => 9000))
-    router = caronte(wait=false, args=Dict("reset" => true))
+    router = caronte(wait=false, args=Dict("broker" => BROKER_NAME, "reset" => true))
     add_server(router, url)
     @test isa(from(url), Visor.Process)
     sleep(1)

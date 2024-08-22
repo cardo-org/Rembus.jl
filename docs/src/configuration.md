@@ -8,7 +8,7 @@ The broker setup is affected by the following environment variables.
 |----------|-------|-------|
 |`BROKER_WS_PORT`|8000|default port for serving WebSocket protocol|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
-|`REMBUS_KEYSTORE`|\$HOME/.config/caronte/keystore| Directory of broker certificate `caronte.crt` and broker secret key `caronte.key`|
+|`REMBUS_KEYSTORE`|\$HOME/.config/caronte/keystore| Directory of broker certificate `rembus.crt` and broker secret key `rembus.key`|
 
 ## Component environment variables
 

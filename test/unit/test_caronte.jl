@@ -1,5 +1,4 @@
-using Rembus
-using Test
+include("../utils.jl")
 
 caronte(wait=false)
 @test from("caronte") !== nothing

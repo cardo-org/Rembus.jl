@@ -51,8 +51,6 @@ function run()
     password = "aaa"
     init(admin, password)
 
-    #@component "wss://:8000/$admin"
-
     auth = basic_auth("user")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
         "https://127.0.0.1:9000/private_topic/foo", ["Authorization" => auth]
@@ -105,7 +103,6 @@ function run()
         ["Authorization" => auth]
     )
 
-    #@terminate
     remove_keys(admin)
 end
 
@@ -116,7 +113,7 @@ else
     test_keystore = "/tmp/keystore"
     script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
     ENV["REMBUS_KEYSTORE"] = test_keystore
-    ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, Rembus.REMBUS_CA)
+    ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
         args = Dict("secure" => true, "http" => 9000)

@@ -83,29 +83,29 @@ function save_token_app(router, df)
     CSV.write(fn, df)
 end
 
-broker_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id)
-broker_dir(router::Embedded) = joinpath(CONFIG.root_dir, router.process.id)
-broker_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name)
+broker_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id)
+broker_dir(router::Embedded) = joinpath(CONFIG.rembus_dir, router.process.id)
+broker_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name)
 
-keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(broker_dir(router), "keystore"))
+keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(CONFIG.rembus_dir, "keystore"))
 
-keys_dir(router::Router) = joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys")
-keys_dir(router::Embedded) = joinpath(CONFIG.root_dir, router.process.id, "keys")
-keys_dir(broker_name::AbstractString) = joinpath(CONFIG.root_dir, broker_name, "keys")
+keys_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys")
+keys_dir(router::Embedded) = joinpath(CONFIG.rembus_dir, router.process.id, "keys")
+keys_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name, "keys")
 
-messages_dir(r::Router) = joinpath(CONFIG.root_dir, r.process.supervisor.id, "messages")
-messages_dir(broker::AbstractString) = joinpath(CONFIG.root_dir, broker, "messages")
+messages_dir(r::Router) = joinpath(CONFIG.rembus_dir, r.process.supervisor.id, "messages")
+messages_dir(broker::AbstractString) = joinpath(CONFIG.rembus_dir, broker, "messages")
 
 function key_file(router::Router, cid::AbstractString)
-    return joinpath(CONFIG.root_dir, router.process.supervisor.id, "keys", cid)
+    return joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys", cid)
 end
 
 function key_file(server::Embedded, cid::AbstractString)
-    return joinpath(CONFIG.root_dir, server.process.id, "keys", cid)
+    return joinpath(CONFIG.rembus_dir, server.process.id, "keys", cid)
 end
 
 function key_file(broker_name::AbstractString, cid::AbstractString)
-    return joinpath(CONFIG.root_dir, broker_name, "keys", cid)
+    return joinpath(CONFIG.rembus_dir, broker_name, "keys", cid)
 end
 
 function save_table(router, router_tbl, filename)
@@ -254,8 +254,10 @@ function save_marks(router)
     fn = joinpath(broker_dir(router), "twins.json")
     twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
     for twin in values(router.id_twin)
-
-        twin_mark[twin.id] = twin.mark
+        # save only named twins, anonymous twin cannot be retroactive
+        if twin.hasname
+            twin_mark[twin.id] = twin.mark
+        end
     end
     JSON3.write(fn, twin_mark)
 end

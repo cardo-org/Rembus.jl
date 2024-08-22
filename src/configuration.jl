@@ -21,20 +21,28 @@ function component_id(cfg)
     return startswith(uri.path, "/") ? uri.path[2:end] : uri.path
 end
 
-function root_dir()
+function default_rembus_dir()
     if Sys.iswindows()
         home = get(ENV, "USERPROFILE", ".")
     else
         home = get(ENV, "HOME", ".")
     end
-    return joinpath(home, ".config")
+    return joinpath(home, ".config", "rembus")
+end
+
+rembus_dir() = CONFIG.rembus_dir
+
+function rembus_dir!(new_dir::AbstractString)
+    old_dir = CONFIG.rembus_dir
+    CONFIG.rembus_dir = new_dir
+    return old_dir
 end
 
 mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
     balancer::String
-    root_dir::String
+    rembus_dir::String
     log::String
     debug::Bool
     overwrite_connection::Bool
@@ -50,7 +58,7 @@ mutable struct Settings
         zmq_ping_interval = 0
         ws_ping_interval = 0
         balancer = "first_up"
-        rdir = root_dir()
+        rdir = default_rembus_dir()
         log = "stdout"
         overwrite_connection = true
         stacktrace = false
@@ -86,7 +94,7 @@ function setup(setting)
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "120")))
 
-    setting.root_dir = get(cfg, "root_dir", get(ENV, "REMBUS_ROOT_DIR", root_dir()))
+    setting.rembus_dir = get(cfg, "rembus_dir", get(ENV, "REMBUS_ROOT_DIR", rembus_dir()))
     setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)

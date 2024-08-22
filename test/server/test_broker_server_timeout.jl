@@ -7,11 +7,11 @@ Test a IdentityMsg response timeout
 function run()
     srv = server()
     serve(srv, wait=false, args=Dict("ws" => 9000))
-    router = caronte(wait=false, args=Dict("reset" => true))
+    router = caronte(wait=false, args=Dict("reset" => true, "broker" => BROKER_NAME))
     add_server(router, "ws://:9000/s1")
 
     sleep(1)
-    twin = from("caronte.twins.s1").args[1]
+    twin = from("$BROKER_NAME.twins.s1").args[1]
 
     msg = Rembus.IdentityMsg(twin.router.process.supervisor.id)
     try
