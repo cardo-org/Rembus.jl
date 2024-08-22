@@ -5,7 +5,7 @@ include("../utils.jl")
 function run()
     try
 
-        @test_throws ErrorException Rembus.rembus_ca()
+        @test_throws Rembus.CABundleNotFound Rembus.rembus_ca()
 
         # invalid ssl configuration prevent ws_serve process startup
         caronte(wait=false, args=Dict("broker" => BROKER_NAME, "secure" => true))

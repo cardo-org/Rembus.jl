@@ -299,6 +299,9 @@ struct CloseConnection end
 struct WrongTcpPacket <: Exception
 end
 
+struct CABundleNotFound <: Exception
+end
+
 # A message error received from the broker.
 abstract type RembusException <: Exception end
 
@@ -1147,8 +1150,10 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
 
         @showerror e
 
-        if isa(e, HTTP.Exceptions.ConnectError) &&
-           isa(e.error.ex, HTTP.OpenSSL.OpenSSLError)
+        if isa(e, CABundleNotFound)
+            @info "CA bundle not found: stop connection retry"
+        elseif (isa(e, HTTP.Exceptions.ConnectError) &&
+                isa(e.error.ex, HTTP.OpenSSL.OpenSSLError))
             @info "unrecoverable error $(e.error.ex): stop connection retry"
         else
             rethrow()
@@ -1768,7 +1773,7 @@ function rembus_ca()
         end
     end
 
-    error("unable to get CA file from $dir, expected exactly one file")
+    throw(CABundleNotFound())
 end
 
 function connect_timeout(rb, isconnected)

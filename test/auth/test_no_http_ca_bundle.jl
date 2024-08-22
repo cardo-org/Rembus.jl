@@ -26,8 +26,7 @@ function run(cid)
         connect("wss://:9000/$cid")
     catch e
         @info "[test_no_http_ca_bundle] expected error: $e"
-        @test isa(e, ErrorException)
-        @test startswith(e.msg, "unable to get CA file from")
+        @test isa(e, Rembus.CABundleNotFound)
     end
 end
 

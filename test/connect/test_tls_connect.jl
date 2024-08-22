@@ -41,9 +41,26 @@ else
         delete!(ENV, "HTTP_CA_BUNDLE")
         execute(no_cacert, "test_tls_connect_no_cacert", args=args)
 
+        # test rembus_ca() method
+        target_dir = joinpath(Rembus.rembus_dir(), "ca")
+        mkpath(target_dir)
+        mv(joinpath(test_keystore, REMBUS_CA), joinpath(target_dir, REMBUS_CA), force=true)
+        execute(run, "test_tls_connect", args=args)
+
+        # create a ca cert that does not signed the original certificate
+        cacert = joinpath(target_dir, REMBUS_CA)
+        Base.run(`openssl req -x509 \
+            -sha256 -days 356 \
+            -nodes \
+            -newkey rsa:2048 \
+            -subj "/CN=Rembus/C=IT/L=Trento" \
+            -keyout /dev/null -out $cacert`)
+
+        execute(no_cacert, "test_tls_connect_invalid_cacert", args=args)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")
         rm(test_keystore, recursive=true, force=true)
+        rm(joinpath(Rembus.rembus_dir(), "ca"), recursive=true, force=true)
     end
 end
