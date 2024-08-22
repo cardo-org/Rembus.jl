@@ -509,9 +509,6 @@ function register(router, msg)
         reason = "name $(msg.cid) not available for registration"
     else
         kdir = keys_dir(router)
-        if !isdir(kdir)
-            mkdir(kdir)
-        end
 
         save_pubkey(router, msg.cid, msg.pubkey)
         if !(msg.cid in router.component_owner.component)

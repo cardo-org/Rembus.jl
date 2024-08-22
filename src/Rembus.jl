@@ -1684,10 +1684,6 @@ end
 
 function pkfile(name)
     cfgdir = rembus_dir()
-    if !isdir(cfgdir)
-        mkpath(cfgdir)
-    end
-
     return joinpath(cfgdir, name)
 end
 

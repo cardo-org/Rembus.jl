@@ -33,7 +33,7 @@ function publish_interceptor(ctx, component, msg)
     publish(ctx.subscriber, "direct_message", 999)
 
     # publish using router
-    router = Rembus.get_router()
+    router = Rembus.get_router("caronte_test")
     publish(router, "some_topic", "some_data")
 
     try
