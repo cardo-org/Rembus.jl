@@ -6,12 +6,14 @@ end
 
 module CarontePlugin
 using Rembus
+using Test
 
 function subscribe_handler(ctx, broker, component, msg)
     ctx.subscriber = component
 end
 
 function publish_interceptor(ctx, component, msg)
+
     @info "[$component]: pub: $msg ($(msg.data))"
 
     subjects = split(msg.topic, "/")
@@ -34,6 +36,8 @@ function publish_interceptor(ctx, component, msg)
 
     # publish using router
     router = Rembus.get_router("caronte_test")
+    @test router !== nothing
+
     publish(router, "some_topic", "some_data")
 
     try
