@@ -8,7 +8,7 @@ function generate_key(cid)
         rm(private_fn)
     end
 
-    cmd = `ssh-keygen -f $private_fn -m PEM -b 2048 -N ''`
+    cmd = `ssh-keygen -t rsa -f $private_fn -m PEM -b 2048 -N ''`
     Base.run(cmd)
     return private_fn
 end
