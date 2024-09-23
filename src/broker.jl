@@ -2192,7 +2192,6 @@ function broker(self, router)
         save_configuration(router)
         persist_messages(router)
         @debug "closing messages at rest timer"
-        close(db_timer)
     end
 end
 

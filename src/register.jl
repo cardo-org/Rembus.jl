@@ -12,7 +12,7 @@ Create a private key for `cid` component and return its public key.
 =#
 function create_private_key(cid::AbstractString)
     file = "$(pkfile(cid)).tmp"
-    cmd = `ssh-keygen -f $file -m PEM -b 2048 -N ''`
+    cmd = `ssh-keygen -f $file -t rsa -m PEM -b 2048 -N ''`
     Base.run(cmd)
 
     try

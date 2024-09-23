@@ -1,0 +1,55 @@
+#! /bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PRJ_ROOT=${SCRIPT_DIR}/..
+
+NAME=rembus
+DNS_NAME=$NAME
+KEYSTORE=${HOME}/.config/rembus/keystore
+TRUSTED_IP_ADDRESS=""
+
+CA_ROOT=$KEYSTORE
+
+# root CA
+CA_CRT=${CA_ROOT}/rembus-ca.crt
+CA_KEY=${CA_ROOT}/rembus-ca.key
+
+while getopts 'n:i:h' opt; do
+  case "$opt" in
+    n)
+      DNS_NAME=${OPTARG}
+      ;;
+    i)
+      TRUSTED_IP_ADDRESS=${OPTARG}
+      ;;
+    ?|h)
+      echo "Usage: $(basename $0) [-n server_dns] [-i ip_address] [-k keystore_dir]"
+      exit 1
+      ;;
+  esac
+done
+
+echo "broker/server keystore: $KEYSTORE"
+cd $KEYSTORE
+
+# create ext file
+cat > ${NAME}.ext <<EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = ${DNS_NAME}
+EOF
+
+openssl genrsa -out ${NAME}.key 2048
+
+# extract the public key
+# https://stackoverflow.com/questions/5244129/use-rsa-private-key-to-generate-public-key
+# openssl rsa -in ${NAME}.key -pubout -out ${NAME}.pem
+
+openssl req -new -key ${NAME}.key -out ${NAME}.csr -subj "/C=IT/ST=Italia/L=Trento/O=Rembus/CN=${NAME}/emailAddress=admin@example.com"
+
+openssl x509 -req -in ${NAME}.csr -CA ${CA_CRT} -CAkey ${CA_KEY} -CAcreateserial -out ${NAME}.crt -days 825 -sha256 -extfile ${NAME}.ext

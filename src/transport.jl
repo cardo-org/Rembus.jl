@@ -919,7 +919,9 @@ function transport_send(::RBHandle, socket::ZMQ.Socket, ::Close)
 end
 
 function tagvalue_if_dataframe(data)
-    if isa(data, Vector)
+    if isa(data, Vector{UInt8})
+        return data
+    elseif isa(data, Vector)
         result = []
 
         for el in data
