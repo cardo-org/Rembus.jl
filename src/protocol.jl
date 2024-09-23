@@ -99,11 +99,13 @@ struct Register <: RembusMsg
     cid::String # client name
     userid::String
     pubkey::Vector{UInt8}
+    type::UInt8
     Register(
         msgid::UInt128,
         cid::AbstractString,
         userid::AbstractString,
-        pubkey::Vector{UInt8}) = new(msgid, cid, userid, pubkey)
+        pubkey::Vector{UInt8},
+        type::UInt8) = new(msgid, cid, userid, pubkey, type)
 end
 
 struct Unregister <: RembusMsg

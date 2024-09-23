@@ -32,7 +32,12 @@ To register a component a user must be provisioned in the `owners.csv` table.
 The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
 
 """
-function register(cid::AbstractString, userid::AbstractString, pin::AbstractString)
+function register(
+    cid::AbstractString,
+    userid::AbstractString,
+    pin::AbstractString,
+    type::UInt8=SIG_RSA
+)
     cmp = Component(cid)
 
     kfile = pkfile(cmp.id)
@@ -53,7 +58,7 @@ function register(cid::AbstractString, userid::AbstractString, pin::AbstractStri
         value = parse(Int, pin, base=16)
         msgid = id() & 0xffffffffffffffffffffffff00000000 + value
 
-        msg = Register(msgid, cmp.id, userid, pubkey)
+        msg = Register(msgid, cmp.id, userid, pubkey, type)
         response = wait_response(rb, msg, request_timeout())
         if isa(response, RembusTimeout)
             throw(response)
