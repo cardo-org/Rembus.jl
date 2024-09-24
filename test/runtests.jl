@@ -224,6 +224,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "register" begin
             include("auth/test_register.jl")
         end
+        @time @safetestset "register_multiple_users" begin
+            include("auth/test_register_multiple_users.jl")
+        end
+        @time @safetestset "register_disabled_user" begin
+            include("auth/test_register_disabled_user.jl")
+        end
         @time @safetestset "login_failure" begin
             include("auth/test_login_failure.jl")
         end

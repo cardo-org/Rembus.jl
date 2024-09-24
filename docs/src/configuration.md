@@ -148,6 +148,24 @@ pin,uid,name,enabled
 58e26283,paperino@topolinia.com,Donald Fauntleroy Duck,true
 ```
 
+```json
+[
+    {
+        "uid": "paperoga@topolinia.com",
+        "name": "Fethry Duck",
+        "pin": "482dc7eb",
+        "enabled": true
+    },
+    {
+        "uid": "paperino@topolinia.com",
+        "name": "Donald Fauntleroy Duck",
+        "pin": "58e26283",
+        "enabled": true
+    },
+
+]
+```
+
 The `pin` column is the PIN token needed for registration, `uid` column is the username,
 `name` is an optional string describing the user and `enabled` consent to stop the user for
 registering components.

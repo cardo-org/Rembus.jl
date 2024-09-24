@@ -478,6 +478,20 @@ function attestation(router::Embedded, rb::RBServerConnection, msg)
     return sts
 end
 
+function isenabled(router, userid)
+    df = router.owners[(router.owners.uid.==userid), :]
+    if isempty(df)
+        @info "unknown user [$userid]"
+        return false
+    else
+        if nrow(df) > 1
+            @info "multiple accounts found for user [$userid]"
+            return false
+        end
+        return ismissing(df[1, :enabled]) || (df[1, :enabled] === true)
+    end
+end
+
 function get_token(router, userid, id::UInt128)
     vals = UInt8[(id>>24)&0xff, (id>>16)&0xff, (id>>8)&0xff, id&0xff]
     token = bytes2hex(vals)
@@ -498,6 +512,11 @@ Register a component.
 =#
 function register(router, msg)
     @debug "registering pubkey of $(msg.cid), id: $(msg.id)"
+
+    if !isenabled(router, msg.userid)
+        return ResMsg(msg.id, STS_GENERIC_ERROR, "user [$(msg.userid)] not enabled")
+    end
+
     sts = STS_SUCCESS
     reason = nothing
     token = get_token(router, msg.userid, msg.id)
@@ -521,7 +540,6 @@ function register(router, msg)
     end
 
     return ResMsg(msg.id, sts, reason)
-    ###put!(twin.process.inbox, response)
 end
 
 #=

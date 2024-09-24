@@ -11,7 +11,6 @@ import Distributed
 using ArgParse
 using Arrow
 using Base64
-using CSV
 using DocStringExtensions
 using DataFrames
 using Dates
@@ -20,6 +19,7 @@ using DuckDB
 using FileWatching
 using HTTP
 using JSON3
+using JSONTables
 using Logging
 using MbedTLS
 using Random

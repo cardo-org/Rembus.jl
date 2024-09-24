@@ -11,12 +11,20 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 Return the owners dataframe
 =#
 function load_owners(router)
-    fn = joinpath(broker_dir(router), "owners.csv")
-    if isfile(fn)
-        DataFrame(CSV.File(fn, types=[String, String, String, Bool]))
-    else
-        @debug "owners.csv not found, only unauthenticated users allowed"
-        DataFrame(pin=String[], uid=String[], name=[], enabled=Bool[])
+    fn = joinpath(broker_dir(router), "owners.json")
+    db = DuckDB.DB()
+    try
+        if isfile(fn)
+            @debug "loading file $fn"
+            df = DataFrame(DuckDB.query(db, "SELECT * FROM read_json('$fn')"))
+            if !isempty(df)
+                return df
+            end
+        end
+        @debug "owners.json empty/not found, only unauthenticated users allowed"
+        return DataFrame(pin=String[], uid=String[], name=[], enabled=Bool[])
+    finally
+        close(db)
     end
 end
 
@@ -53,8 +61,17 @@ end
 Save the owners table.
 =#
 function save_owners(router, owners_df)
-    fn = joinpath(broker_dir(router), "owners.csv")
-    CSV.write(fn, owners_df)
+    fn = joinpath(broker_dir(router), "owners.json")
+    db = DuckDB.DB()
+    try
+        open(fn, "w") do f
+            write(f, arraytable(owners_df))
+        end
+    catch e
+        rethrow()
+    finally
+        close(db)
+    end
 end
 
 #=
@@ -63,13 +80,19 @@ end
 Return the component_owner dataframe
 =#
 function load_token_app(router)
-    fn = joinpath(broker_dir(router), "component_owner.csv")
-    if isfile(fn)
-        df = DataFrame(CSV.File(fn, types=Dict(1 => String, 2 => String)))
-        return df
-    else
-        @debug "component_owner.csv not found"
-        DataFrame(uid=String[], component=String[])
+    fn = joinpath(broker_dir(router), "component_owner.json")
+    db = DuckDB.DB()
+    try
+        if isfile(fn)
+            df = DataFrame(DuckDB.query(db, "SELECT * FROM read_json('$fn')"))
+            if !isempty(df)
+                return df
+            end
+        end
+        @debug "component_owner.json empty/not found"
+        return DataFrame(uid=String[], component=String[])
+    finally
+        close(db)
     end
 end
 
@@ -79,8 +102,17 @@ end
 Save the component_owner table.
 =#
 function save_token_app(router, df)
-    fn = joinpath(broker_dir(router), "component_owner.csv")
-    CSV.write(fn, df)
+    fn = joinpath(broker_dir(router), "component_owner.json")
+    db = DuckDB.DB()
+    try
+        open(fn, "w") do f
+            write(f, arraytable(df))
+        end
+    catch e
+        rethrow()
+    finally
+        close(db)
+    end
 end
 
 broker_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id)
@@ -208,8 +240,6 @@ function pubkey_file(router, cid::AbstractString)
     else
         error("auth failed: unknown $cid")
     end
-
-    error("auth failed: unknown $cid")
 end
 
 isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing

@@ -61,7 +61,7 @@ function unpark(count)
     shared(subscriber, ctx)
     reactive(subscriber)
 
-    sleep(12)
+    sleep(15)
     close(subscriber)
 
     @info "[second_round] test results: count=$(ctx.count)"
@@ -70,5 +70,6 @@ end
 
 # triggers multiple park files
 counter = 0
-execute(() -> park_messages(100000), "test_unpark_file::park_message")
-execute(() -> unpark(100000), "test_unpark_file::unpark_file", reset=false)
+num_messages = 100000
+execute(() -> park_messages(num_messages), "test_unpark_file::park_message")
+execute(() -> unpark(num_messages), "test_unpark_file::unpark_file", reset=false)
