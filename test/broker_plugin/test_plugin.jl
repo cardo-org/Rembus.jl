@@ -14,11 +14,11 @@ function init(ok_cid, ko_cid)
     end
 
     # broker side
-    fn = Rembus.key_file(BROKER_NAME, ok_cid)
+    fn = Rembus.key_base(BROKER_NAME, ok_cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end
-    fn = Rembus.key_file(BROKER_NAME, ko_cid)
+    fn = Rembus.key_base(BROKER_NAME, ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end

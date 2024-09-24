@@ -96,16 +96,44 @@ keys_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name,
 messages_dir(r::Router) = joinpath(CONFIG.rembus_dir, r.process.supervisor.id, "messages")
 messages_dir(broker::AbstractString) = joinpath(CONFIG.rembus_dir, broker, "messages")
 
-function key_file(router::Router, cid::AbstractString)
-    return joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys", cid)
+function fullname(basename::AbstractString)
+    for format in ["pem", "der"]
+        for type in ["rsa", "ecdsa"]
+            fn = "$basename.$type.$format"
+            if isfile(fn)
+                return fn
+            end
+        end
+    end
+    return isfile(basename) ? basename : nothing
 end
 
-function key_file(server::Embedded, cid::AbstractString)
+function key_base(router::Router, cid::AbstractString)
+    res = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys", cid)
+    return res
+end
+
+function key_base(server::Embedded, cid::AbstractString)
     return joinpath(CONFIG.rembus_dir, server.process.id, "keys", cid)
 end
 
-function key_file(broker_name::AbstractString, cid::AbstractString)
+function key_base(broker_name::AbstractString, cid::AbstractString)
     return joinpath(CONFIG.rembus_dir, broker_name, "keys", cid)
+end
+
+function key_file(router::Router, cid::AbstractString)
+    basename = key_base(router, cid)
+    return fullname(basename)
+end
+
+function key_file(server::Embedded, cid::AbstractString)
+    basename = key_base(server, cid)
+    return fullname(basename)
+end
+
+function key_file(broker_name::AbstractString, cid::AbstractString)
+    basename = key_base(broker_name, cid)
+    return fullname(basename)
 end
 
 function save_table(router, router_tbl, filename)
@@ -147,8 +175,19 @@ function save_admins(router)
     end
 end
 
-function save_pubkey(router, cid::AbstractString, pubkey)
-    fn = key_file(router, cid)
+function save_pubkey(router, cid::AbstractString, pubkey, type)
+    name = key_base(router, cid)
+    format = "der"
+    # check if pubkey start with -----BEGIN chars
+    if pubkey[1:10] == UInt8[0x2d, 0x2d, 0x2d, 0x2d, 0x2d, 0x42, 0x45, 0x47, 0x49, 0x4e]
+        format = "pem"
+    end
+    if type == SIG_RSA
+        typestr = "rsa"
+    else
+        typestr = "ecdsa"
+    end
+    fn = "$name.$typestr.$format"
     open(fn, "w") do io
         write(io, pubkey)
     end
@@ -156,7 +195,7 @@ end
 
 function remove_pubkey(router, cid::AbstractString)
     fn = key_file(router, cid)
-    if isfile(fn)
+    if fn !== nothing
         rm(fn)
     end
 end
@@ -164,14 +203,16 @@ end
 function pubkey_file(router, cid::AbstractString)
     fn = key_file(router, cid)
 
-    if isfile(fn)
+    if fn !== nothing
         return fn
     else
         error("auth failed: unknown $cid")
     end
+
+    error("auth failed: unknown $cid")
 end
 
-isregistered(router, cid::AbstractString) = isfile(key_file(router, cid))
+isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
 
 function load_impl_table(router)
     @debug "loading exposers table"

@@ -513,7 +513,7 @@ function register(router, msg)
             mkdir(kdir)
         end
 
-        save_pubkey(router, msg.cid, msg.pubkey)
+        save_pubkey(router, msg.cid, msg.pubkey, msg.type)
         if !(msg.cid in router.component_owner.component)
             push!(router.component_owner, [msg.userid, msg.cid])
         end
@@ -856,8 +856,7 @@ function zeromq_receiver(router::Router)
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
                 # check if cid is registered
-                rembus_login = isfile(key_file(router, msg.cid))
-                if rembus_login
+                if key_file(router, msg.cid) !== nothing
                     # authentication mode, send the challenge
                     response = challenge(router, twin, msg)
                 else
@@ -872,8 +871,7 @@ function zeromq_receiver(router::Router)
                     # broker restarted
                     # start the authentication flow if cid is registered
                     @debug "lost connection to broker: restarting $(msg.cid)"
-                    rembus_login = isfile(key_file(router, msg.cid))
-                    if rembus_login
+                    if key_file(router, msg.cid) !== nothing
                         # check if challenge was already sent
                         if !haskey(twin.session, "challenge")
                             response = challenge(router, twin, msg)
@@ -1350,8 +1348,7 @@ function identity_check(router, twin, msg; paging=true)
         respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "already connected"), twin)
     else
         # check if cid is registered
-        rembus_login = isfile(key_file(router, msg.cid))
-        if rembus_login
+        if key_file(router, msg.cid) !== nothing
             # authentication mode, send the challenge
             response = challenge(router, twin, msg)
             respond(router, response, twin)
@@ -1426,16 +1423,14 @@ function verify_basic_auth(router, authorization)
     if idx === nothing
         # no password, only component name
         cid = val
-        file = key_file(router, cid)
-
-        if isfile(file)
+        if key_file(router, cid) !== nothing
             error("authentication failed")
         end
     else
         cid = val[1:idx-1]
         pwd = val[idx+1:end]
         file = key_file(router, cid)
-        if isfile(file)
+        if file !== nothing
             secret = readline(file)
             if secret != pwd
                 error("authentication failed")

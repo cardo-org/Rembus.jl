@@ -20,6 +20,9 @@ function run(url)
     ENV["REMBUS_TIMEOUT"] = 0.0
     @test_throws RembusTimeout Rembus.register(url, uid, pin)
     delete!(ENV, "REMBUS_TIMEOUT")
+
+    # wait a moment, to be sure that the pubkey file is created by the above register
+    sleep(0.5)
     remove_keys(cmp.id)
 
     Rembus.register(url, uid, pin)
@@ -67,7 +70,7 @@ function run(url)
     # public key was provisioned
     fname = Rembus.pubkey_file(BROKER_NAME, cmp.id)
     @info "[test_register#6]"
-    @test basename(fname) === cmp.id
+    @test basename(fname) === "$(cmp.id).rsa.pem"
 end
 
 function unregister(url)

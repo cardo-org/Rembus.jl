@@ -6,14 +6,15 @@ function generate_key(cid)
         rm(private_fn)
     end
 
-    cmd = `ssh-keygen -f $private_fn -m PEM -b 2048 -N ''`
+    cmd = `ssh-keygen -t rsa -f $private_fn -m PEM -b 2048 -N ''`
     Base.run(cmd)
     return private_fn
 end
 
 function setup(cid)
     private_fn = generate_key(cid)
-    mv("$private_fn.pub", Rembus.key_file(BROKER_NAME, cid), force=true)
+    basename = Rembus.key_base(BROKER_NAME, cid)
+    mv("$private_fn.pub", "$basename.rsa.pem", force=true)
 end
 
 function teardown(cid)

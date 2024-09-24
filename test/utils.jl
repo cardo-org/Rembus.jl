@@ -130,8 +130,10 @@ end
 
 function remove_keys(cid)
     for fn in [Rembus.pkfile(cid), Rembus.key_file(BROKER_NAME, cid)]
-        @info "removing $fn"
-        rm(fn, force=true)
+        if fn !== nothing
+            @info "removing $fn"
+            rm(fn, force=true)
+        end
     end
 end
 

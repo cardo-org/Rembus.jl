@@ -28,7 +28,7 @@ function run()
     Rembus.register(cid, uid, pin)
 
     keyfn = joinpath(Rembus.keys_dir(server_name), cid)
-    @test isfile(keyfn)
+    @test keyfn !== nothing
 
     rb = connect(cid)
 

@@ -15,7 +15,8 @@ end
 
 function setup(cid)
     private_fn = generate_key(cid)
-    open(Rembus.key_file(BROKER_NAME, cid), "w") do f
+    basename = Rembus.key_base(BROKER_NAME, cid)
+    open("$basename.rsa.pem", "w") do f
         write(f, read(`ssh-keygen -f $private_fn -e -m PEM`))
     end
 
@@ -26,7 +27,8 @@ end
 
 function teardown(cid)
     rm(Rembus.pkfile(cid))
-    rm(Rembus.key_file(BROKER_NAME, cid))
+    pubkey = Rembus.key_file(BROKER_NAME, cid)
+    rm(pubkey)
 end
 
 function run(cid)

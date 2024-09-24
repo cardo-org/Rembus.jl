@@ -16,7 +16,7 @@ function init(cid)
         mkpath(kdir)
     end
 
-    fn = Rembus.key_file(BROKER_NAME, cid)
+    fn = Rembus.key_base(BROKER_NAME, cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end

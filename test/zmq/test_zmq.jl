@@ -14,7 +14,7 @@ function init(cid)
         mkpath(kdir)
     end
 
-    fn = Rembus.key_file(BROKER_NAME, cid)
+    fn = Rembus.key_base(BROKER_NAME, cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end
@@ -31,7 +31,7 @@ function run()
 
     # restart caronte
     # trigger a resend_attestate()
-    Rembus.caronte(wait=false, args=Dict("broker"=>BROKER_NAME, "zmq" => 8002))
+    Rembus.caronte(wait=false, args=Dict("broker" => BROKER_NAME, "zmq" => 8002))
     sleep(2)
 end
 

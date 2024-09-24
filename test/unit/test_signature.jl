@@ -43,7 +43,7 @@ function run()
     secret = "pippo"
 
     client_fn = Rembus.pkfile(cid)
-    server_fn = Rembus.key_file(BROKER_NAME, cid)
+    server_fn = Rembus.key_base(BROKER_NAME, cid)
     @info "secret file: $client_fn"
 
     # create client and server files
@@ -71,8 +71,8 @@ function run()
     mv("$(client_fn).tmp", client_fn, force=true)
 
     # create public secret
-    server_fn = Rembus.key_file(BROKER_NAME, cid)
-    open(server_fn, "w") do f
+    server_fn = Rembus.key_base(BROKER_NAME, cid)
+    open("$server_fn.rsa.pem", "w") do f
         write(f, pubkey)
     end
 
