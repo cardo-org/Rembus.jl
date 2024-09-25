@@ -6,17 +6,29 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
 #=
-    create_private_key(cid::AbstractString)
+    rsa_private_key(cid::AbstractString)
 
 Create a private key for `cid` component and return its public key.
 =#
-function create_private_key(cid::AbstractString)
+function rsa_private_key(cid::AbstractString)
     file = "$(pkfile(cid)).tmp"
     cmd = `ssh-keygen -f $file -t rsa -m PEM -b 2048 -N ''`
     Base.run(cmd)
 
     try
         return read(`ssh-keygen -f $file -e -m PEM`)
+    finally
+        rm("$file.pub", force=true)
+    end
+end
+
+function ecdsa_private_key(cid::AbstractString)
+    file = "$(pkfile(cid)).tmp"
+    cmd = `ssh-keygen -f $file -t ecdsa -m PEM -b 256 -N ''`
+    Base.run(cmd)
+
+    try
+        return read(`ssh-keygen -f $file -e -m pem`)
     finally
         rm("$file.pub", force=true)
     end
@@ -53,7 +65,11 @@ function register(
 
     try
         @debug "registering $cid"
-        pubkey = create_private_key(cmp.id)
+        if type === SIG_RSA
+            pubkey = rsa_private_key(cmp.id)
+        elseif type === SIG_ECDSA
+            pubkey = ecdsa_private_key(cmp.id)
+        end
 
         value = parse(Int, pin, base=16)
         msgid = id() & 0xffffffffffffffffffffffff00000000 + value

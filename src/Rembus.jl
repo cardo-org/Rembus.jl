@@ -1702,6 +1702,13 @@ function resend_attestate(rb, response)
     return nothing
 end
 
+function sign(ctx::MbedTLS.PKContext, hash_alg::MbedTLS.MDKind, hash, rng)
+    n = 1024 # MBEDTLS_MPI_MAX_SIZE defined in mbedtls bignum.h
+    output = Vector{UInt8}(undef, n)
+    len = MbedTLS.sign!(ctx, hash_alg, hash, output, rng)
+    output[1:len]
+end
+
 function attestate(rb, response)
     file = pkfile(rb.client.id)
     if !isfile(file)
@@ -1712,7 +1719,7 @@ function attestate(rb, response)
         ctx = MbedTLS.parse_keyfile(file)
         plain = encode([Vector{UInt8}(response.data), rb.client.id])
         hash = MbedTLS.digest(MD_SHA256, plain)
-        signature = MbedTLS.sign(ctx, MD_SHA256, hash, MersenneTwister(0))
+        signature = sign(ctx, MD_SHA256, hash, MersenneTwister(0))
         return Attestation(rb.client.id, signature)
     catch e
         if isa(e, MbedTLS.MbedException)

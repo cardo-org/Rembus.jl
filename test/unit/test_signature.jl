@@ -67,7 +67,7 @@ function run()
 
     # create private secret
     client_fn = Rembus.pkfile(cid)
-    pubkey = Rembus.create_private_key(cid)
+    pubkey = Rembus.rsa_private_key(cid)
     mv("$(client_fn).tmp", client_fn, force=true)
 
     # create public secret

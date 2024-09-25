@@ -6,9 +6,10 @@ The broker setup is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
+|`REMBUS_ROOT_DIR`|\$HOME/.config/rembus|data root directory|
 |`BROKER_WS_PORT`|8000|default port for serving WebSocket protocol|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
-|`REMBUS_KEYSTORE`|\$HOME/.config/rembus/keystore| Directory of broker/server certificate `rembus.crt` and broker/server secret key `rembus.key`|
+|`REMBUS_KEYSTORE`|\$REMBUS\_ROOT\_DIR/keystore| Directory of broker/server certificate `rembus.crt` and broker/server secret key `rembus.key`|
 
 ## Component environment variables
 
@@ -16,14 +17,25 @@ A Rembus component is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
+|`REMBUS_ROOT_DIR`|\$HOME/.config/rembus|data root directory|
 |`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
 |`REMBUS_TIMEOUT`|5| Maximum number of seconds waiting for rpc responses|
-|`HTTP_CA_BUNDLE`|\$REMBUS\_DIR/ca/rembus-ca.crt|CA certificate|
+|`HTTP_CA_BUNDLE`|\$REMBUS\_ROOT\_DIR/ca/rembus-ca.crt|CA certificate|
 
 ## Broker configuration files
 
-The directory `$HOME/.config/rembus/caronte` contains broker settings and secret materials.
+The broker name determines the directory where the data files are stored.
+
+For example, to set the name of the broker with the companion `broker` script use
+the optional `name` argument:
+
+```shell
+broker --name my_broker
+```
+
+In the following it is assumed the default `caronte` name for the broker: in this
+case the directory `$REMBUS_ROOT_DIR/caronte` contains the broker settings and secret materials.
 
 ```sh
 > cd ~/.config/rembus/caronte
@@ -32,30 +44,31 @@ The directory `$HOME/.config/rembus/caronte` contains broker settings and secret
 .
 ├── admins.json
 ├── keys
-│   ├── bar
-│   └── foo
+│   ├── bar.rsa.pem
+│   └── foo.ecdsa.pem
 ├── exposers.json
-├── owners.csv
-├── component_owner.csv
+├── owners.json
+├── component_owner.json
 ├── topic_auth.json
-├── twins
-    ├── bar
-    └── foo
-
+├── twins.json
+├── messages
+    ├── 1345
+    ├── 345456
+    └── 867687
 
 ```
 
-where `foo` and `bar` files are named after component names.
-
-In case the component are offline the undelivered messages are temporarly persisted into `twins/bar` and `/twins/foo` files.
-
 ### Secret material for authenticated components
 
-The "secret" files under the `keys` directory contain the secret material used to authenticate the component named as the file.
+A file in the `keys` directory contains the secret material used to authenticate the component.
 
-The "secret" file may contain a RSA public key or a shared password string.
+This file may contain:
 
-To create the RSA key pairs and send the public key to the broker the [`Rembus.register`](@ref) method may be employed.
+* a RSA public key;
+* an ECDSA public key;
+* a plaintext shared password string;
+
+To create the RSA or ECDSA  key pairs and send the public key to the broker the [`Rembus.register`](@ref) method may be employed.
 
 ### Components with admin privilege
 
@@ -66,8 +79,7 @@ The element of this list are component names.
 > cat admins.json
 ["foo", "bar"]
 ```
-A component with admin privilege may change the privateness level of topics and authorize other components
-to bind to private topics.
+A component with admin privilege may change the privateness level of topics and authorize other components to bind to private topics.
 
 See [`private_topic`](@ref), [`public_topic`](@ref), [`authorize`](@ref), [`unauthorize`](@ref) for details.
 
@@ -136,17 +148,14 @@ asserts then only components `myconsumer` and `myproducer` are allowed to bind t
 Authenticated components may be provisioned with the [`Rembus.register`](@ref) method.
 
 ```julia
-register(component_name, uid, pin)
+register(component_name, uid, pin, key_type=SIG_RSA)
 ```
 
-`register` requires a username and a pin that must match with one of the entries of `owners.csv` file.
+`key_type` may be equal to `SIG_RSA` for RSA Encryption and equal to `SIG_ECDSA` for Elliptic Curve Digital Signature Algorithm.
 
-```text
-> cat owners.csv 
-pin,uid,name,enabled
-482dc7eb,paperoga@topolinia.com,Fethry Duck,true
-58e26283,paperino@topolinia.com,Donald Fauntleroy Duck,true
-```
+`register` requires a username and a pin that must match with one of the users defined in `owners.json` file. 
+
+`owners.json` file example:
 
 ```json
 [
@@ -166,21 +175,36 @@ pin,uid,name,enabled
 ]
 ```
 
-The `pin` column is the PIN token needed for registration, `uid` column is the username,
-`name` is an optional string describing the user and `enabled` consent to stop the user for
-registering components.
+`uid` is the username.
+
+`pin` is a secret token used for authentication. The `pin` column is a 8 digits string 
+composed of numbers and the characters `[a-f]`. 
+
+`name` is an optional string describing the user.
+
+`enabled` consent to disable the user for
+registering components. `enabled` is optional and if not present it defaults to `true`.
 
 ### Components ownership
 
-`component_owner.csv` is a csv file containing the mapping between the registered components and
+`component_owner.json` contains the mapping between the registered components and
 the user that performed the registration with `register` API.
 
 `uid` is the user identity and `component` is the component identifier.
 
-For example if the user Paperoga registered the component `foo` then:
+For example if the user Paperoga registered the component `foo` then `component_owner.json` 
+will be:
 
-```text
-> cat component_owner.csv
-uid,component
-paperoga@topolinia.com,foo
+```json
+[
+    {"uid": "paperoga@topolinia.com","component": "foo"}    
+]
 ```
+
+### Files reserved to the broker
+
+`twins.json` get saved at broker shutdown and contains, for each component,
+the reference for the last message delivered to the component.
+It is a file managed by the broker, do no edit this file. 
+
+the files in `messages` directory are parquet files that get saved periodically and at broker shutdown and contain all the published messages.

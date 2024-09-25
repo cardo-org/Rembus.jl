@@ -488,7 +488,9 @@ function isenabled(router, userid)
             @info "multiple accounts found for user [$userid]"
             return false
         end
-        return ismissing(df[1, :enabled]) || (df[1, :enabled] === true)
+        return (columnindex(df, :enabled) == 0) ||
+               ismissing(df[1, :enabled]) ||
+               (df[1, :enabled] === true)
     end
 end
 
@@ -1123,6 +1125,10 @@ end
 function command_line()
     s = ArgParseSettings()
     @add_arg_table! s begin
+        "--name", "-n"
+        help = "broker name"
+        default = "caronte"
+        arg_type = String
         "--reset", "-r"
         help = "factory reset, clean up broker configuration"
         action = :store_true
@@ -1169,7 +1175,7 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
     if isempty(args)
         args = command_line()
     end
-    sv_name = get(args, "broker", "caronte")
+    sv_name = get(args, "name", "caronte")
     setup(CONFIG)
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.debug = true
