@@ -14,7 +14,7 @@ proc = process("router", task, args=(router,))
 
 twin = Rembus.Twin(router, "twin")
 supervise([
-        supervisor("broker", [
+        supervisor("mybroker", [
             proc,
             process(Rembus.twin_task, args=(twin,))
         ])
@@ -38,7 +38,7 @@ msg = Rembus.Msg(Rembus.TYPE_PUB, Rembus.PubSubMsg("mytopic", zeros(UInt8, 11)),
 
 twin.id = "mytwin"
 twin.hasname = true
-twin_dir = joinpath(Rembus.broker_dir("broker"), "twins")
+twin_dir = joinpath(Rembus.broker_dir("mybroker"), "twins")
 mkpath(joinpath(twin_dir, twin.id))
 
 Rembus.destroy_twin(twin, router)

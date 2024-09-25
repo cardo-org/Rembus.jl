@@ -33,14 +33,14 @@ function run(exposer_url)
     # main broker
     caronte(
         wait=false,
-        args=Dict("broker" => "main_broker", "reset" => true)
+        args=Dict("name" => "main_broker", "reset" => true)
     )
     yield()
 
     caronte(
         wait=false,
         plugin=Broker,
-        args=Dict("broker" => "edge_broker", "ws" => 9000))
+        args=Dict("name" => "edge_broker", "ws" => 9000))
     yield()
 
     #    cli_url = "ws://:8000/client"
@@ -62,7 +62,7 @@ function run(exposer_url)
     # reconnect
     caronte(
         wait=false,
-        args=Dict("broker" => "main_broker", "reset" => true)
+        args=Dict("name" => "main_broker", "reset" => true)
     )
     sleep(5)
     p = from(broker_url)

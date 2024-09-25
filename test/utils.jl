@@ -20,7 +20,7 @@ macro start_caronte(init, args, reset)
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
         params = $(esc(args))
         if !running
-            name = get(params, "broker", BROKER_NAME)
+            name = get(params, "name", BROKER_NAME)
             $(esc(reset)) && Rembus.caronte_reset(name)
             fn = $(esc(init))
             if fn !== nothing
@@ -72,7 +72,7 @@ function execute(
 )
     Rembus.setup(Rembus.CONFIG)
 
-    @start_caronte setup merge(args, Dict("broker" => BROKER_NAME)) reset
+    @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset
     sleep(0.5)
     Rembus.logging()
     @info "[$testname] start"

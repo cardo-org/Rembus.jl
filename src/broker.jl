@@ -1122,12 +1122,12 @@ function callback_and(
     end
 end
 
-function command_line()
+function command_line(default_name="caronte")
     s = ArgParseSettings()
     @add_arg_table! s begin
         "--name", "-n"
         help = "broker name"
-        default = "caronte"
+        default = default_name
         arg_type = String
         "--reset", "-r"
         help = "factory reset, clean up broker configuration"
@@ -1258,7 +1258,7 @@ function serve(
     server::Embedded; wait=true, args=Dict()
 )
     if isempty(args)
-        args = command_line()
+        args = command_line("server")
     end
 
     expose(server, "version", (ctx, cmp) -> VERSION)

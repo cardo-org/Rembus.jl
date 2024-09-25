@@ -32,7 +32,7 @@ function run()
     expose(srv, mymethod)
     subscribe(srv, mytopic)
     serve(srv, wait=false, args=Dict("ws" => 9000))
-    caronte(wait=false, args=Dict("broker" => BROKER_NAME))
+    caronte(wait=false, args=Dict("name" => BROKER_NAME))
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
 

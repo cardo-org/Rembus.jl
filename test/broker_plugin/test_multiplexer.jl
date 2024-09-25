@@ -31,14 +31,14 @@ function run(exposer_url, secure=false)
     # main broker
     caronte(
         wait=false,
-        args=Dict("broker" => "main_broker", "reset" => true, "secure" => secure)
+        args=Dict("name" => "main_broker", "reset" => true, "secure" => secure)
     )
     yield()
 
     caronte(
         wait=false,
         plugin=Broker,
-        args=Dict("broker" => "edge_broker", "ws" => 9000, "secure" => secure))
+        args=Dict("name" => "edge_broker", "ws" => 9000, "secure" => secure))
     yield()
 
     if secure
