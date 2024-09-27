@@ -4,28 +4,30 @@ using DataFrames
 
 # tests: 3
 
-function init(server_name, uid, pin)
+function init(server_name, tenant, pin)
     broker_dir = Rembus.broker_dir(server_name)
-    df = DataFrame(pin=String[pin], uid=String[uid], name=["Test"], enabled=Bool[true])
+    df = DataFrame(
+        pin=String[pin], tenant=String[tenant], name=["Test"], enabled=Bool[true]
+    )
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_owners(broker_dir, df)
+    Rembus.save_tenants(broker_dir, arraytable(df))
 end
 
 
 function run()
     cid = "mycid"
-    uid = "userid"
+    tenant = "TenantA"
     pin = "11223344"
     server_name = "server_test"
 
-    init(server_name, uid, pin)
+    init(server_name, tenant, pin)
 
     srv = server()
     serve(srv, wait=false, args=Dict("name" => server_name))
 
-    Rembus.register(cid, uid, pin)
+    Rembus.register(cid, pin, tenant=tenant)
 
     keyfn = joinpath(Rembus.keys_dir(server_name), cid)
     @test keyfn !== nothing

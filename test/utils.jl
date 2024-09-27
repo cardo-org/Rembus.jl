@@ -1,4 +1,5 @@
 using DataFrames
+using JSONTables
 using JSON3
 using HTTP
 using Logging

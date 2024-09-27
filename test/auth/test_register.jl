@@ -4,13 +4,13 @@ include("../utils.jl")
 
 using DataFrames
 
-function init(uid, pin)
+function init(pin)
     broker_dir = Rembus.broker_dir(BROKER_NAME)
-    df = DataFrame(pin=String[pin], uid=String[uid], name=["Test"], enabled=Bool[true])
+    df = DataFrame(pin=String[pin])
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_owners(broker_dir, df)
+    Rembus.save_tenants(broker_dir, arraytable(df))
 end
 
 function run(url)
@@ -18,28 +18,28 @@ function run(url)
 
     # trigger a request timeout
     ENV["REMBUS_TIMEOUT"] = 0.0
-    @test_throws RembusTimeout Rembus.register(url, uid, pin)
+    @test_throws RembusTimeout register(url, pin)
     delete!(ENV, "REMBUS_TIMEOUT")
 
     # wait a moment, to be sure that the pubkey file is created by the above register
     sleep(0.5)
     remove_keys(cmp.id)
 
-    Rembus.register(url, uid, pin)
+    register(url, pin)
 
     # private key was created
     @info "[test_register#1]"
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
-        Rembus.register(url, uid, pin)
+        register(url, pin)
     catch e
         @info "[test_register] expected error: $e"
     end
 
     try
         # wrong token
-        Rembus.register("mycomponent", uid, "00000000")
+        register("mycomponent", "00000000")
         @test false
     catch e
         @info "[test_register#2] expected error: $e"
@@ -52,7 +52,7 @@ function run(url)
     mv(pkfile, "$pkfile.staged", force=true)
     try
         # register again
-        Rembus.register(url, uid, pin)
+        register(url, pin)
         @test false
     catch e
         @info "[test_register#3] expected error: $e"
@@ -65,7 +65,7 @@ function run(url)
     df = Rembus.load_token_app(BROKER_NAME)
     @info "[test_register#4,5] component_owner: $df"
     @test df[df.component.==cmp.id, :component][1] === cmp.id
-    @test df[df.component.==cmp.id, :uid][1] === uid
+    @test df[df.component.==cmp.id, :tenant][1] === BROKER_NAME
 
     # public key was provisioned
     fname = Rembus.pubkey_file(BROKER_NAME, cmp.id)
@@ -73,11 +73,11 @@ function run(url)
     @test basename(fname) === "$(cmp.id).rsa.pem"
 end
 
-function unregister(url)
+function decommission(url)
     client = tryconnect("zmq://:8002/wrong_cid")
 
     try
-        Rembus.unregister(client)
+        unregister(client)
         @test false
     catch e
         @info "[test_register#7] unregister expected error: $e"
@@ -88,7 +88,7 @@ function unregister(url)
 
     client = tryconnect(url)
     try
-        Rembus.unregister(client)
+        unregister(client)
 
         df = Rembus.load_token_app(BROKER_NAME)
 
@@ -110,7 +110,7 @@ function unregister(url)
 
     client = tryconnect("public_component")
     try
-        Rembus.unregister(client)
+        unregister(client)
         @test false
     catch e
         @info "[test_register#10] unregister expected error: $e"
@@ -118,18 +118,16 @@ function unregister(url)
     finally
         close(client)
     end
-
 end
 
-uid = "rembus_user"
 cid = "regcomp"
 pin = "11223344"
 
-setup() = init(uid, pin)
+setup() = init(pin)
 try
     url = "zmq://:8002/$cid"
     execute(() -> run(url), "test_register", setup=setup)
-    execute(() -> unregister(url), "test_unregister", setup=setup)
+    execute(() -> decommission(url), "test_unregister", setup=setup)
 
     url = cid
     execute(() -> run(cid), "test_register", setup=setup)

@@ -4,13 +4,15 @@ include("../utils.jl")
 
 using DataFrames
 
-function init(uid, pin)
+function init(tenant, pin)
     broker_dir = Rembus.broker_dir(BROKER_NAME)
-    df = DataFrame(pin=String[pin], uid=String[uid], name=["Test"], enabled=Bool[true])
+    df = DataFrame(
+        pin=String[pin], tenant=String[tenant], name=["Test"], enabled=Bool[true]
+    )
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_owners(broker_dir, df)
+    Rembus.save_tenants(broker_dir, arraytable(df))
 end
 
 function run(url)
@@ -18,19 +20,21 @@ function run(url)
 
     # trigger a request timeout
     ENV["REMBUS_TIMEOUT"] = 0.0
-    @test_throws RembusTimeout Rembus.register(url, uid, pin, Rembus.SIG_ECDSA)
+    @test_throws RembusTimeout Rembus.register(
+        url, pin, tenant=tenant, scheme=Rembus.SIG_ECDSA
+    )
     delete!(ENV, "REMBUS_TIMEOUT")
     sleep(0.5)
     remove_keys(cmp.id)
 
-    Rembus.register(url, uid, pin, Rembus.SIG_ECDSA)
+    Rembus.register(url, pin, tenant=tenant, scheme=Rembus.SIG_ECDSA)
 
     # private key was created
     @info "[test_register#1]"
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
-        Rembus.register(url, uid, pin)
+        Rembus.register(url, pin, tenant=tenant)
     catch e
         @info "[test_register] expected error: $e"
     end
@@ -41,11 +45,10 @@ function run(url)
     mv(pkfile, "$pkfile.staged", force=true)
     try
         # register again
-        Rembus.register(url, uid, pin, Rembus.SIG_RSA)
+        Rembus.register(url, pin, tenant=tenant, scheme=Rembus.SIG_RSA)
         @test false
     catch e
         @info "[test_register#2] expected error: $e"
-        showerror(stdout, e, catch_backtrace())
         @test true
     end
     mv("$pkfile.staged", pkfile, force=true)
@@ -55,7 +58,7 @@ function run(url)
     df = Rembus.load_token_app(BROKER_NAME)
     @info "[test_register#3,4] component_owner: $df"
     @test df[df.component.==cmp.id, :component][1] === cmp.id
-    @test df[df.component.==cmp.id, :uid][1] === uid
+    @test df[df.component.==cmp.id, :tenant][1] === tenant
 
     # public key was provisioned
     fname = Rembus.pubkey_file(BROKER_NAME, cmp.id)
@@ -63,11 +66,11 @@ function run(url)
     @test basename(fname) === "$(cmp.id).ecdsa.pem"
 end
 
-uid = "ecdsa_user"
+tenant = "A"
 cid = "ecdsa_comp"
 pin = "11223344"
 
-setup() = init(uid, pin)
+setup() = init(tenant, pin)
 try
     execute(() -> run(cid), "test_register_ecdsa", setup=setup)
 catch e

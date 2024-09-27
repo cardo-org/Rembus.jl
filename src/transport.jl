@@ -103,7 +103,7 @@ function from_cbor(packet)
         #                                          topic        data
         return AdminReqMsg(bytes2id(payload[2]), payload[3], payload[4])
     elseif ptype == TYPE_REGISTER
-        #                           cid        userid      pubkey,      type
+        #                           cid        tenant      pubkey,      type
         return Register(
             bytes2id(payload[2]), payload[3], payload[4], payload[5], payload[6]
         )
@@ -179,11 +179,11 @@ function broker_parse(pkt)
     elseif ptype == TYPE_REGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        userid = decode_internal(io)
+        tenant = decode_internal(io)
         pubkey = decode_internal(io)
         type = decode_internal(io)
         @debug "<<message REGISTER, cid: $cid"
-        return Register(bytes2id(id), cid, userid, pubkey, type)
+        return Register(bytes2id(id), cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
@@ -412,11 +412,11 @@ function broker_parse(router::Router, pkt::ZMQPacket)
     elseif ptype == TYPE_REGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
-        userid = pkt.header[4]
+        tenant = pkt.header[4]
         type = pkt.header[5]
         pubkey::Vector{UInt8} = pkt.data
         router.mid2address[mid] = id
-        return Register(mid, cid, userid, pubkey, type)
+        return Register(mid, cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
@@ -881,7 +881,7 @@ function transport_send(::RBHandle, socket::ZMQ.Socket, msg::Attestation)
 end
 
 function transport_send(::RBHandle, ws, msg::Register)
-    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid, msg.pubkey, msg.type]
+    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.pubkey, msg.type]
     transport_write(ws, pkt)
     return true
 end
@@ -891,7 +891,7 @@ function transport_send(::RBHandle, socket::ZMQ.Socket, msg::Register)
         send(socket, Message(), more=true)
         send(
             socket,
-            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.userid, msg.type]),
+            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.type]),
             more=true
         )
         send(socket, msg.pubkey, more=true)

@@ -6,23 +6,28 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
 #=
-    load_owners()
+    load_tenants()
 
 Return the owners dataframe
 =#
-function load_owners(router)
-    fn = joinpath(broker_dir(router), "owners.json")
+function load_tenants(router)
+    fn = joinpath(broker_dir(router), TENANTS_FILE)
     db = DuckDB.DB()
     try
         if isfile(fn)
             @debug "loading file $fn"
             df = DataFrame(DuckDB.query(db, "SELECT * FROM read_json('$fn')"))
             if !isempty(df)
+                # if not found then set default tenant
+                if columnindex(df, :tenant) == 0
+                    @info "setting default tenant: [$(router.process.supervisor.id)]"
+                    df[!, :tenant] .= router.process.supervisor.id
+                end
                 return df
             end
         end
-        @debug "owners.json empty/not found, only unauthenticated users allowed"
-        return DataFrame(pin=String[], uid=String[], name=[], enabled=Bool[])
+        @debug "$TENANTS_FILE empty/not found"
+        return DataFrame(pin=String[], tenant=String[], name=[], enabled=Bool[])
     finally
         close(db)
     end
@@ -56,16 +61,17 @@ function save_servers(router)
 end
 
 #=
-    save_owners(owners_df)
+    save_tenants(owners_df)
 
 Save the owners table.
 =#
-function save_owners(router, owners_df)
-    fn = joinpath(broker_dir(router), "owners.json")
+function save_tenants(router, tenants::AbstractString)
+    fn = joinpath(broker_dir(router), TENANTS_FILE)
     db = DuckDB.DB()
     try
         open(fn, "w") do f
-            write(f, arraytable(owners_df))
+            #write(f, arraytable(owners_df))
+            write(f, tenants)
         end
     catch e
         rethrow()
@@ -80,7 +86,7 @@ end
 Return the component_owner dataframe
 =#
 function load_token_app(router)
-    fn = joinpath(broker_dir(router), "component_owner.json")
+    fn = joinpath(broker_dir(router), COMPONENT_TENANT)
     db = DuckDB.DB()
     try
         if isfile(fn)
@@ -89,8 +95,8 @@ function load_token_app(router)
                 return df
             end
         end
-        @debug "component_owner.json empty/not found"
-        return DataFrame(uid=String[], component=String[])
+        @debug "$COMPONENT_TENANT empty/not found"
+        return DataFrame(tenant=String[], component=String[])
     finally
         close(db)
     end
@@ -102,7 +108,7 @@ end
 Save the component_owner table.
 =#
 function save_token_app(router, df)
-    fn = joinpath(broker_dir(router), "component_owner.json")
+    fn = joinpath(broker_dir(router), COMPONENT_TENANT)
     db = DuckDB.DB()
     try
         open(fn, "w") do f
@@ -397,7 +403,7 @@ function load_configuration(router)
         load_impl_table(router)
         load_topic_auth_table(router)
         load_admins(router)
-        router.owners = load_owners(router)
+        router.owners = load_tenants(router)
         router.component_owner = load_token_app(router)
         load_servers(router)
         load_marks(router)

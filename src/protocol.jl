@@ -12,8 +12,8 @@ end
 struct IdentityMsg <: RembusMsg
     id::UInt128
     cid::String
-    IdentityMsg(userid::AbstractString) = new(id(), userid)
-    IdentityMsg(msgid::UInt128, userid::AbstractString) = new(msgid, userid)
+    IdentityMsg(cid::AbstractString) = new(id(), cid)
+    IdentityMsg(msgid::UInt128, cid::AbstractString) = new(msgid, cid)
 end
 
 mutable struct PubSubMsg{T} <: RembusTopicMsg
@@ -97,15 +97,15 @@ Base.show(io::IO, message::ResMsg) = show(io, "msgid:$(message.id) status:$(mess
 struct Register <: RembusMsg
     id::UInt128
     cid::String # client name
-    userid::String
+    tenant::Union{Nothing,String}
     pubkey::Vector{UInt8}
     type::UInt8
     Register(
         msgid::UInt128,
         cid::AbstractString,
-        userid::AbstractString,
+        tenant::Union{Nothing,AbstractString},
         pubkey::Vector{UInt8},
-        type::UInt8) = new(msgid, cid, userid, pubkey, type)
+        type::UInt8) = new(msgid, cid, tenant, pubkey, type)
 end
 
 struct Unregister <: RembusMsg

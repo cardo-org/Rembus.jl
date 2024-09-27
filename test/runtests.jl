@@ -224,6 +224,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "register" begin
             include("auth/test_register.jl")
         end
+        @time @safetestset "register_multitenancy" begin
+            include("auth/test_register_multitenancy.jl")
+        end
         @time @safetestset "register_ecdsa" begin
             include("auth/test_register_ecdsa.jl")
         end

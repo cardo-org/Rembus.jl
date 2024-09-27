@@ -478,14 +478,16 @@ function attestation(router::Embedded, rb::RBServerConnection, msg)
     return sts
 end
 
-function isenabled(router, userid)
-    df = router.owners[(router.owners.uid.==userid), :]
+isenabled(router, tenant::Nothing) = true
+
+function isenabled(router, tenant_id::AbstractString)
+    df = router.owners[(router.owners.tenant.==tenant_id), :]
     if isempty(df)
-        @info "unknown user [$userid]"
+        @info "unknown tenant [$tenant_id]"
         return false
     else
         if nrow(df) > 1
-            @info "multiple accounts found for user [$userid]"
+            @info "multiple tenants found for [$tenant_id]"
             return false
         end
         return (columnindex(df, :enabled) == 0) ||
@@ -494,15 +496,15 @@ function isenabled(router, userid)
     end
 end
 
-function get_token(router, userid, id::UInt128)
+function get_token(router, tenant, id::UInt128)
     vals = UInt8[(id>>24)&0xff, (id>>16)&0xff, (id>>8)&0xff, id&0xff]
     token = bytes2hex(vals)
-    df = router.owners[(router.owners.pin.==token).&(router.owners.uid.==userid), :]
+    df = router.owners[(router.owners.pin.==token).&(router.owners.tenant.==tenant), :]
     if isempty(df)
-        @info "user [$userid]: invalid token"
+        @info "tenant [$tenant]: invalid token"
         return nothing
     else
-        @debug "user [$userid]: token is valid"
+        @debug "tenant [$tenant]: token is valid"
         return token
     end
 end
@@ -515,16 +517,22 @@ Register a component.
 function register(router, msg)
     @debug "registering pubkey of $(msg.cid), id: $(msg.id)"
 
-    if !isenabled(router, msg.userid)
-        return ResMsg(msg.id, STS_GENERIC_ERROR, "user [$(msg.userid)] not enabled")
+    if !isenabled(router, msg.tenant)
+        return ResMsg(msg.id, STS_GENERIC_ERROR, "tenant [$(msg.tenant)] not enabled")
     end
 
     sts = STS_SUCCESS
     reason = nothing
-    token = get_token(router, msg.userid, msg.id)
+    if msg.tenant === nothing
+        tenant = router.process.supervisor.id
+    else
+        tenant = msg.tenant
+    end
+
+    token = get_token(router, tenant, msg.id)
     if token === nothing
         sts = STS_GENERIC_ERROR
-        reason = "wrong uid/pin"
+        reason = "wrong tenant/pin"
     elseif isregistered(router, msg.cid)
         sts = STS_NAME_ALREADY_TAKEN
         reason = "name $(msg.cid) not available for registration"
@@ -536,7 +544,7 @@ function register(router, msg)
 
         save_pubkey(router, msg.cid, msg.pubkey, msg.type)
         if !(msg.cid in router.component_owner.component)
-            push!(router.component_owner, [msg.userid, msg.cid])
+            push!(router.component_owner, [tenant, msg.cid])
         end
         save_token_app(router, router.component_owner)
     end
@@ -1308,7 +1316,7 @@ function serve(
         Visor.start(p)
     end
     server.process = from(name)
-    server.owners = load_owners(server)
+    server.owners = load_tenants(server)
     server.component_owner = load_token_app(server)
     if wait
         supervise()

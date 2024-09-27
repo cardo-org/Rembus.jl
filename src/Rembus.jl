@@ -73,6 +73,7 @@ export forever
 export terminate
 export egress_interceptor, ingress_interceptor
 export rbinfo
+export register, unregister
 
 # broker api
 export add_server, remove_server

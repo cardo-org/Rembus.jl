@@ -47,7 +47,7 @@ case the directory `$REMBUS_ROOT_DIR/caronte` contains the broker settings and s
 │   ├── bar.rsa.pem
 │   └── foo.ecdsa.pem
 ├── exposers.json
-├── owners.json
+├── tenants.json
 ├── component_owner.json
 ├── topic_auth.json
 ├── twins.json
@@ -153,9 +153,9 @@ register(component_name, uid, pin, key_type=SIG_RSA)
 
 `key_type` may be equal to `SIG_RSA` for RSA Encryption and equal to `SIG_ECDSA` for Elliptic Curve Digital Signature Algorithm.
 
-`register` requires a username and a pin that must match with one of the users defined in `owners.json` file. 
+`register` requires a username and a pin that must match with one of the users defined in `tenants.json` file. 
 
-`owners.json` file example:
+`tenants.json` file example:
 
 ```json
 [

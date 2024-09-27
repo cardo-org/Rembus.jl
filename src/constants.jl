@@ -23,6 +23,9 @@ const QOS2 = UInt8(0x30) # exactly once
 const SIG_RSA = 0x1
 const SIG_ECDSA = 0x2
 
+const TENANTS_FILE = "tenants.json"
+const COMPONENT_TENANT = "tenant_component.json"
+
 const BROKER_CONFIG = "__config__"
 const CID = "cid"
 const COMMAND = "cmd"

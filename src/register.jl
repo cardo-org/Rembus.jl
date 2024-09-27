@@ -35,20 +35,26 @@ function ecdsa_private_key(cid::AbstractString)
 end
 
 """
-    register(cid::AbstractString, userid::AbstractString, pin::AbstractString)
+    register(
+        cid::AbstractString,
+        pin::AbstractString;
+        tenant=Union{Nothing, AbstractString} = nothing,
+        scheme::UInt8
+    )
 
 Register the component with name `cid`.
 
-To register a component a user must be provisioned in the `owners.csv` table.
+To register a component a single `pin` or a set of tenants must be configured
+in the `tenants.json` file.
 
 The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
 
 """
 function register(
     cid::AbstractString,
-    userid::AbstractString,
-    pin::AbstractString,
-    type::UInt8=SIG_RSA
+    pin::AbstractString;
+    tenant::Union{Nothing,AbstractString}=nothing,
+    scheme::UInt8=SIG_RSA
 )
     cmp = Component(cid)
 
@@ -65,16 +71,16 @@ function register(
 
     try
         @debug "registering $cid"
-        if type === SIG_RSA
+        if scheme === SIG_RSA
             pubkey = rsa_private_key(cmp.id)
-        elseif type === SIG_ECDSA
+        elseif scheme === SIG_ECDSA
             pubkey = ecdsa_private_key(cmp.id)
         end
 
         value = parse(Int, pin, base=16)
         msgid = id() & 0xffffffffffffffffffffffff00000000 + value
 
-        msg = Register(msgid, cmp.id, userid, pubkey, type)
+        msg = Register(msgid, cmp.id, tenant, pubkey, scheme)
         response = wait_response(rb, msg, request_timeout())
         if isa(response, RembusTimeout)
             throw(response)
