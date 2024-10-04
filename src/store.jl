@@ -310,7 +310,7 @@ function load_twins(router)
     for (cid, topicsdict) in twin_topicsdict
         twin = create_twin(cid, router)
         twin.hasname = true
-        twin.retroactive = topicsdict
+        twin.msg_from = topicsdict
 
         for topic in keys(topicsdict)
             if haskey(twins, topic)
@@ -331,7 +331,7 @@ function save_marks(router)
     fn = joinpath(broker_dir(router), "twins.json")
     twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
     for twin in values(router.id_twin)
-        # save only named twins, anonymous twin cannot be retroactive
+        # save only named twins, anonymous twin cannot be msg_from
         if twin.hasname
             twin_mark[twin.id] = twin.mark
         end
@@ -370,7 +370,7 @@ function save_twins(router)
         if twin.hasname
             twin_finalize(router.context, twin)
             # ??? delete!(router.id_twin, twin_id)
-            twin_cfg[twin_id] = twin.retroactive
+            twin_cfg[twin_id] = twin.msg_from
         end
     end
     fn = joinpath(broker_dir(router), "subscribers.json")

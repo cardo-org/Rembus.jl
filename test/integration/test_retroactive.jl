@@ -5,7 +5,7 @@ mutable struct TestBag
 end
 
 function consume(bag, data)
-    @debug "[test retroactive] received: $data" _group = :test
+    @debug "[test msg_from] received: $data" _group = :test
     bag.broadcast_received = true
 end
 
@@ -17,7 +17,7 @@ function run()
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
     reactive(subscriber)
-    subscribe(subscriber, topic, consume, retroactive=LastReceived())
+    subscribe(subscriber, topic, consume, msg_from=LastReceived())
 
     close(subscriber)
 
@@ -25,7 +25,7 @@ function run()
 
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
-    subscribe(subscriber, topic, consume, retroactive=Now())
+    subscribe(subscriber, topic, consume, msg_from=Now())
     reactive(subscriber)
 
     sleep(0.2)
@@ -37,7 +37,7 @@ function run()
 
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
-    subscribe(subscriber, topic, consume, retroactive=LastReceived())
+    subscribe(subscriber, topic, consume, msg_from=LastReceived())
     reactive(subscriber)
 
     #sleep(0.2)

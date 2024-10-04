@@ -30,7 +30,7 @@ const BROKER_CONFIG = "__config__"
 const CID = "cid"
 const COMMAND = "cmd"
 const DATA = :data
-const RETROACTIVE = "retroactive"
+const MSG_FROM = "msg_from"
 const STATUS = "status"
 
 const REACTIVE_CMD = "reactive"

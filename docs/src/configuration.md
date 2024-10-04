@@ -109,23 +109,28 @@ The topics subscribers are persisted in the file `subscribers.json`. Only named 
 are persisted.
 
 `subscribers.json` contains a map: keywords are component names and values are maps.
-The keys of the map are subscribed topics and values are booleans that
-assert if the topic is retroactive:
+The keys of the map are subscribed topics and values are floats that
+define time periods in microseconds. A message received before the node subscription time
+but included in the time period will be delivered to the node.
+
+For example, in the following setting `mytopic1` does not get messages received before the subscription
+because the time period is zero, while messages more recent than one hour are delivered to `topic2`:
+
+If the time period is `Inf` then all messages received before the time of subscription and not delivered
+because the node was offline are sent to it.
 
 ```text
 > cat subscribers.json
 {
-    "mycomponent":{"mytopic1": true, "mytopic2": false}
+    "mycomponent":{"mytopic1": 0.0, "mytopic2": 3.6e9}
 }
 ```
 
-`mycomponent` is subscribed to `mytopic1` and `mytopic2` topics, and `mytopic1` is retroactive,
-namely when it connects it wants to receive messages published when it was offline.
-
-For declaring retroactiveness with [Macro-based API](@ref) use the option `before_now`:
+For declaring interest for all messaged delivered wheh the node was offline with [Macro-based API](@ref)
+use `from=LastReceived()` expression:
 
 ```julia
-@subscribe mytopic1 before_now
+@subscribe mytopic1 from=LastReceived()
 ```
 
 ### Private topics

@@ -26,7 +26,7 @@ mutable struct Twin
     isauth::Bool
     mark::UInt64
     socket::Any
-    retroactive::Dict{String,Float64}
+    msg_from::Dict{String,Float64}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
     out::Dict{UInt128,Threads.Condition}
     acktimer::Dict{UInt128,Timer}
@@ -195,7 +195,7 @@ function send_messages(twin::Twin, df)
         msgid = UInt128(row.ts) << 64 + row.uid
         tmark = twin.mark
         if row.ptr > tmark
-            if haskey(twin.retroactive, row.topic) && row.ts > (nowts - twin.retroactive[row.topic])
+            if haskey(twin.msg_from, row.topic) && row.ts > (nowts - twin.msg_from[row.topic])
                 pkt = Rembus.from_cbor(row.pkt)
                 pkt.id = msgid
                 msg = Msg(TYPE_PUB, pkt, twin)

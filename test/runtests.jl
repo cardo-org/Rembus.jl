@@ -140,7 +140,7 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "rembus_task" begin
             include("integration/test_rembus_task.jl")
         end
-        @time @safetestset "retroactive" begin
+        @time @safetestset "msg_from" begin
             include("integration/test_retroactive.jl")
         end
         @time @safetestset "process_fault" begin

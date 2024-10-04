@@ -105,8 +105,8 @@ function admin_command(router, twin, msg::AdminReqMsg)
     if cmd == SUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
-                retroactive = get(msg.data, RETROACTIVE, Now())
-                twin.retroactive[msg.topic] = retroactive
+                msg_from = get(msg.data, MSG_FROM, Now())
+                twin.msg_from[msg.topic] = msg_from
                 if haskey(router.topic_interests, msg.topic)
                     push!(router.topic_interests[msg.topic], twin)
                 else
@@ -143,8 +143,8 @@ function admin_command(router, twin, msg::AdminReqMsg)
                         sts = STS_GENERIC_ERROR
                     end
                     # remove from twin configuration
-                    if haskey(twin.retroactive, msg.topic)
-                        delete!(twin.retroactive, msg.topic)
+                    if haskey(twin.msg_from, msg.topic)
+                        delete!(twin.msg_from, msg.topic)
                     end
                 else
                     sts = STS_GENERIC_ERROR
