@@ -60,7 +60,7 @@ function run()
 
     sleep(0.1)
 
-    @subscribe listener foo from_now
+    @subscribe listener foo from = Now()
     @shared listener bag
     @reactive listener
 
@@ -71,7 +71,7 @@ function run()
     @debug "[$requestor] result=$result" _group = :test
     @test result == 2
 
-    @subscribe exposer bar from_now
+    @subscribe exposer bar from = Now()
     @shared exposer bag
     @reactive exposer
 

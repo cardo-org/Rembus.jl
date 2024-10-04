@@ -10,8 +10,8 @@ function run()
     @info "component: $(rbinfo(rb))"
 
     shared(rb, ctx)
-    subscribe(rb, my_topic, retroactive=true)
-    subscribe(rb, "topic", my_topic, retroactive=true)
+    subscribe(rb, my_topic, retroactive=LastReceived())
+    subscribe(rb, "topic", my_topic, retroactive=LastReceived())
     expose(rb, "service", my_service)
     expose(rb, my_service)
     reactive(rb)

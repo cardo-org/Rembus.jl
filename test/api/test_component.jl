@@ -15,8 +15,6 @@ function run()
     @component "mycomponent"
     sleep(1)
 
-    @test_throws ErrorException @subscribe atopic invalid_mode
-
     @subscribe atopic
     @shared ctx
     @reactive

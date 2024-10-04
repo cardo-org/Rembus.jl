@@ -27,7 +27,7 @@ end
 function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=missing)
     @component sub1
 
-    @subscribe sub1 mytopic from_now
+    @subscribe sub1 mytopic from = Now()
 
     if testholder !== missing
         @shared sub1 testholder
@@ -38,17 +38,17 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
     @component sub2
     @reactive sub2
 
-    @subscribe sub2 mytopic from_now
+    @subscribe sub2 mytopic from = Now()
     if testholder !== missing
         @shared sub2 testholder
     end
 
-    @subscribe sub2 noarg from_now
+    @subscribe sub2 noarg from = Now()
 
     @component sub3
     @reactive sub3
 
-    @subscribe sub3 mytopic before_now
+    @subscribe sub3 mytopic from = LastReceived()
     if testholder !== missing
         @shared sub3 testholder
     end

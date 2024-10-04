@@ -46,7 +46,7 @@ end
 function unpark(count)
     ctx = TestContext()
     subscriber = connect("test_unpark_sub")
-    subscribe(subscriber, "consume", consume, retroactive=true)
+    subscribe(subscriber, "consume", consume, retroactive=LastReceived())
     shared(subscriber, ctx)
     reactive(subscriber)
 
@@ -57,7 +57,7 @@ function unpark(count)
 
     # reopen subscriber, the error condition is not active
     subscriber = connect("test_unpark_sub")
-    subscribe(subscriber, "consume", consume, retroactive=true)
+    subscribe(subscriber, "consume", consume, retroactive=LastReceived())
     shared(subscriber, ctx)
     reactive(subscriber)
 

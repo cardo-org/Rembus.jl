@@ -29,7 +29,7 @@ function run()
 
     @expose "exposer" mymethod
 
-    @subscribe "subscriber" mymethod
+    @subscribe "subscriber" mymethod from = Now()
     @shared "subscriber" bag
     @reactive "subscriber"
 

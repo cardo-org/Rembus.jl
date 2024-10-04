@@ -29,7 +29,7 @@ function publish_macroapi(publisher, sub1; waittime=1)
 
     @component sub1
     @shared sub1 testbag
-    @subscribe sub1 mytopic from_now
+    @subscribe sub1 mytopic from = Now()
     @reactive sub1
 
     sleep(waittime / 3)
@@ -144,7 +144,7 @@ function types()
 
     sleep(0.1)
 
-    @subscribe TYPE_LISTENER type_consumer from_now
+    @subscribe TYPE_LISTENER type_consumer from = Now()
     @shared TYPE_LISTENER bag
     @reactive TYPE_LISTENER
 

@@ -26,7 +26,7 @@ mutable struct Twin
     isauth::Bool
     mark::UInt64
     socket::Any
-    retroactive::Dict{String,Bool}
+    retroactive::Dict{String,Float64}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
     out::Dict{UInt128,Threads.Condition}
     acktimer::Dict{UInt128,Timer}
@@ -146,7 +146,7 @@ function Base.show(io::IO, msg::Msg)
 end
 
 #=
-Methods related to th epersistence of Pubsub messages.
+Methods related to the persistence of Pubsub messages.
 =#
 
 messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
@@ -157,7 +157,9 @@ messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
     For QOS1 or QOS2 levels the message id is used to match ACK and ACK2 messages.
 =#
 function save_message(router, msg::PubSubMsg)
-    ts::UInt64 = msg.id >> 64
+    #ts::UInt64 = msg.id >> 64
+    tv = Libc.TimeVal()
+    ts = tv.sec * 1_000_000 + tv.usec
     uid::UInt64 = msg.id & 0xffffffffffffffff
     if isa(msg.data, IOBuffer)
         data = msg.data.data
@@ -188,11 +190,12 @@ function data_at_rest(fn, broker="caronte")
 end
 
 function send_messages(twin::Twin, df)
+    nowts = time() * 1_000_000
     for row in eachrow(df)
         msgid = UInt128(row.ts) << 64 + row.uid
         tmark = twin.mark
         if row.ptr > tmark
-            if haskey(twin.retroactive, row.topic) && twin.retroactive[row.topic]
+            if haskey(twin.retroactive, row.topic) && row.ts > (nowts - twin.retroactive[row.topic])
                 pkt = Rembus.from_cbor(row.pkt)
                 pkt.id = msgid
                 msg = Msg(TYPE_PUB, pkt, twin)

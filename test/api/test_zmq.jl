@@ -24,7 +24,7 @@ function run()
     @debug "rpc result = $result" _group = :test
     @test result == df
 
-    @subscribe "subscriber" consume
+    @subscribe "subscriber" consume from = Now()
     @reactive "subscriber"
 
     @publish "client" consume("hello")

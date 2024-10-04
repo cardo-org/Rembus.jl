@@ -54,7 +54,7 @@ function run(publisher, consumer)
 
     sleep(0.1)
 
-    subscribe(sub, test_topic, consume, retroactive=true)
+    subscribe(sub, test_topic, consume, retroactive=LastReceived())
     reactive(sub)
 
     @async storm(pub)
@@ -69,7 +69,7 @@ function run(publisher, consumer)
     sub = connect(consumer)
 
     shared(sub, ctx)
-    subscribe(sub, test_topic, consume, retroactive=true)
+    subscribe(sub, test_topic, consume, retroactive=LastReceived())
     reactive(sub)
 
     @info "sleeping"

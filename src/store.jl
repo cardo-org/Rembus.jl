@@ -301,7 +301,7 @@ function load_twins(router)
     fn = joinpath(broker_dir(router), "subscribers.json")
     if isfile(fn)
         content = read(fn, String)
-        twin_topicsdict = JSON3.read(content, Dict)
+        twin_topicsdict = JSON3.read(content, Dict, allow_inf=true)
     else
         twin_topicsdict = Dict()
     end
@@ -365,7 +365,7 @@ Persist undelivered messages if they are queued in memory.
 =#
 function save_twins(router)
     @debug "saving subscribers table"
-    twin_cfg = Dict{String,Dict{String,Bool}}()
+    twin_cfg = Dict{String,Dict{String,Float64}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
             twin_finalize(router.context, twin)
@@ -375,7 +375,7 @@ function save_twins(router)
     end
     fn = joinpath(broker_dir(router), "subscribers.json")
     open(fn, "w") do io
-        write(io, JSON3.write(twin_cfg))
+        write(io, JSON3.write(twin_cfg, allow_inf=true))
     end
 end
 

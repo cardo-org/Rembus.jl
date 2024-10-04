@@ -105,7 +105,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
     if cmd == SUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
-                retroactive = get(msg.data, RETROACTIVE, true)
+                retroactive = get(msg.data, RETROACTIVE, Now())
                 twin.retroactive[msg.topic] = retroactive
                 if haskey(router.topic_interests, msg.topic)
                     push!(router.topic_interests[msg.topic], twin)

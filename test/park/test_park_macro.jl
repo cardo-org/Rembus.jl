@@ -24,7 +24,7 @@ end
 
 function subscribe(sub, ctx)
     @component sub
-    @subscribe sub consume before_now
+    @subscribe sub consume from = Now()
     @shared sub ctx
 end
 

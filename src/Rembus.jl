@@ -163,7 +163,7 @@ mutable struct RBConnection <: RBHandle
     reactive::Bool
     client::Component
     receiver::Dict{String,Function}
-    subinfo::Dict{String,Bool}
+    subinfo::Dict{String,Float64}
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
@@ -731,22 +731,14 @@ function expose_expr(fn, cid=nothing)
     return ex
 end
 
-function subscribe_expr(fn, mode::Symbol, cid=nothing)
-    if mode == :from_now
-        sts = false
-    elseif mode == :before_now
-        sts = true
-    else
-        return :(throw(
-            ErrorException("subscribe invalid mode: must be from_now or before_now")
-        ))
-    end
+function subscribe_expr(fn, from, cid=nothing)
     ex = :(call(
         Rembus.name2proc(cid, true, true),
-        Rembus.AddInterest(aaa, $sts),
+        Rembus.AddInterest(aaa, Now()),
         timeout=Rembus.call_timeout()
     ))
     ex.args[3].args[2] = fnname(fn)
+    ex.args[3].args[3] = from.args[2]
     ex.args[2].args[2] = cid
     return ex
 end
@@ -860,9 +852,9 @@ supervise()
 @publish foo("gfr", 54.2)
 ```
 """
-macro subscribe(fn::Symbol, mode::Symbol=:from_now)
+macro subscribe(fn::Symbol, from=:(from = Now()))
     quote
-        $(esc(subscribe_expr(fn, mode)))
+        $(esc(subscribe_expr(fn, from)))
         nothing
     end
 end
@@ -874,8 +866,8 @@ end
 
 Subscribe the function expression.
 """
-macro subscribe(fn::Expr, mode::Symbol=:from_now)
-    ex = subscribe_expr(fn, mode)
+macro subscribe(fn::Expr, from=:(from = Now()))
+    ex = subscribe_expr(fn, from)
     quote
         $(esc(fn))
         $(esc(ex))
@@ -883,17 +875,8 @@ macro subscribe(fn::Expr, mode::Symbol=:from_now)
     end
 end
 
-macro subscribe(cid, fn::Expr, mode::Symbol=:from_now)
-    ex = subscribe_expr(fn, mode, cid)
-    quote
-        $(esc(fn))
-        $(esc(ex))
-        nothing
-    end
-end
-
-macro subscribe(cid, fn::Symbol, mode::Symbol=:from_now)
-    ex = subscribe_expr(fn, mode, cid)
+macro subscribe(cid, fn::Symbol, from)
+    ex = subscribe_expr(fn, from, cid)
     quote
         $(esc(ex))
         nothing
@@ -1003,15 +986,15 @@ end
 struct AddInterest
     topic::String
     fn::Function
-    retroactive::Bool
+    retroactive::Union{Real,Period,Dates.CompoundPeriod}
     AddInterest(
         topic::AbstractString,
         fn::Function,
-        retroactive::Bool
+        retroactive
     ) = new(topic, fn, retroactive)
     AddInterest(
         fn::Function,
-        retroactive::Bool
+        retroactive
     ) = new(string(fn), fn, retroactive)
 end
 
@@ -1038,7 +1021,7 @@ end
 expose(server::Embedded, func::Function) = expose(server, string(func), func)
 
 function subscribe(
-    server::Embedded, name::AbstractString, func::Function; retroactive=false
+    server::Embedded, name::AbstractString, func::Function; retroactive=Now()
 )
     server.topic_function[name] = func
     server.subinfo[name] = retroactive
@@ -2096,13 +2079,23 @@ The subscribe from settings:
   valuesNow() subscribes for messages received from now on;
   LastReceived() subscribes for messages received in the past where node was offline;
 =#
-Now() = 0
-LastReceived() = -1
+Now() = 0.0
+LastReceived() = Inf
+
+function to_microseconds(retroactive::Union{Real,Period,Dates.CompoundPeriod})
+    if isa(retroactive, Real)
+        return retroactive
+    elseif isa(retroactive, Period)
+        return Microsecond(retroactive).value
+    elseif isa(retroactive, Dates.CompoundPeriod)
+        return sum(Microsecond.(retroactive.periods)).value
+    end
+end
 
 """
-    subscribe(rb::RBHandle, fn::Function; retroactive::Bool=false, exceptionerror=true)
+    subscribe(rb::RBHandle, fn::Function; retroactive=Now(), exceptionerror=true)
     subscribe(
-        rb::RBHandle, topic::AbstractString, fn::Function; retroactive::Bool=false,
+        rb::RBHandle, topic::AbstractString, fn::Function; retroactive=Now(),
         exceptionerror=true
     )
 
@@ -2113,34 +2106,39 @@ The function `fn` is called when a message is received on `topic` and
 
 If the `topic` argument is omitted the function name must be equal to the topic name.
 
-If `retroactive` is `true` then `rb` component will receive messages published when it was
+If `retroactive` is `LastReceived()` then `rb` component will receive messages published when it was
 offline.
 """
 function subscribe(
     rb::RBConnection, topic::AbstractString, fn::Function;
-    retroactive::Bool=false, exceptionerror=true
+    retroactive::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
 )
     add_receiver(rb, topic, fn)
-    rb.subinfo[topic] = retroactive
+    rb.subinfo[topic] = to_microseconds(retroactive)
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => retroactive)),
+        AdminReqMsg(
+            topic,
+            Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => rb.subinfo[topic])
+        ),
         exceptionerror=exceptionerror
     )
 end
 
 function subscribe(
     rb::RBServerConnection, topic::AbstractString, fn::Function;
-    retroactive::Bool=false, exceptionerror=true
+    retroactive::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
 )
-    ### add_receiver(rb, topic, fn)
     return rpcreq(rb,
-        AdminReqMsg(topic, Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => retroactive)),
+        AdminReqMsg(
+            topic,
+            Dict(COMMAND => SUBSCRIBE_CMD, RETROACTIVE => to_microseconds(retroactive))
+        ),
         exceptionerror=exceptionerror
     )
 end
 
 function subscribe(
-    rb::RBHandle, fn::Function; retroactive::Bool=false, exceptionerror=true
+    rb::RBHandle, fn::Function; retroactive=Now(), exceptionerror=true
 )
     return subscribe(
         rb, string(fn), fn; retroactive=retroactive, exceptionerror=exceptionerror
@@ -2181,7 +2179,7 @@ function unexpose(proc::Visor.Process, fn)
     return call(proc, Rembus.RemoveImpl(fn), timeout=call_timeout())
 end
 
-function subscribe(proc::Visor.Process, fn::Function; retroactive::Bool=false)
+function subscribe(proc::Visor.Process, fn::Function; retroactive=Now())
     return call(proc, Rembus.AddInterest(fn, retroactive), timeout=call_timeout())
 end
 
@@ -2190,7 +2188,7 @@ function unsubscribe(proc::Visor.Process, fn)
 end
 
 function subscribe(
-    proc::Visor.Process, topic::AbstractString, fn::Function; retroactive::Bool=false
+    proc::Visor.Process, topic::AbstractString, fn::Function; retroactive=Now()
 )
     return call(proc, Rembus.AddInterest(topic, fn, retroactive), timeout=call_timeout())
 end
