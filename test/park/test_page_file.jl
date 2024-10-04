@@ -36,7 +36,7 @@ function second_run()
     ctx = Ctx(0)
     sub = connect("mysub")
     shared(sub, ctx)
-    subscribe(sub, mytopic, true)
+    subscribe(sub, mytopic, retroactive=true)
     reactive(sub)
     sleep(5)
     @info "messages:$(Int(ctx.count))"

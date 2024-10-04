@@ -31,7 +31,7 @@ end
 function set_subscriber(ctx)
     subscriber = connect("test_park_sub")
     shared(subscriber, ctx)
-    subscribe(subscriber, consume, true)
+    subscribe(subscriber, consume, retroactive=true)
     return subscriber
 end
 

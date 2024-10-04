@@ -16,7 +16,7 @@ function run()
     pub = connect("publisher")
 
     shared(sub, ctx)
-    subscribe(sub, mytopic, true)
+    subscribe(sub, mytopic, retroactive=true)
     reactive(sub)
 
     publish(pub, "mytopic", 1)

@@ -5,6 +5,6 @@ consume(topic, value) = @info "$topic = $value"
 
 url = isempty(ARGS) ? string(uuid4()) : ARGS[1]
 rb = component(url)
-subscribe(rb, "a/*/c", consume, true)
+subscribe(rb, "a/*/c", consume, reactive=true)
 
 forever(rb)

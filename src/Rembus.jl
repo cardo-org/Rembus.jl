@@ -84,6 +84,7 @@ export RembusTimeout
 export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodException
 export SmallInteger
 export QOS0, QOS1, QOS2
+export LastReceived, Now
 
 mutable struct Component
     id::String
@@ -1037,7 +1038,7 @@ end
 expose(server::Embedded, func::Function) = expose(server, string(func), func)
 
 function subscribe(
-    server::Embedded, name::AbstractString, func::Function, retroactive=false
+    server::Embedded, name::AbstractString, func::Function; retroactive=false
 )
     server.topic_function[name] = func
     server.subinfo[name] = retroactive
@@ -1111,7 +1112,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                         rb,
                         msg.request.topic,
                         msg.request.fn,
-                        msg.request.retroactive,
+                        retroactive=msg.request.retroactive,
                         exceptionerror=false
                     )
                 elseif isa(req, RemoveInterest)
@@ -1948,7 +1949,7 @@ function callbacks(rb::RBHandle, fnmap, submap)
     # register again callbacks
     for (name, fn) in fnmap
         if haskey(submap, name)
-            subscribe(rb, name, fn, submap[name], exceptionerror=false)
+            subscribe(rb, name, fn, retroactive=submap[name], exceptionerror=false)
         else
             expose(rb, name, fn, exceptionerror=false)
         end
@@ -2089,10 +2090,19 @@ function reactive(rb::RBHandle; exceptionerror=true)
     return response
 end
 
+
+#=
+The subscribe from settings:
+  valuesNow() subscribes for messages received from now on;
+  LastReceived() subscribes for messages received in the past where node was offline;
+=#
+Now() = 0
+LastReceived() = -1
+
 """
-    subscribe(rb::RBHandle, fn::Function, retroactive::Bool=false; exceptionerror=true)
+    subscribe(rb::RBHandle, fn::Function; retroactive::Bool=false, exceptionerror=true)
     subscribe(
-        rb::RBHandle, topic::AbstractString, fn::Function, retroactive::Bool=false;
+        rb::RBHandle, topic::AbstractString, fn::Function; retroactive::Bool=false,
         exceptionerror=true
     )
 
@@ -2107,8 +2117,8 @@ If `retroactive` is `true` then `rb` component will receive messages published w
 offline.
 """
 function subscribe(
-    rb::RBConnection, topic::AbstractString, fn::Function, retroactive::Bool=false;
-    exceptionerror=true
+    rb::RBConnection, topic::AbstractString, fn::Function;
+    retroactive::Bool=false, exceptionerror=true
 )
     add_receiver(rb, topic, fn)
     rb.subinfo[topic] = retroactive
@@ -2119,8 +2129,8 @@ function subscribe(
 end
 
 function subscribe(
-    rb::RBServerConnection, topic::AbstractString, fn::Function, retroactive::Bool=false;
-    exceptionerror=true
+    rb::RBServerConnection, topic::AbstractString, fn::Function;
+    retroactive::Bool=false, exceptionerror=true
 )
     ### add_receiver(rb, topic, fn)
     return rpcreq(rb,
@@ -2130,10 +2140,11 @@ function subscribe(
 end
 
 function subscribe(
-    rb::RBHandle, fn::Function, retroactive::Bool=false;
-    exceptionerror=true
+    rb::RBHandle, fn::Function; retroactive::Bool=false, exceptionerror=true
 )
-    return subscribe(rb, string(fn), fn, retroactive; exceptionerror=exceptionerror)
+    return subscribe(
+        rb, string(fn), fn; retroactive=retroactive, exceptionerror=exceptionerror
+    )
 end
 
 """
@@ -2170,7 +2181,7 @@ function unexpose(proc::Visor.Process, fn)
     return call(proc, Rembus.RemoveImpl(fn), timeout=call_timeout())
 end
 
-function subscribe(proc::Visor.Process, fn::Function, retroactive::Bool=false)
+function subscribe(proc::Visor.Process, fn::Function; retroactive::Bool=false)
     return call(proc, Rembus.AddInterest(fn, retroactive), timeout=call_timeout())
 end
 
@@ -2179,7 +2190,7 @@ function unsubscribe(proc::Visor.Process, fn)
 end
 
 function subscribe(
-    proc::Visor.Process, topic::AbstractString, fn::Function, retroactive::Bool=false
+    proc::Visor.Process, topic::AbstractString, fn::Function; retroactive::Bool=false
 )
     return call(proc, Rembus.AddInterest(topic, fn, retroactive), timeout=call_timeout())
 end

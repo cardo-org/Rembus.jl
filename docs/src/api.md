@@ -134,7 +134,7 @@ For receiving messages when the component was offline it is mandatory to set a c
 ```julia
 connect("myname")
 
-subscribe(rb, mytopic, true)
+subscribe(rb, mytopic, retroactive=true)
 
 forever() # or until Ctrl-C
 ```

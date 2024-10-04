@@ -63,7 +63,7 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
 
     sub3 = connect(sub3)
     shared(sub3, testbag)
-    subscribe(sub3, my_topic, consume, true)
+    subscribe(sub3, my_topic, consume, retroactive=true)
     reactive(sub3)
 
     #sleep(1)

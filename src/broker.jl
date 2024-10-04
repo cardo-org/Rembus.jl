@@ -941,7 +941,6 @@ function zeromq_receiver(router::Router)
                 rethrow()
             end
             @warn "[ZMQ] recv error: $e"
-            showerror(stdout, e, catch_backtrace())
             @showerror e
         end
     end
