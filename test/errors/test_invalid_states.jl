@@ -38,7 +38,7 @@ function run()
     close(rb)
 
     # a ping to a closed socket logs an error
-    Rembus.ping(rb.socket)
+    Rembus.ws_ping(rb)
 
     @test !Rembus.isconnected(rb)
 

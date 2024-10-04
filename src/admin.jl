@@ -136,6 +136,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
                 if haskey(router.topic_interests, msg.topic)
                     if twin in router.topic_interests[msg.topic]
                         delete!(router.topic_interests[msg.topic], twin)
+                        if isempty(router.topic_interests[msg.topic])
+                            delete!(router.topic_interests, msg.topic)
+                        end
                     else
                         sts = STS_GENERIC_ERROR
                     end
@@ -157,6 +160,9 @@ function admin_command(router, twin, msg::AdminReqMsg)
                 if haskey(router.topic_impls, msg.topic)
                     if twin in router.topic_impls[msg.topic]
                         delete!(router.topic_impls[msg.topic], twin)
+                        if isempty(router.topic_impls[msg.topic])
+                            delete!(router.topic_impls, msg.topic)
+                        end
                     else
                         sts = STS_GENERIC_ERROR
                     end

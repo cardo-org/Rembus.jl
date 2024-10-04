@@ -320,7 +320,7 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "invalid_states" begin
             include("errors/test_invalid_states.jl")
         end
-        @time @safetestset "errors" begin
+        @time @safetestset "rembus_errors" begin
             include("errors/test_rembus_errors.jl")
         end
         @time @safetestset "serve_ws_error" begin

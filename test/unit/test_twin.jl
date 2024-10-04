@@ -42,6 +42,7 @@ twin_dir = joinpath(Rembus.broker_dir("mybroker"), "twins")
 mkpath(joinpath(twin_dir, twin.id))
 
 Rembus.destroy_twin(twin, router)
+Rembus.cleanup(twin, router)
 
 @test !isempty(router.topic_impls)
 @test !haskey(router.address2twin, identity)

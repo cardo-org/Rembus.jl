@@ -243,13 +243,15 @@ function start_reactive(twin::Twin)
     allfiles = msg_files(twin.router)
     files = filter(t -> parse(Int, t) > twin.mark, allfiles)
     twin.reactive = true
-    for fn in files
-        @debug "loading file [$fn]"
-        from_disk_messages(twin, fn)
-    end
+    if twin.hasname
+        for fn in files
+            @debug "loading file [$fn]"
+            from_disk_messages(twin, fn)
+        end
 
-    # send the cached in-memory messages
-    from_memory_messages(twin)
+        # send the cached in-memory messages
+        from_memory_messages(twin)
+    end
 end
 
 #=
@@ -318,7 +320,6 @@ end
 function cleanup(twin, router::Router)
     # Remove from address2twin
     filter!(((k, v),) -> twin != v, router.address2twin)
-
     # Remove from topic_impls
     for topic in keys(router.topic_impls)
         delete!(router.topic_impls[topic], twin)
@@ -334,7 +335,6 @@ function cleanup(twin, router::Router)
             delete!(router.topic_interests, topic)
         end
     end
-
     delete!(router.id_twin, twin.id)
     return nothing
 end
@@ -350,8 +350,7 @@ function destroy_twin(twin, router)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
-    # TBD: remove cleanup
-    return cleanup(twin, router)
+    return nothing
 end
 
 function verify_signature(twin, msg)
@@ -977,6 +976,7 @@ Disconnect the twin from the ws/tcp channel.
 function detach(twin)
     if twin.socket !== nothing
         if !isa(twin.socket, ZMQ.Socket)
+            flush(twin.socket.io)
             close(twin.socket)
         end
         twin.socket = nothing
@@ -1010,7 +1010,6 @@ function twin_task(self, twin)
         @error "twin_task: $e" exception = (e, catch_backtrace())
         rethrow()
     finally
-        cleanup(twin, twin.router)
         if isa(twin.socket, WebSockets.WebSocket)
             close(twin.socket, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
         end
@@ -1197,7 +1196,7 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
 
     router = Router(plugin, context)
 
-    tasks = [supervisor("twins", terminateif=:shutdown), process(broker, args=(router,))]
+    tasks = [process(broker, args=(router,)), supervisor("twins", terminateif=:shutdown)]
 
     if get(args, "http", nothing) !== nothing
         push!(
@@ -1249,6 +1248,7 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
         [supervisor(sv_name, tasks, strategy=:one_for_all, intensity=1)],
         wait=wait
     )
+
     return router
 end
 
@@ -1544,6 +1544,7 @@ function http_publish(router::Router, req::HTTP.Request)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
         Visor.shutdown(twin.process)
+        cleanup(twin, router)
         return HTTP.Response(200, [])
     catch e
         @error "http::publish: $e"
@@ -1581,6 +1582,7 @@ function http_rpc(router::Router, req::HTTP.Request)
             end
 
             Visor.shutdown(twin.process)
+            cleanup(twin, router)
             return HTTP.Response(
                 sts,
                 ["Content_type" => "application/json"],
@@ -2168,7 +2170,9 @@ function broker(self, router)
             if isa(msg, Msg)
                 @debug "[broker] recv [type=$(msg.ptype)]: $msg"
                 if msg.ptype == TYPE_PUB
-                    msg.counter = save_message(router, msg.content)
+                    if CONFIG.save_messages
+                        msg.counter = save_message(router, msg.content)
+                    end
                     # publish to interested twins
                     broadcast!(router, msg)
                 elseif msg.ptype == TYPE_RPC
@@ -2213,11 +2217,13 @@ function broker(self, router)
         end
     catch e
         @error "[broker] error: $e"
-        showerror(stdout, e, catch_backtrace())
+        @showerror e
         rethrow()
     finally
         save_configuration(router)
-        persist_messages(router)
+        if CONFIG.save_messages
+            persist_messages(router)
+        end
         @debug "closing messages at rest timer"
     end
 end

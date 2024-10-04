@@ -274,6 +274,7 @@ mutable struct RBPool <: RBHandle
     RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
 end
 
+struct WsPing end
 
 include("constants.jl")
 include("configuration.jl")
@@ -1448,16 +1449,17 @@ function parse_msg(rb, response)
     return nothing
 end
 
-keep_alive(socket::TCPSocket) = nothing
+#keep_alive(rb, socket::TCPSocket) = nothing
 
-function keep_alive(socket::WebSockets.WebSocket)
+#function keep_alive(socket::WebSockets.WebSocket)
+function keep_alive(rb)
     CONFIG.ws_ping_interval == 0 && return
-
     while true
         sleep(CONFIG.ws_ping_interval)
-        if isopen(socket.io)
-            @debug "socket ping"
-            ping(socket)
+        if isopen(rb.socket.io)
+            if isa(rb.socket, WebSockets.WebSocket)
+                ws_ping(rb)
+            end
         else
             @debug "socket connection closed, keep alive done"
             break
@@ -1475,7 +1477,7 @@ function read_socket(socket, process, rb, isconnected::Condition)
         # signal to the initiator function _connect that the connection is up.
         notify(isconnected)
 
-        @async keep_alive(rb.socket)
+        @async keep_alive(rb)
         while isopen(socket)
             response = transport_read(socket)
             if !isempty(response)
@@ -1556,6 +1558,8 @@ function write_task(rb::RBHandle)
                 end
 
                 break
+            elseif isa(msg, WsPing)
+                WebSockets.ping(rb.socket)
             else
                 if rb.egress !== nothing
                     msg = rb.egress(rb, msg)
@@ -1693,7 +1697,7 @@ function resend_attestate(rb, response)
         msg = attestate(rb, response)
         put!(rb.msgch, msg)
         if rb.client.protocol == :zmq
-            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     catch e
         @error "resend_attestate: $e"
@@ -1755,7 +1759,7 @@ function authenticate(rb)
         rembuserror(code=response.status, reason=reason)
     else
         if rb.client.protocol == :zmq
-            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     end
     return nothing
@@ -1815,11 +1819,11 @@ function _connect(rb, process)
     return rb
 end
 
-function ping(socket)
+function ws_ping(rb)
     try
-        WebSockets.ping(socket)
+        put!(rb.msgch, WsPing())
     catch e
-        @error "socket ping: $e"
+        @info "socket ping: $e"
     end
 
     return nothing
@@ -2330,19 +2334,19 @@ function unauthorize(
 end
 
 # """
-#     ping(rb::RBHandle)
+#     zmq_ping(rb::RBHandle)
 #
 # Send a ping message to check if the broker is online.
 #
 # Required by ZeroMQ socket.
 # """
-function ping(rb::RBConnection)
+function zmq_ping(rb::RBConnection)
     try
         if rb.client.protocol == :zmq
             if isconnected(rb)
                 rpcreq(rb, PingMsg(rb.client.id))
             end
-            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> ping(rb), CONFIG.zmq_ping_interval)
+            CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     catch e
         @debug "[$(rb.client.id)]: pong not received"

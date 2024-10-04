@@ -42,7 +42,7 @@ function run()
     @test res == 3
 
     @unexpose aservice
-    @test_throws RpcMethodUnavailable rpc(rb, "aservice", [1, 2])
+    @test_throws RpcMethodNotFound rpc(rb, "aservice", [1, 2])
 
     close(rb)
 

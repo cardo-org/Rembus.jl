@@ -25,7 +25,7 @@ function run()
     unexpose(rb, "service")
     unreactive(rb)
 
-    @test_throws RpcMethodUnavailable rpc(client, "service", [1, 2])
+    @test_throws RpcMethodNotFound rpc(client, "service", [1, 2])
 
     # just for lines coverage
     @async forever(rb)

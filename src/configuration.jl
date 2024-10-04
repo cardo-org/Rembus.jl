@@ -52,7 +52,7 @@ mutable struct Settings
     cid::String  # rembus default component cid
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
-    context::Any
+    save_messages::Bool
     db_max_messages::UInt
     Settings() = begin
         zmq_ping_interval = 0
@@ -70,7 +70,7 @@ mutable struct Settings
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
         new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log, debug,
             overwrite_connection, stacktrace, metering, rawdump, cid,
-            connection_retry_period, nothing, nothing, db_max_messages)
+            connection_retry_period, nothing, true, db_max_messages)
     end
 end
 
@@ -92,7 +92,7 @@ function setup(setting)
         parse(Float32, get(ENV, "REMBUS_ZMQ_PING_INTERVAL", "10")))
 
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
-        parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "120")))
+        parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
 
     setting.rembus_dir = get(cfg, "rembus_dir", get(ENV, "REMBUS_ROOT_DIR", rembus_dir()))
     setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
@@ -106,6 +106,11 @@ function setup(setting)
         cfg,
         "db_max_messages",
         parse(UInt, get(ENV, "REMBUS_DB_MAX_SIZE", REMBUS_DB_MAX_SIZE))
+    )
+    setting.save_messages = get(
+        cfg,
+        "save_messages",
+        parse(Bool, get(ENV, "REMBUS_SAVE_MESSAGES", "true"))
     )
 
     if haskey(ENV, "REMBUS_DEBUG")
