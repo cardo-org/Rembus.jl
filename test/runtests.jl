@@ -216,6 +216,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "mixed" begin
             include("api/test_mixed.jl")
         end
+        @time @safetestset "subscribe" begin
+            include("api/test_subscribe.jl")
+        end
         @time @safetestset "subscribe_glob" begin
             include("api/test_subscribe_glob.jl")
         end

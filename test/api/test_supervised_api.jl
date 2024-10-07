@@ -3,6 +3,13 @@ include("../utils.jl")
 my_topic(ctx) = @info "my_topic called"
 my_service(ctx, x, y) = x + y
 
+mutable struct Ctx
+    called::Bool
+end
+
+from_supervised(ctx) = ctx.called = true
+
+
 function run()
     ctx = "mystring"
 
@@ -30,12 +37,20 @@ function run()
     # just for lines coverage
     @async forever(rb)
 
-    publish(rb, "devnull")
+    ctx = Ctx(false)
+    sub = connect()
+    shared(sub, ctx)
+    subscribe(sub, from_supervised)
+    reactive(sub)
+
+    publish(rb, "from_supervised")
     res = rpc(rb, "version")
     @test isa(res, String)
 
     close(client)
+    close(sub)
     terminate(rb)
+    @test ctx.called === true
 end
 
 execute(run, "test_supervised_api")

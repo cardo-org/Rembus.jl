@@ -2205,8 +2205,8 @@ function shared(proc::Visor.Process, ctx)
     return call(proc, SetHolder(ctx), timeout=call_timeout())
 end
 
-function publish(proc::Visor.Process, topic::AbstractString, data=[])
-    cast(proc, PubSubMsg(topic, data))
+function publish(proc::Visor.Process, topic::AbstractString, data=[]; qos=QOS0)
+    cast(proc, CastCall(topic, data, qos))
 end
 
 function rpc(proc::Visor.Process, topic::AbstractString, data=[])

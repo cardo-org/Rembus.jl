@@ -320,6 +320,9 @@ function offline!(twin)
     return nothing
 end
 
+#=
+Remove the twin from the router tables.
+=#
 function cleanup(twin, router::Router)
     # Remove from address2twin
     filter!(((k, v),) -> twin != v, router.address2twin)
@@ -330,7 +333,6 @@ function cleanup(twin, router::Router)
             delete!(router.topic_impls, topic)
         end
     end
-
     # Remove from topic_interests
     for topic in keys(router.topic_interests)
         delete!(router.topic_interests[topic], twin)
@@ -338,6 +340,7 @@ function cleanup(twin, router::Router)
             delete!(router.topic_interests, topic)
         end
     end
+
     delete!(router.id_twin, twin.id)
     return nothing
 end
@@ -2226,7 +2229,9 @@ function broker(self, router)
         if CONFIG.save_messages
             persist_messages(router)
         end
-        @debug "closing messages at rest timer"
+        filter!(router.id_twin) do (id, tw)
+            cleanup(tw, router)
+        end
     end
 end
 
