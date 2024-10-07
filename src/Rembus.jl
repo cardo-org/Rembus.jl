@@ -2057,15 +2057,29 @@ function unreactive(rb::RBHandle; exceptionerror=true)
 end
 
 """
-    reactive(rb::RBHandle, timeout=5; exceptionerror=true)
+    reactive(
+        rb::RBHandle;
+        msg_from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+        exceptionerror=true
+    )
 
 Start the delivery of published messages for which there was declared
 an interest with [`subscribe`](@ref).
 """
-function reactive(rb::RBHandle; exceptionerror=true)
+function reactive(
+    rb::RBHandle;
+    msg_from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+    exceptionerror=true
+)
     response = rpcreq(
         rb,
-        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => true)),
+        AdminReqMsg(
+            BROKER_CONFIG,
+            Dict(
+                COMMAND => REACTIVE_CMD,
+                STATUS => true,
+                MSG_FROM => to_microseconds(msg_from))
+        ),
         exceptionerror=exceptionerror
     )
     rb.reactive = true

@@ -222,6 +222,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "subscribe_glob" begin
             include("api/test_subscribe_glob.jl")
         end
+        @time @safetestset "reactive" begin
+            include("api/test_reactive.jl")
+        end
     end
     if GROUP == "all" || GROUP == "auth"
         @time @safetestset "register" begin

@@ -118,4 +118,4 @@ execute(run, "test_publish_macros")
 # expect 64 messages published (received and stored by broker)
 # the mark of sub1 and sub3 is 63 because they not subscribed to
 # noarg_topic.
-verify_counters(total=64, components=Dict("sub2" => 64, "sub1" => 63, "sub3" => 63))
+verify_counters(total=64, components=Dict("sub2" => 64, "sub1" => 64, "sub3" => 64))

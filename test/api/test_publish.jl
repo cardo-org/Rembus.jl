@@ -132,4 +132,4 @@ execute(run, "test_publish")
 # expect 68 messages published (received and stored by broker)
 # the mark of sub1 and sub3 is 67 because they not subscribed to
 # noarg_topic.
-verify_counters(total=68, components=Dict("sub2" => 68, "sub1" => 67, "sub3" => 67))
+verify_counters(total=68, components=Dict("sub2" => 68, "sub1" => 68, "sub3" => 68))

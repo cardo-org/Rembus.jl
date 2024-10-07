@@ -9,6 +9,7 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 
 struct EnableReactiveMsg <: RembusMsg
     id::UInt128
+    msg_from::Float64
 end
 
 #=
@@ -241,10 +242,26 @@ function persist_messages(router)
     close(db)
 end
 
-function start_reactive(twin::Twin)
+function start_reactive(twin::Twin, from_msg::Float64)
     # get the files with never sent messages
     allfiles = msg_files(twin.router)
-    files = filter(t -> parse(Int, t) > twin.mark, allfiles)
+    nowts = time()
+    mdir = Rembus.messages_dir(twin.router)
+    files = filter(allfiles) do fn
+        if parse(Int, fn) <= twin.mark
+            # the mesage was already delivered in a previous online session
+            # of the component
+            return false
+        else
+            ftime = mtime(joinpath(mdir, fn))
+            delta = nowts - ftime
+            if delta * 1_000_000 > from_msg
+                @info "skipping msg $fn: mtime: $(unix2datetime(ftime)) ($delta secs from now)"
+                return false
+            end
+        end
+        return true
+    end
     twin.reactive = true
     if twin.hasname
         for fn in files
@@ -1018,10 +1035,14 @@ function twin_task(self, twin)
         if isa(twin.socket, WebSockets.WebSocket)
             close(twin.socket, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
         end
+        # forward the message counter to the last message received when online
+        # because these messages get already a chance to be delivered.
+        if twin.reactive
+            twin.mark = twin.router.mcounter
+        end
     end
     @debug "[$twin] task done"
 end
-
 
 #=
     handle_ack_timeout(tim, twin, msg, msgid)
@@ -2214,7 +2235,7 @@ function broker(self, router)
                     #TBD: manage errors
                     response = ResMsg(msg.content.id, STS_SUCCESS, nothing)
                     put!(msg.twchannel.process.inbox, response)
-                    start_reactive(msg.twchannel)
+                    start_reactive(msg.twchannel, msg.content.msg_from)
                 end
             else
                 @warn "unknown message: $msg"
@@ -2231,6 +2252,7 @@ function broker(self, router)
         end
         filter!(router.id_twin) do (id, tw)
             cleanup(tw, router)
+            return true
         end
     end
 end

@@ -195,8 +195,13 @@ function admin_command(router, twin, msg::AdminReqMsg)
         outcome = callback_and(Symbol(REACTIVE_HANDLER), router, twin, msg) do
             enabled = get(msg.data, STATUS, false)
             if enabled
-                return EnableReactiveMsg(msg.id)
+                return EnableReactiveMsg(msg.id, get(msg.data, MSG_FROM, 0.0))
             else
+                if twin.reactive
+                    # forward the message counter to the last message received when online
+                    # because these messages get already a chance to be delivered.
+                    twin.mark = router.mcounter
+                end
                 twin.reactive = false
                 return nothing
             end
