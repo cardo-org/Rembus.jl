@@ -22,7 +22,7 @@ function run()
     Timer(tmr -> shutdown(), 5)
 
     subscriber = connect("test_forever_sub")
-    subscribe(subscriber, topic, consume, msg_from=LastReceived())
+    subscribe(subscriber, topic, consume, from=LastReceived())
 
     forever(subscriber)
     @info "[test_forever] done" _group = :test

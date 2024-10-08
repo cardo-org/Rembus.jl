@@ -147,6 +147,19 @@ function Base.show(io::IO, msg::Msg)
 end
 
 #=
+Return the subscribed pubsub topics of the twin
+=#
+function twin_topics(twin::Twin)
+    topics = []
+    for (k, v) in twin.router.topic_interests
+        if twin in v
+            push!(topics, k)
+        end
+    end
+    return topics
+end
+
+#=
 Methods related to the persistence of Pubsub messages.
 =#
 
@@ -208,11 +221,14 @@ function send_messages(twin::Twin, df)
 end
 
 function from_disk_messages(twin::Twin, fn)
-    db = DuckDB.DB()
     path = joinpath(messages_dir(twin.router), fn)
     df = DataFrame(read_parquet(path))
-    df.msg = decode.(Vector{UInt8}.(df.pkt))
-    send_messages(twin, df)
+    interests = twin_topics(twin)
+    filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
+    if !isempty(filtered)
+        filtered.msg = decode.(Vector{UInt8}.(filtered.pkt))
+        send_messages(twin, filtered)
+    end
 end
 
 function from_memory_messages(twin::Twin)
@@ -243,27 +259,28 @@ function persist_messages(router)
 end
 
 function start_reactive(twin::Twin, from_msg::Float64)
-    # get the files with never sent messages
-    allfiles = msg_files(twin.router)
-    nowts = time()
-    mdir = Rembus.messages_dir(twin.router)
-    files = filter(allfiles) do fn
-        if parse(Int, fn) <= twin.mark
-            # the mesage was already delivered in a previous online session
-            # of the component
-            return false
-        else
-            ftime = mtime(joinpath(mdir, fn))
-            delta = nowts - ftime
-            if delta * 1_000_000 > from_msg
-                @info "skipping msg $fn: mtime: $(unix2datetime(ftime)) ($delta secs from now)"
-                return false
-            end
-        end
-        return true
-    end
     twin.reactive = true
-    if twin.hasname
+    @info "[$twin] start reactive from: $(from_msg)"
+    if twin.hasname && (from_msg > 0.0)
+        # get the files with never sent messages
+        allfiles = msg_files(twin.router)
+        nowts = time()
+        mdir = Rembus.messages_dir(twin.router)
+        files = filter(allfiles) do fn
+            if parse(Int, fn) <= twin.mark
+                # the mesage was already delivered in a previous online session
+                # of the component
+                return false
+            else
+                ftime = mtime(joinpath(mdir, fn))
+                delta = nowts - ftime
+                if delta * 1_000_000 > from_msg
+                    @info "skip $fn: mtime: $(unix2datetime(ftime)) ($delta secs from now)"
+                    return false
+                end
+            end
+            return true
+        end
         for fn in files
             @debug "loading file [$fn]"
             from_disk_messages(twin, fn)
@@ -272,6 +289,8 @@ function start_reactive(twin::Twin, from_msg::Float64)
         # send the cached in-memory messages
         from_memory_messages(twin)
     end
+
+    return nothing
 end
 
 #=
@@ -1029,17 +1048,17 @@ function twin_task(self, twin)
             end
         end
     catch e
-        @error "twin_task: $e" exception = (e, catch_backtrace())
+        @error "[$twin] twin_task: $e" exception = (e, catch_backtrace())
         rethrow()
     finally
         if isa(twin.socket, WebSockets.WebSocket)
             close(twin.socket, WebSockets.CloseFrameBody(1008, "unexpected twin close"))
         end
-        # forward the message counter to the last message received when online
-        # because these messages get already a chance to be delivered.
-        if twin.reactive
-            twin.mark = twin.router.mcounter
-        end
+    end
+    # forward the message counter to the last message received when online
+    # because these messages get already a chance to be delivered.
+    if twin.reactive
+        twin.mark = twin.router.mcounter
     end
     @debug "[$twin] task done"
 end
@@ -1427,7 +1446,7 @@ function client_receiver(router::Embedded, ws)
     sv = router.process
     p = startup(Visor.from_supervisor(sv, "twins"), spec)
     read_socket(ws, p, rb)
-    #Needed?
+    # TODO: Needed?
     #router.id_twin[id] = twin
     return rb
 end
@@ -2232,7 +2251,7 @@ function broker(self, router)
                     # reply toward the client that has made the request
                     respond(router, msg)
                 elseif msg.ptype == REACTIVE_MESSAGE
-                    #TBD: manage errors
+                    #if msg.twchannel.hasname
                     response = ResMsg(msg.content.id, STS_SUCCESS, nothing)
                     put!(msg.twchannel.process.inbox, response)
                     start_reactive(msg.twchannel, msg.content.msg_from)

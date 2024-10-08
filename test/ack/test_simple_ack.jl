@@ -16,7 +16,7 @@ function run()
     pub = connect("publisher")
 
     shared(sub, ctx)
-    subscribe(sub, mytopic, msg_from=LastReceived())
+    subscribe(sub, mytopic, from=LastReceived())
     reactive(sub)
 
     publish(pub, "mytopic", 1)

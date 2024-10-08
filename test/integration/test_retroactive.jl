@@ -17,7 +17,7 @@ function run()
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
     reactive(subscriber)
-    subscribe(subscriber, topic, consume, msg_from=LastReceived())
+    subscribe(subscriber, topic, consume, from=LastReceived())
 
     close(subscriber)
 
@@ -25,7 +25,7 @@ function run()
 
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
-    subscribe(subscriber, topic, consume, msg_from=Now())
+    subscribe(subscriber, topic, consume, from=Now())
     reactive(subscriber)
 
     sleep(0.2)
@@ -37,7 +37,7 @@ function run()
 
     subscriber = connect("test_retroactive_sub")
     shared(subscriber, bag)
-    subscribe(subscriber, topic, consume, msg_from=LastReceived())
+    subscribe(subscriber, topic, consume, from=LastReceived())
     reactive(subscriber)
 
     #sleep(0.2)

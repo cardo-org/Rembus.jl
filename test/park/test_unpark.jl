@@ -38,7 +38,7 @@ function park_messages(count)
     close(subscriber)
 
     send(publisher, count)
-    sleep(4)
+    sleep(10)
     close(publisher)
     close(subscriber)
 end
@@ -46,20 +46,20 @@ end
 function unpark(count)
     ctx = TestContext()
     subscriber = connect("test_unpark_sub")
-    subscribe(subscriber, "consume", consume, msg_from=LastReceived())
+    subscribe(subscriber, "consume", consume, from=LastReceived())
     shared(subscriber, ctx)
-    reactive(subscriber)
+    reactive(subscriber, timeout=10)
 
-    sleep(1)
+    sleep(4)
     close(subscriber)
     @info "[first round] test results: count=$(ctx.count)"
     @test ctx.count == 4
 
     # reopen subscriber, the error condition is not active
     subscriber = connect("test_unpark_sub")
-    subscribe(subscriber, "consume", consume, msg_from=LastReceived())
+    subscribe(subscriber, "consume", consume, from=LastReceived())
     shared(subscriber, ctx)
-    reactive(subscriber)
+    reactive(subscriber, timeout=60)
 
     sleep(15)
     close(subscriber)

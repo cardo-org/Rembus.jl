@@ -63,7 +63,7 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
 
     sub3 = connect(sub3)
     shared(sub3, testbag)
-    subscribe(sub3, my_topic, consume, msg_from=LastReceived())
+    subscribe(sub3, my_topic, consume, from=LastReceived())
     reactive(sub3)
 
     #sleep(1)

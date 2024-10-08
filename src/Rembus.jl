@@ -930,13 +930,14 @@ macro unsubscribe(cid, fn)
     end
 end
 
-function reactive_expr(reactive, cid=nothing)
+function reactive_expr(reactive, from, cid=nothing)
     ex = :(call(
-        Rembus.name2proc("cid"),
-        Rembus.Reactive($reactive),
+        Rembus.name2proc("cid", true, true),
+        Rembus.Reactive($reactive, Now()),
         timeout=Rembus.call_timeout()
     ))
     ex.args[2].args[2] = cid
+    ex.args[3].args[3] = from.args[2]
     return ex
 end
 
@@ -945,8 +946,21 @@ end
 
 The subscribed methods start to handle published messages.
 """
-macro reactive(cid=nothing)
-    ex = reactive_expr(true, cid)
+macro reactive(cid, from::Expr=:(from = LastReceived()))
+    ex = reactive_expr(true, from, cid)
+    quote
+        $(esc(ex))
+        nothing
+    end
+end
+
+"""
+    @reactive
+
+The subscribed methods start to handle published messages.
+"""
+macro reactive(from::Expr=:(from = LastReceived()))
+    ex = reactive_expr(true, from, nothing)
     quote
         $(esc(ex))
         nothing
@@ -959,7 +973,7 @@ end
 The subscribed methods stop to handle published messages.
 """
 macro unreactive(cid=nothing)
-    ex = reactive_expr(false, cid)
+    ex = reactive_expr(false, :(from = NaN), cid)
     quote
         $(esc(ex))
         nothing
@@ -1006,6 +1020,7 @@ end
 
 struct Reactive
     status::Bool
+    msg_from::Union{Real,Period,Dates.CompoundPeriod}
 end
 struct EnableAck
     status::Bool
@@ -1021,10 +1036,10 @@ end
 expose(server::Embedded, func::Function) = expose(server, string(func), func)
 
 function subscribe(
-    server::Embedded, name::AbstractString, func::Function; msg_from=Now()
+    server::Embedded, name::AbstractString, func::Function; from=Now()
 )
     server.topic_function[name] = func
-    server.subinfo[name] = msg_from
+    server.subinfo[name] = from
 end
 
 subscribe(server::Embedded, func::Function) = subscribe(server, string(func), func)
@@ -1095,14 +1110,18 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                         rb,
                         msg.request.topic,
                         msg.request.fn,
-                        msg_from=msg.request.msg_from,
+                        from=msg.request.msg_from,
                         exceptionerror=false
                     )
                 elseif isa(req, RemoveInterest)
                     result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
                 elseif isa(req, Reactive)
                     if req.status
-                        result = reactive(rb, exceptionerror=false)
+                        result = reactive(
+                            rb,
+                            from=msg.request.msg_from,
+                            exceptionerror=false
+                        )
                     else
                         result = unreactive(rb, exceptionerror=false)
                     end
@@ -1483,7 +1502,7 @@ function read_socket(socket, process, rb, isconnected::Condition)
 end
 
 #=
-Read from the socket when a component is a server.
+Read from the socket when a component is a server (accept connections).
 =#
 function read_socket(socket, process, rb)
     try
@@ -1932,7 +1951,7 @@ function callbacks(rb::RBHandle, fnmap, submap)
     # register again callbacks
     for (name, fn) in fnmap
         if haskey(submap, name)
-            subscribe(rb, name, fn, msg_from=submap[name], exceptionerror=false)
+            subscribe(rb, name, fn, from=submap[name], exceptionerror=false)
         else
             expose(rb, name, fn, exceptionerror=false)
         end
@@ -2059,7 +2078,7 @@ end
 """
     reactive(
         rb::RBHandle;
-        msg_from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+        from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
         exceptionerror=true
     )
 
@@ -2068,7 +2087,8 @@ an interest with [`subscribe`](@ref).
 """
 function reactive(
     rb::RBHandle;
-    msg_from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+    from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+    timeout=request_timeout(),
     exceptionerror=true
 )
     response = rpcreq(
@@ -2078,9 +2098,10 @@ function reactive(
             Dict(
                 COMMAND => REACTIVE_CMD,
                 STATUS => true,
-                MSG_FROM => to_microseconds(msg_from))
+                MSG_FROM => to_microseconds(from))
         ),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        timeout=timeout
     )
     rb.reactive = true
 
@@ -2107,9 +2128,9 @@ function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})
 end
 
 """
-    subscribe(rb::RBHandle, fn::Function; msg_from=Now(), exceptionerror=true)
+    subscribe(rb::RBHandle, fn::Function; from=Now(), exceptionerror=true)
     subscribe(
-        rb::RBHandle, topic::AbstractString, fn::Function; msg_from=Now(),
+        rb::RBHandle, topic::AbstractString, fn::Function; from=Now(),
         exceptionerror=true
     )
 
@@ -2120,15 +2141,15 @@ The function `fn` is called when a message is received on `topic` and
 
 If the `topic` argument is omitted the function name must be equal to the topic name.
 
-If `msg_from` is `LastReceived()` then `rb` component will receive messages published when it was
+If `from` is `LastReceived()` then `rb` component will receive messages published when it was
 offline.
 """
 function subscribe(
     rb::RBConnection, topic::AbstractString, fn::Function;
-    msg_from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
 )
     add_receiver(rb, topic, fn)
-    rb.subinfo[topic] = to_microseconds(msg_from)
+    rb.subinfo[topic] = to_microseconds(from)
     return rpcreq(rb,
         AdminReqMsg(
             topic,
@@ -2138,24 +2159,33 @@ function subscribe(
     )
 end
 
+#=
+Subscribe the topic to the remote node, tipically a broker.
+
+TODO improve docs and make tests
+
+The argument fn is not needed because a server component
+doesn't require
+
+=#
 function subscribe(
     rb::RBServerConnection, topic::AbstractString, fn::Function;
-    msg_from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
 )
     return rpcreq(rb,
         AdminReqMsg(
             topic,
-            Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => to_microseconds(msg_from))
+            Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => to_microseconds(from))
         ),
         exceptionerror=exceptionerror
     )
 end
 
 function subscribe(
-    rb::RBHandle, fn::Function; msg_from=Now(), exceptionerror=true
+    rb::RBHandle, fn::Function; from=Now(), exceptionerror=true
 )
     return subscribe(
-        rb, string(fn), fn; msg_from=msg_from, exceptionerror=exceptionerror
+        rb, string(fn), fn; from=from, exceptionerror=exceptionerror
     )
 end
 
@@ -2193,8 +2223,8 @@ function unexpose(proc::Visor.Process, fn)
     return call(proc, Rembus.RemoveImpl(fn), timeout=call_timeout())
 end
 
-function subscribe(proc::Visor.Process, fn::Function; msg_from=Now())
-    return call(proc, Rembus.AddInterest(fn, msg_from), timeout=call_timeout())
+function subscribe(proc::Visor.Process, fn::Function; from=Now())
+    return call(proc, Rembus.AddInterest(fn, from), timeout=call_timeout())
 end
 
 function unsubscribe(proc::Visor.Process, fn)
@@ -2202,17 +2232,17 @@ function unsubscribe(proc::Visor.Process, fn)
 end
 
 function subscribe(
-    proc::Visor.Process, topic::AbstractString, fn::Function; msg_from=Now()
+    proc::Visor.Process, topic::AbstractString, fn::Function; from=Now()
 )
-    return call(proc, Rembus.AddInterest(topic, fn, msg_from), timeout=call_timeout())
+    return call(proc, Rembus.AddInterest(topic, fn, from), timeout=call_timeout())
 end
 
-function reactive(proc::Visor.Process)
-    return call(proc, Reactive(true), timeout=call_timeout())
+function reactive(proc::Visor.Process, from=LastReceived())
+    return call(proc, Reactive(true, from), timeout=call_timeout())
 end
 
 function unreactive(proc::Visor.Process)
-    return call(proc, Reactive(false), timeout=call_timeout())
+    return call(proc, Reactive(false, NaN), timeout=call_timeout())
 end
 
 function shared(proc::Visor.Process, ctx)

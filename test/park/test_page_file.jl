@@ -36,8 +36,9 @@ function second_run()
     ctx = Ctx(0)
     sub = connect("mysub")
     shared(sub, ctx)
-    subscribe(sub, mytopic, msg_from=LastReceived())
-    reactive(sub)
+    subscribe(sub, mytopic, from=LastReceived())
+    @info "default timeout: $(Rembus.request_timeout())"
+    reactive(sub, timeout=10)
     sleep(5)
     @info "messages:$(Int(ctx.count))"
     count = 0

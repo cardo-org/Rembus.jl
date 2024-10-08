@@ -25,8 +25,8 @@ function run()
 
     myc = connect("myc")
     shared(myc, ctx)
-    subscribe(myc, topic_1, msg_from=Second(1))
-    reactive(myc, msg_from=Now())
+    subscribe(myc, topic_1, from=Second(1))
+    reactive(myc, from=Now())
     sleep(1)
     close(myc)
 
@@ -34,7 +34,7 @@ function run()
     #    @component "myc"
     #    @shared ctx
     #    @subscribe topic_1 from = Second(1)
-    #    @reactive msg_from = Now()
+    #    @reactive from = Now()
     #    sleep(1)
     #    @terminate
 

@@ -8,6 +8,8 @@ Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 # When compiling responses are delayed a litte bit
 ENV["REMBUS_TIMEOUT"] = "60"
 
+const MESSAGES = 100
+
 df = DataFrame(name=["trento", "belluno"], score=[10, 50])
 bdf = DataFrame(x=1:10, y=1:10)
 
@@ -22,6 +24,25 @@ end
 
 function mytopic(bag::TestBag, data)
     @debug "df:\n$(view(data, 1:2, :))"
+end
+
+function publish_messages()
+    pub = connect()
+    for i in 1:MESSAGES
+        publish(pub, "topicut")
+    end
+    sleep(2)
+    close(pub)
+end
+
+topicut() = nothing
+
+function read_messages()
+    sub = connect("mysub")
+    subscribe(sub, topicut, from=LastReceived())
+    reactive(sub)
+    sleep(5)
+    close(sub)
 end
 
 function publish_macroapi(publisher, sub1; waittime=1)
@@ -199,6 +220,14 @@ for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
     end
 end
 
+publish_messages()
+
 broker_server()
 
 response = HTTP.get("http://localhost:9000/version", [])
+
+shutdown()
+caronte(wait=false)
+yield()
+Rembus.islistening(wait=20)
+read_messages()

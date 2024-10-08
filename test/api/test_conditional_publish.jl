@@ -45,7 +45,7 @@ function run()
         @expose foo
 
         sub = connect("mysub")
-        subscribe(sub, "foo", foo_subscriber, msg_from=LastReceived())
+        subscribe(sub, "foo", foo_subscriber, from=LastReceived())
         shared(sub, ctx)
         reactive(sub)
 
