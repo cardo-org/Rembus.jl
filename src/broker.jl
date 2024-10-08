@@ -260,7 +260,7 @@ end
 
 function start_reactive(twin::Twin, from_msg::Float64)
     twin.reactive = true
-    @info "[$twin] start reactive from: $(from_msg)"
+    @debug "[$twin] start reactive from: $(from_msg)"
     if twin.hasname && (from_msg > 0.0)
         # get the files with never sent messages
         allfiles = msg_files(twin.router)

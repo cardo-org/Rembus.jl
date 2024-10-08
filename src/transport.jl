@@ -460,10 +460,10 @@ function data2payload(data::IOBuffer)
 end
 =#
 
-function id2bytes(id::UInt128)
+function id2bytes(id::UInt128)::Vector{UInt8}
     io = IOBuffer(maxsize=16)
     write(io, id)
-    io.data
+    take!(io)
 end
 
 function bytes2id(buff::Vector{UInt8})

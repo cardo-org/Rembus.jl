@@ -127,4 +127,4 @@ function setup(setting)
     return nothing
 end
 
-const Rembus.CONFIG = Rembus.Settings()
+const global CONFIG = Rembus.Settings()
