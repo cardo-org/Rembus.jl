@@ -73,6 +73,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "server" begin
             include("server/test_server.jl")
         end
+        @time @safetestset "server_late_expose" begin
+            include("server/test_server_late_expose.jl")
+        end
         @time @safetestset "broker_server_timeout" begin
             include("server/test_broker_server_timeout.jl")
         end

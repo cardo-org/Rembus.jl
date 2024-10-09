@@ -18,11 +18,6 @@ end
 function run()
     ctx = Ctx(0)
 
-    #rb = connect()
-    #publish(rb, "topic_1")
-    #sleep(1)
-    #close(rb)
-
     myc = connect("myc")
     shared(myc, ctx)
     subscribe(myc, topic_1, from=Second(1))
@@ -30,13 +25,15 @@ function run()
     sleep(1)
     close(myc)
 
-    #    # Only named component may receive message from past ...
-    #    @component "myc"
-    #    @shared ctx
-    #    @subscribe topic_1 from = Second(1)
-    #    @reactive from = Now()
-    #    sleep(1)
-    #    @terminate
+    # Only named component may receive message from past ...
+    @component "myc"
+    @shared ctx
+    @subscribe topic_1 from = Second(1)
+
+    # 1 microsec just for cover the skip file check (Rembus.start_reactive)
+    @reactive from = Microsecond(1)
+    sleep(1)
+    @terminate
 
     @test ctx.topic_1 == 0
 end

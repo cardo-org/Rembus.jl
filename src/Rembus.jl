@@ -1031,6 +1031,7 @@ struct Reactive
     status::Bool
     msg_from::Union{Real,Period,Dates.CompoundPeriod}
 end
+
 struct EnableAck
     status::Bool
 end
@@ -1043,7 +1044,7 @@ function expose(
     exceptionerror=true
 )
     server.topic_function[name] = func
-    # inform all connected nodes
+    # inform all (already) connected nodes
     for (id, twin) in server.id_twin
         rpcreq(twin,
             AdminReqMsg(name, Dict(COMMAND => EXPOSE_CMD)),
@@ -1989,8 +1990,11 @@ function bind(process::Visor.Supervised, rb::RBServerConnection)
     return rb
 end
 
+#=
+Notify all subscribed and exposed method to the remote node.
+This happens just after a connection establishement.
+=#
 function callbacks(rb::RBHandle, fnmap, submap)
-    # register again callbacks
     for (name, fn) in fnmap
         if haskey(submap, name)
             subscribe(rb, name, fn, from=submap[name], exceptionerror=false)
