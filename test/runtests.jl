@@ -43,6 +43,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "component_id" begin
             include("unit/test_component_id.jl")
         end
+        @time @safetestset "twin_topics" begin
+            include("unit/test_twin_topics.jl")
+        end
     end
     if GROUP == "all" || GROUP == "http"
         @time @safetestset "http" begin
