@@ -122,13 +122,13 @@ function save_token_app(router, df)
 end
 
 broker_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id)
-broker_dir(router::Embedded) = joinpath(CONFIG.rembus_dir, router.process.id)
+broker_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id)
 broker_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name)
 
 keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(CONFIG.rembus_dir, "keystore"))
 
 keys_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys")
-keys_dir(router::Embedded) = joinpath(CONFIG.rembus_dir, router.process.id, "keys")
+keys_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id, "keys")
 keys_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name, "keys")
 
 messages_dir(r::Router) = joinpath(CONFIG.rembus_dir, r.process.supervisor.id, "messages")
@@ -151,7 +151,7 @@ function key_base(router::Router, cid::AbstractString)
     return res
 end
 
-function key_base(server::Embedded, cid::AbstractString)
+function key_base(server::Server, cid::AbstractString)
     return joinpath(CONFIG.rembus_dir, server.process.id, "keys", cid)
 end
 
@@ -164,7 +164,7 @@ function key_file(router::Router, cid::AbstractString)
     return fullname(basename)
 end
 
-function key_file(server::Embedded, cid::AbstractString)
+function key_file(server::Server, cid::AbstractString)
     basename = key_base(server, cid)
     return fullname(basename)
 end

@@ -86,6 +86,11 @@ export SmallInteger
 export QOS0, QOS1, QOS2
 export LastReceived, Now
 
+struct IdentityReturn
+    sts::UInt8
+    value::Any
+end
+
 mutable struct Component
     id::String
     protocol::Symbol
@@ -221,7 +226,7 @@ end
 
 abstract type AbstractRouter end
 
-mutable struct Embedded <: AbstractRouter
+mutable struct Server <: AbstractRouter
     start_ts::Float64
     topic_function::Dict{String,Function}
     subinfo::Dict{String,Bool}
@@ -231,12 +236,16 @@ mutable struct Embedded <: AbstractRouter
     ws_server::Sockets.TCPServer
     owners::DataFrame
     component_owner::DataFrame
-    Embedded(context=nothing) = new(time(), Dict(), Dict(), Dict(), context)
+    Server(context=nothing) = new(time(), Dict(), Dict(), Dict(), context)
+end
+
+function Base.show(io::IO, srv::Server)
+    return print(io, "$(isdefined(srv, :process) ? srv.process.id : "server")")
 end
 
 mutable struct RBServerConnection <: RBHandle
     duck::Union{Nothing,DBHandler}
-    router::Embedded
+    router::Server
     session::Dict{String,Any}
     egress::Union{Nothing,Function}
     ingress::Union{Nothing,Function}
@@ -248,7 +257,7 @@ mutable struct RBServerConnection <: RBHandle
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
     context::Union{Nothing,ZMQ.Context}
-    RBServerConnection(server::Embedded, name::String) = new(
+    RBServerConnection(server::Server, name::String) = new(
         nothing,
         server,
         Dict(),
@@ -1029,20 +1038,33 @@ end
 #=
 Provide an exposed server method.
 =#
-function expose(server::Embedded, name::AbstractString, func::Function)
+function expose(
+    server::Server, name::AbstractString, func::Function;
+    exceptionerror=true
+)
     server.topic_function[name] = func
+    # inform all connected nodes
+    for (id, twin) in server.id_twin
+        rpcreq(twin,
+            AdminReqMsg(name, Dict(COMMAND => EXPOSE_CMD)),
+            exceptionerror=exceptionerror
+        )
+    end
 end
 
-expose(server::Embedded, func::Function) = expose(server, string(func), func)
+expose(
+    server::Server,
+    func::Function;
+    exceptionerror=true) = expose(server, string(func), func, exceptionerror=exceptionerror)
 
 function subscribe(
-    server::Embedded, name::AbstractString, func::Function; from=Now()
+    server::Server, name::AbstractString, func::Function; from=Now()
 )
     server.topic_function[name] = func
     server.subinfo[name] = from
 end
 
-subscribe(server::Embedded, func::Function) = subscribe(server, string(func), func)
+subscribe(server::Server, func::Function) = subscribe(server, string(func), func)
 
 """
     shared(rb::RBHandle, ctx)
@@ -1501,24 +1523,44 @@ function read_socket(socket, process, rb, isconnected::Condition)
     end
 end
 
+function update_cid(rb::RBServerConnection, process, id)
+    setname(process, id)
+    # Search for a component with the same name
+    #for (kid, cmp) in rb.router.id_twin
+    filter!(rb.router.id_twin) do (kid, cmp)
+        if cmp.client.id == id
+            @debug "rbserver updating [$kid] -> [$id]"
+            rb.client = Component(id)
+            return false
+        end
+
+        return true
+    end
+
+    rb.router.id_twin[id] = rb
+end
+
 #=
-Read from the socket when a component is a server (accept connections).
+Read from the socket when a component is an Acceptor.
 =#
-function read_socket(socket, process, rb)
+function read_socket(socket, process, rb::RBServerConnection)
     try
         while isopen(socket)
             response = transport_read(socket)
             msg = from_cbor(response)
 
             if isa(msg, IdentityMsg)
-                cmp = identity_check(rb.router, rb, msg, paging=true)
-                if cmp !== nothing
-                    setname(process, msg.cid)
+                ret = identity_check(rb.router, rb, msg, paging=true)
+                if ret.sts === STS_SUCCESS
+                    update_cid(rb, process, msg.cid)
+                elseif ret.sts === STS_GENERIC_ERROR
+                    @info "[$rb]: closing connection"
+                    close(rb.socket)
                 end
             elseif isa(msg, Attestation)
                 sts = attestation(rb.router, rb, msg)
                 if sts === STS_SUCCESS
-                    setname(process, msg.cid)
+                    update_cid(rb, process, msg.cid)
                 end
             elseif isa(msg, Register)
                 response = register(rb.router, msg)
@@ -1958,7 +2000,7 @@ function callbacks(rb::RBHandle, fnmap, submap)
     end
 
     if rb.reactive
-        reactive(rb)
+        reactive(rb, exceptionerror=false)
     end
 end
 

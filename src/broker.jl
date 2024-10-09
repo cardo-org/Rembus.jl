@@ -75,7 +75,7 @@ end
 
 Initialize a server for brokerless rpc and one way pub/sub.
 """
-server(ctx=nothing) = Embedded(ctx)
+server(ctx=nothing) = Server(ctx)
 
 msg_dataframe() = DataFrame(
     ptr=UInt[], ts=UInt[], uid=UInt[], topic=String[], pkt=String[]
@@ -325,6 +325,8 @@ Base.isopen(c::Condition) = true
 
 offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
 
+offline(twin::RBServerConnection) = ((twin.socket === nothing) || !isopen(twin.socket))
+
 session(twin::Twin) = twin.session
 
 named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothing
@@ -444,7 +446,7 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
     return namedtwin
 end
 
-function setidentity(::Embedded, rb::RBServerConnection, msg; isauth=false, paging=true)
+function setidentity(::Server, rb::RBServerConnection, msg; isauth=false, paging=true)
     rb.client.id = msg.cid
     rb.isauth = isauth
     return rb
@@ -494,7 +496,7 @@ function attestation(router, twin, msg, authenticate=true)
     return authtwin
 end
 
-function attestation(router::Embedded, rb::RBServerConnection, msg)
+function attestation(router::Server, rb::RBServerConnection, msg)
     @debug "[$rb] authenticating cid: $(msg.cid)"
     sts = STS_SUCCESS
     reason = nothing
@@ -877,9 +879,9 @@ function anonymous_twin_receiver(router, twin)
             msg::RembusMsg = broker_parse(payload)
             #@mlog("[$(twin.id)] <- $(prettystr(msg))")
             if isa(msg, IdentityMsg)
-                auth_twin = identity_check(router, twin, msg, paging=true)
-                if auth_twin !== nothing
-                    return auth_twin
+                ret = identity_check(router, twin, msg, paging=true)
+                if ret.sts === STS_SUCCESS
+                    return ret.value
                 end
             elseif isa(msg, Register)
                 response = register(router, msg)
@@ -1303,12 +1305,12 @@ function caronted()::Cint
 end
 
 """
-    serve(server::Embedded; wait=true, secure=false)
+    serve(server::Server; wait=true, secure=false)
 
 Start an embedded server and accept connections.
 """
 function serve(
-    server::Embedded; wait=true, args=Dict()
+    server::Server; wait=true, args=Dict()
 )
     if isempty(args)
         args = command_line("server")
@@ -1413,11 +1415,17 @@ function client_receiver(router::Router, sock)
     return nothing
 end
 
-function identity_check(router, twin, msg; paging=true)
+#=
+Returns
+ * .sts=STS_SUCCESS, .value=Twin or RbServerConnection for a named but unauth node
+ * .sts=STS_GENERIC_ERROR, .value=nothing for an error
+ * .sts=STS_CHALLENGE, .value=nothing when a Challenge packet is sent
+=#
+function identity_check(router, twin, msg; paging=true)::IdentityReturn
     @debug "[$twin] auth identity: $(msg.cid)"
     if isempty(msg.cid)
         respond(router, ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid"), twin)
-        return nothing
+        return IdentityReturn(STS_GENERIC_ERROR, nothing)
     end
     named = named_twin(msg.cid, router)
     if named !== nothing && !offline(named)
@@ -1429,25 +1437,27 @@ function identity_check(router, twin, msg; paging=true)
             # authentication mode, send the challenge
             response = challenge(router, twin, msg)
             respond(router, response, twin)
+            return IdentityReturn(STS_CHALLENGE, nothing)
         else
             authtwin = setidentity(router, twin, msg, paging=paging)
             respond(router, ResMsg(msg.id, STS_SUCCESS, nothing), authtwin)
-            return authtwin
+            return IdentityReturn(STS_SUCCESS, authtwin)
         end
     end
-    return nothing
+    return IdentityReturn(STS_GENERIC_ERROR, nothing)
 end
 
-function client_receiver(router::Embedded, ws)
+function client_receiver(router::Server, ws)
     id = string(uuid4())
     rb = RBServerConnection(router, id)
     rb.socket = ws
     spec = process(id, server_task, args=(rb,))
     sv = router.process
     p = startup(Visor.from_supervisor(sv, "twins"), spec)
+    router.id_twin[id] = rb
     read_socket(ws, p, rb)
-    # TODO: Needed?
-    #router.id_twin[id] = twin
+    delete!(router.id_twin, id)
+    # TODO: return nothing?
     return rb
 end
 
@@ -2092,11 +2102,9 @@ function respond(router::Router, msg::Msg)
     return nothing
 end
 
-###respond(::Embedded, msg::Msg) = put!(msg.twchannel.process.inbox, msg)
-
 respond(::AbstractRouter, msg::RembusMsg, twin::Twin) = put!(twin.process.inbox, msg)
 
-respond(::Embedded, msg::RembusMsg, rb::RBServerConnection) = put!(rb.msgch, msg)
+respond(::Server, msg::RembusMsg, rb::RBServerConnection) = put!(rb.msgch, msg)
 
 function uptime(router)
     utime = time() - router.start_ts
@@ -2384,8 +2392,7 @@ end
 Send a request to a remote component.
 
 For example the IdentityMsg request is initiated by the twin
-when a broker connects to a component acting like a server (accepting
-connections)
+when a broker connects to a component that acts as an Acceptor
 =#
 function wait_response(twin::Twin, msg::Msg, timeout)
     mid::UInt128 = msg.content.id
