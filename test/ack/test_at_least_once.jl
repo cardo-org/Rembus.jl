@@ -70,6 +70,8 @@ end
 num_msg = 6
 execute(() -> run(num_msg), "test_at_least_once")
 
-# expect two messages at rest
-df = Rembus.data_at_rest(string(num_msg), BROKER_NAME)
-@test nrow(df) == num_msg
+if !Sys.iswindows()
+    # expect two messages at rest
+    df = Rembus.data_at_rest(string(num_msg), BROKER_NAME)
+    @test nrow(df) == num_msg
+end

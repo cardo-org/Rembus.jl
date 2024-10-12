@@ -1217,7 +1217,7 @@ function caronte_reset(broker_name="caronte")
 end
 
 """
-    caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
+    caronte(; wait=true, debug=false; plugin=nothing, context=nothing, args=Dict())
 
 Start the broker.
 
@@ -1225,16 +1225,19 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 
 Overwrite command line arguments if args is not empty.
 """
-function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
+function caronte(;
+    wait=true, debug=TRACE_INFO, plugin=nothing, context=nothing, args=Dict()
+)
     if isempty(args)
         args = command_line()
     end
     sv_name = get(args, "name", "caronte")
     setup(CONFIG)
-    if haskey(args, "debug") && args["debug"] === true
-        CONFIG.debug = true
-    end
+    CONFIG.trace_level = String(debug)
 
+    if haskey(args, "debug") && args["debug"] === true
+        CONFIG.trace_level = TRACE_DEBUG
+    end
     if haskey(args, "reset") && args["reset"] === true
         Rembus.caronte_reset(sv_name)
     end
@@ -1290,10 +1293,10 @@ function caronte(; wait=true, plugin=nothing, context=nothing, args=Dict())
                 stop_waiting_after=2.0)
         )
     end
-
     supervise(
         [supervisor(sv_name, tasks, strategy=:one_for_all, intensity=1)],
-        wait=wait
+        wait=wait,
+        intensity=2
     )
 
     return router
@@ -1310,7 +1313,7 @@ end
 Start an embedded server and accept connections.
 """
 function serve(
-    server::Server; wait=true, args=Dict()
+    server::Server; wait=true, debug=TRACE_INFO, args=Dict()
 )
     if isempty(args)
         args = command_line("server")
@@ -1331,8 +1334,10 @@ function serve(
     if embedded_sv === nothing
         # first server process
         setup(CONFIG)
+        CONFIG.trace_level = String(debug)
+
         if haskey(args, "debug") && args["debug"] === true
-            CONFIG.debug = true
+            CONFIG.trace_level = TRACE_DEBUG
         end
 
         init_log()
@@ -2281,6 +2286,7 @@ function broker(self, router)
             cleanup(tw, router)
             return true
         end
+        @info "$(router.process.supervisor) shutted down"
     end
 end
 

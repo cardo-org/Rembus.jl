@@ -1119,6 +1119,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
             elseif isa(msg, Exception)
                 throw(msg)
             elseif isrequest(msg)
+                setphase(pd, :up)
                 req = msg.request
                 if isa(req, SetHolder)
                     result = shared(rb, msg.request.shared)
@@ -1155,6 +1156,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                 end
                 reply(msg, result)
             else
+                setphase(pd, :up)
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
         end
@@ -1188,6 +1190,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
         end
     finally
         @debug "[$pd]: terminating"
+        setphase(pd, :down)
         close(rb)
     end
 end
@@ -1494,7 +1497,12 @@ function keep_alive(rb)
 end
 
 processput!(process::NullProcess, e) = nothing
-processput!(process::Visor.Process, e) = put!(process.inbox, e)
+
+function processput!(process::Visor.Process, e)
+    if getphase(process) === :up
+        put!(process.inbox, e)
+    end
+end
 
 function read_socket(socket, process, rb, isconnected::Condition)
     try
@@ -2727,6 +2735,7 @@ end
     @compile_workload begin
         sv = Rembus.caronte(
             wait=false,
+            debug="error",
             args=Dict(
                 "ws" => 8000,
                 "tcp" => 8001,

@@ -14,6 +14,8 @@ execute(() -> run(publisher, consumer), "test_ws_ack")
 @info "[test_ws_ack] received $count messages"
 @test num_msg <= count < num_msg + 100
 
-# expect two messages at rest
-df = Rembus.data_at_rest(string(num_msg), BROKER_NAME)
-@test nrow(df) == num_msg
+if !Sys.iswindows()
+    # expect two messages at rest
+    df = Rembus.data_at_rest(string(num_msg), BROKER_NAME)
+    @test nrow(df) == num_msg
+end

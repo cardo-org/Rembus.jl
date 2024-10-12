@@ -235,13 +235,13 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == ENABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.debug = true
+            CONFIG.trace_level = "debug"
         else
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == DISABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.debug = false
+            CONFIG.trace_level = "info"
         else
             sts = STS_GENERIC_ERROR
         end

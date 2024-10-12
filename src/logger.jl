@@ -46,7 +46,9 @@ function Logging.shouldlog(
 )
     if _module === HTTP.Servers
         level >= Logging.Warn
-    elseif CONFIG.debug && (_module === Rembus || _module === Visor)
+    elseif CONFIG.trace_level == "error"
+        level >= Logging.Warn
+    elseif CONFIG.trace_level == "debug" && (_module === Rembus || _module === Visor)
         level >= Logging.Debug
     else
         level >= Logging.Info

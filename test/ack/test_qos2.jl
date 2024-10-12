@@ -93,6 +93,8 @@ end
 
 execute(run, "test_qos2")
 
-# expect one messages at rest
-df = Rembus.data_at_rest(string(1), BROKER_NAME)
-@test nrow(df) == 1
+if !Sys.iswindows()
+    # expect one messages at rest
+    df = Rembus.data_at_rest(string(1), BROKER_NAME)
+    @test nrow(df) == 1
+end

@@ -86,6 +86,11 @@ end
 
 execute(run, "test_qos2")
 
-# expect one messages at rest
-df = Rembus.data_at_rest(string(1), BROKER_NAME)
-@test nrow(df) == 1
+# On Windows this locks the file and prevents to remove it
+# This make fail the next test because caronte_reset() throw an error.
+# See: https://discourse.julialang.org/t/how-to-release-lock-on-arrow-table/107046
+if !Sys.iswindows()
+    # expect one messages at rest
+    df = Rembus.data_at_rest(string(1), BROKER_NAME)
+    @test nrow(df) == 1
+end

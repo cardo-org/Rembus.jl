@@ -33,6 +33,10 @@ const DATA = :data
 const MSG_FROM = "msg_from"
 const STATUS = "status"
 
+const TRACE_DEBUG = "debug"
+const TRACE_INFO = "info"
+const TRACE_ERROR = "error"
+
 const REACTIVE_CMD = "reactive"
 const RESET_ROUTER_CMD = "reset_router"
 const SHUTDOWN_CMD = "shutdown"
