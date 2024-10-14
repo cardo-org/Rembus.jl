@@ -3,7 +3,7 @@ using Test
 
 logfile = "mycaronte.log"
 
-Rembus.CONFIG.log = logfile
+Rembus.CONFIG.log_destination = logfile
 logger = Rembus.logging()
 
 @info "very important info"

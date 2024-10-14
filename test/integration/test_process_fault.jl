@@ -20,9 +20,7 @@ function run()
     cid = "test_process"
 
     Rembus.caronte_reset(BROKER_NAME)
-
-    Visor.trace_event = trace
-    supervise([rembus(cid)], intensity=3)
+    supervise([rembus(cid)], intensity=3, handler=trace)
 end
 
 try
@@ -31,6 +29,7 @@ try
     @debug "task restarts: $restarts" _group = :test
     @test 1 <= restarts <= 2
 catch e
+    @test false
     @error "[test_process_fault]: $e"
     showerror(stdout, e, catch_backtrace())
 finally

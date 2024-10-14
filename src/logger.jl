@@ -22,11 +22,11 @@ function repl_metafmt(level::LogLevel, _module, group, id, file, line)
 end
 
 function logging()
-    if CONFIG.log === "stdout"
+    if CONFIG.log_destination === "stdout"
         rlogger = RembusLogger(stdout)
         rlogger |> global_logger
     else
-        rlogger = RembusLogger(open(CONFIG.log, "a+"))
+        rlogger = RembusLogger(open(CONFIG.log_destination, "a+"))
         rlogger |> global_logger
     end
 
@@ -46,9 +46,9 @@ function Logging.shouldlog(
 )
     if _module === HTTP.Servers
         level >= Logging.Warn
-    elseif CONFIG.trace_level == "error"
+    elseif CONFIG.log_level == "error"
         level >= Logging.Warn
-    elseif CONFIG.trace_level == "debug" && (_module === Rembus || _module === Visor)
+    elseif CONFIG.log_level == "debug" && (_module === Rembus || _module === Visor)
         level >= Logging.Debug
     else
         level >= Logging.Info

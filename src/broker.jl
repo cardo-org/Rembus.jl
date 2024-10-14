@@ -1233,10 +1233,10 @@ function caronte(;
     end
     sv_name = get(args, "name", "caronte")
     setup(CONFIG)
-    CONFIG.trace_level = String(debug)
+    CONFIG.log_level = String(debug)
 
     if haskey(args, "debug") && args["debug"] === true
-        CONFIG.trace_level = TRACE_DEBUG
+        CONFIG.log_level = TRACE_DEBUG
     end
     if haskey(args, "reset") && args["reset"] === true
         Rembus.caronte_reset(sv_name)
@@ -1334,10 +1334,10 @@ function serve(
     if embedded_sv === nothing
         # first server process
         setup(CONFIG)
-        CONFIG.trace_level = String(debug)
+        CONFIG.log_level = String(debug)
 
         if haskey(args, "debug") && args["debug"] === true
-            CONFIG.trace_level = TRACE_DEBUG
+            CONFIG.log_level = TRACE_DEBUG
         end
 
         init_log()

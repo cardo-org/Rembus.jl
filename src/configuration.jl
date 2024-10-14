@@ -43,8 +43,8 @@ mutable struct Settings
     ws_ping_interval::Float32
     balancer::String
     rembus_dir::String
-    log::String
-    trace_level::String
+    log_destination::String
+    log_level::String
     overwrite_connection::Bool
     stacktrace   # log stacktrace on error
     metering     # log in and out messages
@@ -59,16 +59,16 @@ mutable struct Settings
         ws_ping_interval = 0
         balancer = "first_up"
         rdir = default_rembus_dir()
-        log = "stdout"
+        log_destination = "stdout"
+        log_level = TRACE_INFO
         overwrite_connection = true
         stacktrace = false
         metering = false
         rawdump = false
         cid = DEFAULT_APP_NAME
         connection_retry_period = 2.0
-        trace_level = TRACE_INFO
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log, trace_level,
+        new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log_destination, log_level,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, true, db_max_messages)
     end
@@ -95,7 +95,7 @@ function setup(setting)
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
 
     setting.rembus_dir = get(cfg, "rembus_dir", get(ENV, "REMBUS_ROOT_DIR", rembus_dir()))
-    setting.log = get(cfg, "log", get(ENV, "BROKER_LOG", "stdout"))
+    setting.log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)
     setting.metering = get(cfg, "metering", false)
@@ -114,12 +114,12 @@ function setup(setting)
     )
 
     if haskey(ENV, "REMBUS_DEBUG")
-        setting.trace_level = TRACE_INFO
+        setting.log_level = TRACE_INFO
         if ENV["REMBUS_DEBUG"] == "1"
-            setting.trace_level = TRACE_DEBUG
+            setting.log_level = TRACE_DEBUG
         end
     else
-        setting.trace_level = get(cfg, "trace_level", TRACE_INFO)
+        setting.log_level = get(cfg, "log_level", TRACE_INFO)
     end
     balancer = get(cfg, "balancer", get(ENV, "BROKER_BALANCER", "first_up"))
     set_balancer(setting, balancer)
