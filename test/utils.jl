@@ -70,17 +70,17 @@ function execute(
     mode="anonymous",
     reset=true,
     setup=nothing,
+    islistening=["serve_ws"],
     args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002, "http" => 9000)
 )
     Rembus.setup(Rembus.CONFIG)
 
     @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset mode
     sleep(0.5)
+    procs = ["$BROKER_NAME.$proc" for proc in islistening]
     Rembus.islistening(
         wait=20,
-        procs=[
-            "$BROKER_NAME.serve_ws", "$BROKER_NAME.serve_tcp", "$BROKER_NAME.serve_zeromq"
-        ]
+        procs=procs
     )
     Rembus.logging()
     @info "[$testname] start"

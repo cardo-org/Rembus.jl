@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function consume(data)
-    @debug "[test_forever_sub] received: $data" _group = :test
+    @debug "[test_forever_sub] received: $data"
 end
 
 function run()
@@ -19,13 +19,14 @@ function run()
         ]
     )
 
-    Timer(tmr -> shutdown(), 5)
+    t = Timer(tmr -> shutdown(), 5)
 
     subscriber = connect("test_forever_sub")
     subscribe(subscriber, topic, consume, from=LastReceived())
 
     forever(subscriber)
-    @info "[test_forever] done" _group = :test
+    @info "[test_forever] done"
+    wait(t)
 end
 
 execute(run, "test_forever")
