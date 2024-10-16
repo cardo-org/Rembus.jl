@@ -76,6 +76,12 @@ function execute(
 
     @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset mode
     sleep(0.5)
+    Rembus.islistening(
+        wait=20,
+        procs=[
+            "$BROKER_NAME.serve_ws", "$BROKER_NAME.serve_tcp", "$BROKER_NAME.serve_zeromq"
+        ]
+    )
     Rembus.logging()
     @info "[$testname] start"
     try

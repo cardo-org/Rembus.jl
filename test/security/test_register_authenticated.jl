@@ -17,12 +17,10 @@ function run()
 end
 
 try
-    #authenticated!()
     execute(run, "test_register_authenticated", mode="authenticated", setup=() -> init(pin))
     @test true
 catch e
     @error "[test_register_authenticated]: $e"
     @test false
 finally
-    #remove_keys(node)
 end
