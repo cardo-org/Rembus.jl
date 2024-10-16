@@ -54,6 +54,7 @@ mutable struct Settings
     broker_plugin::Union{Nothing,Module}
     save_messages::Bool
     db_max_messages::UInt
+    connection_mode::ConnectionMode
     Settings() = begin
         zmq_ping_interval = 0
         ws_ping_interval = 0
@@ -70,7 +71,7 @@ mutable struct Settings
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
         new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log_destination, log_level,
             overwrite_connection, stacktrace, metering, rawdump, cid,
-            connection_retry_period, nothing, true, db_max_messages)
+            connection_retry_period, nothing, true, db_max_messages, anonymous)
     end
 end
 
@@ -83,6 +84,16 @@ function set_balancer(setting, policy)
     setting.balancer = policy
 
     return nothing
+end
+
+function string_to_enum(connection_mode)
+    if connection_mode == "anonymous"
+        return anonymous
+    elseif connection_mode == "authenticated"
+        return authenticated
+    else
+        error("connection_mode: invalid value [$connection_mode]")
+    end
 end
 
 function setup(setting)
@@ -102,6 +113,10 @@ function setup(setting)
     setting.rawdump = get(cfg, "rawdump", false)
     setting.cid = component_id(cfg)
     setting.connection_retry_period = get(cfg, "connection_retry_period", 2.0)
+
+    connection_mode = get(cfg, "connection_mode", "anonymous")
+    setting.connection_mode = string_to_enum(connection_mode)
+
     setting.db_max_messages = get(
         cfg,
         "db_max_messages",

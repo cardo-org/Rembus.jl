@@ -23,6 +23,8 @@ const QOS2 = UInt8(0x30) # exactly once
 const SIG_RSA = 0x1
 const SIG_ECDSA = 0x2
 
+const CONNECTION_ID = 0x12345678961deadbeef123456789
+
 const TENANTS_FILE = "tenants.json"
 const COMPONENT_TENANT = "tenant_component.json"
 

@@ -22,6 +22,7 @@ for dir in [
     "test/server",
     "test/errors",
     "test/integration",
+    "test/security",
     "test/park",
     "test/private",
     "test/repl",

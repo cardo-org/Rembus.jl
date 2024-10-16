@@ -74,6 +74,7 @@ export terminate
 export egress_interceptor, ingress_interceptor
 export rbinfo
 export register, unregister
+export anonymous!, named!, authenticated!
 
 # broker api
 export add_server, remove_server
@@ -85,6 +86,11 @@ export RpcMethodNotFound, RpcMethodUnavailable, RpcMethodLoopback, RpcMethodExce
 export SmallInteger
 export QOS0, QOS1, QOS2
 export LastReceived, Now
+
+# The permitted mode of connection.
+# if mode is authenticated then anonymous modes are not permitted.
+# if mode is anonymous then authenticated mode is available.
+@enum ConnectionMode anonymous authenticated
 
 struct IdentityReturn
     sts::UInt8
@@ -227,6 +233,7 @@ end
 abstract type AbstractRouter end
 
 mutable struct Server <: AbstractRouter
+    mode::ConnectionMode
     start_ts::Float64
     topic_function::Dict{String,Function}
     subinfo::Dict{String,Bool}
@@ -236,7 +243,7 @@ mutable struct Server <: AbstractRouter
     ws_server::Sockets.TCPServer
     owners::DataFrame
     component_owner::DataFrame
-    Server(context=nothing) = new(time(), Dict(), Dict(), Dict(), context)
+    Server(context=nothing) = new(anonymous, time(), Dict(), Dict(), Dict(), context)
 end
 
 function Base.show(io::IO, srv::Server)
@@ -298,6 +305,10 @@ include("transport.jl")
 include("admin.jl")
 include("store.jl")
 include("register.jl")
+
+anonymous!() = CONFIG.connection_mode = anonymous
+
+authenticated!() = CONFIG.connection_mode = authenticated
 
 function __init__()
     setup(CONFIG)
@@ -466,6 +477,8 @@ end
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
 
 request_timeout() = parse(Float32, get(ENV, "REMBUS_TIMEOUT", "10"))
+
+challenge_timeout() = parse(Float32, get(ENV, "REMBUS_CHALLENGE_TIMEOUT", "10"))
 
 connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "10"))
 
@@ -1379,7 +1392,9 @@ function handle_input(rb, msg)
             delete!(rb.out, msg.id)
         else
             # it is a response without a waiting Condition
-            if msg.status == STS_CHALLENGE
+            if msg.id == CONNECTION_ID
+                @debug "unexpected unsolicited challenge"
+            elseif msg.status == STS_CHALLENGE
                 @async resend_attestate(rb, msg)
             else
                 @warn "ignoring response: $msg"
@@ -1747,6 +1762,11 @@ function pkfile(name)
 end
 
 function resend_attestate(rb, response)
+    # gate for anonymous node
+    if rb.client.id == "rembus"
+        return nothing
+    end
+
     try
         msg = attestate(rb, response)
         put!(rb.msgch, msg)
@@ -1914,8 +1934,18 @@ isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 
 function connect(rb::RBConnection)
     if !isconnected(rb)
-        _connect(rb, NullProcess(rb.client.id))
-        authenticate(rb)
+        if rb.client.protocol !== :zmq && CONFIG.connection_mode === authenticated
+            if rb.client.id == "rembus"
+                close(rb)
+                error("anonymous components not allowed")
+            end
+            task = @async connection_inquiry(rb)
+            _connect(rb, NullProcess(rb.client.id))
+            wait(task)
+        else
+            _connect(rb, NullProcess(rb.client.id))
+            authenticate(rb)
+        end
     end
 
     return rb
@@ -2599,11 +2629,17 @@ end
 function response_or_timeout(rb::RBHandle, msg::RembusMsg, timeout)
     response = wait_response(rb, msg, request_timeout())
     if isa(response, RembusTimeout)
-        close(rb.socket)
+        rb.socket !== nothing && close(rb.socket)
         throw(response)
     end
 
     return response
+end
+
+function inquiry_timeout(rb, condition::Distributed.Future)
+    put!(condition, RembusTimeout("inquiry timeout"))
+    delete!(rb.out, CONNECTION_ID)
+    return nothing
 end
 
 function send_request(rb::RBHandle, msg::RembusMsg)
@@ -2612,6 +2648,27 @@ function send_request(rb::RBHandle, msg::RembusMsg)
     rb.out[mid] = resp_cond
     put!(rb.msgch, msg)
     return resp_cond
+end
+
+#=
+A broker with ConnectionMode equal to authenticated send immediately
+a challenge.
+=#
+function connection_inquiry(rb::RBHandle)
+    resp_cond = Distributed.Future()
+    rb.out[CONNECTION_ID] = resp_cond
+    t = Timer((tim) -> inquiry_timeout(rb, resp_cond), request_timeout())
+    response = fetch(resp_cond)
+    close(t)
+
+    if isa(response, RembusTimeout)
+        @info "[$rb] no inquiry from acceptor"
+    elseif (response.status == STS_CHALLENGE)
+        msg = attestate(rb, response)
+        response = response_or_timeout(rb, msg, request_timeout())
+    end
+
+    return nothing
 end
 
 # https://github.com/JuliaLang/julia/issues/36217
@@ -2735,7 +2792,8 @@ end
     @compile_workload begin
         sv = Rembus.caronte(
             wait=false,
-            debug="error",
+            mode="anonymous",
+            log="error",
             args=Dict(
                 "ws" => 8000,
                 "tcp" => 8001,

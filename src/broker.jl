@@ -82,6 +82,7 @@ msg_dataframe() = DataFrame(
 )
 
 mutable struct Router <: AbstractRouter
+    mode::ConnectionMode
     msg_df::DataFrame
     mcounter::UInt64
     start_ts::Float64
@@ -109,6 +110,7 @@ mutable struct Router <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
+        anonymous,
         msg_dataframe(),
         0,
         NaN,
@@ -354,7 +356,9 @@ Unbind the ZMQ socket from the twin.
 function offline!(twin)
     @debug "[$twin] closing: going offline"
     twin.socket = nothing
-
+    delete!(twin.router.twin2address, twin.id)
+    # Remove from address2twin
+    filter!(((k, v),) -> twin != v, twin.router.address2twin)
     return nothing
 end
 
@@ -391,6 +395,7 @@ Remove the twin from the system.
 Shutdown the process and remove the twin from the router.
 =#
 function destroy_twin(twin, router)
+    detach(twin)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
@@ -558,7 +563,7 @@ end
 Register a component.
 =#
 function register(router, msg)
-    @debug "registering pubkey of $(msg.cid), id: $(msg.id)"
+    @debug "registering pubkey of $(msg.cid), id: $(msg.id), tenant: $(msg.tenant)"
 
     if !isenabled(router, msg.tenant)
         return ResMsg(msg.id, STS_GENERIC_ERROR, "tenant [$(msg.tenant)] not enabled")
@@ -850,14 +855,14 @@ function twin_receiver(router, twin)
     return nothing
 end
 
-function challenge(router, twin, msg)
+function challenge(router, twin, msgid)
     if haskey(router.topic_function, "challenge")
         challenge = router.topic_function["challenge"](twin)
     else
         challenge = rand(RandomDevice(), UInt8, 4)
     end
     twin.session["challenge"] = challenge
-    return ResMsg(msg.id, STS_CHALLENGE, challenge)
+    return ResMsg(msgid, STS_CHALLENGE, challenge)
 end
 
 #=
@@ -873,7 +878,7 @@ function anonymous_twin_receiver(router, twin)
             payload = transport_read(ws)
             if isempty(payload)
                 twin.socket = nothing
-                @debug "component [$(twin.id)]: connection closed"
+                @debug "component [$twin]: connection closed"
                 break
             end
             msg::RembusMsg = broker_parse(payload)
@@ -900,6 +905,68 @@ function anonymous_twin_receiver(router, twin)
     end
 
     return nothing
+end
+
+
+function close_connection(twin)
+    @warn "[$twin] challenge not resolved: closing connection"
+    end_receiver(twin)
+end
+
+#=
+    authenticate_twin_receiver(router, twin)
+
+Authenticate the remote node before trusting the connection.
+
+Wait a finite amount of time for the challenge response.
+=#
+function authenticate_twin_receiver(router, twin)
+    @debug "authenticating [$(twin.id)]"
+    t = Timer((tmr) -> close_connection(twin), challenge_timeout())
+    try
+        ws = twin.socket
+        while isopen(ws)
+            payload = transport_read(ws)
+            if isempty(payload)
+                # tcp socket only: transport_read returns
+                # an empty array when the connection is closed.
+                twin.socket = nothing
+                @debug "component [$twin]: connection closed"
+                break
+            end
+            msg::RembusMsg = broker_parse(payload)
+            if isa(msg, IdentityMsg)
+                # Manage the case when the component has not set mode to authenticated.
+                ret = identity_check(router, twin, msg, paging=true)
+                if ret.sts !== STS_CHALLENGE
+                    error("[$(msg.cid)] authentication failed")
+                end
+            elseif isa(msg, Register)
+                response = register(router, msg)
+                put!(twin.process.inbox, response)
+            elseif isa(msg, Attestation)
+                return attestation(router, twin, msg)
+            else
+                error("not authenticated")
+            end
+        end
+    catch e
+        receiver_exception(router, twin, e)
+        @showerror e
+    finally
+        close(t)
+        end_receiver(twin)
+    end
+
+    return nothing
+end
+
+
+function commands_permitted(twin)
+    if twin.router.mode === authenticated
+        return isauthenticated(twin)
+    end
+    return true
 end
 
 function zeromq_receiver(router::Router)
@@ -929,7 +996,7 @@ function zeromq_receiver(router::Router)
                 # check if cid is registered
                 if key_file(router, msg.cid) !== nothing
                     # authentication mode, send the challenge
-                    response = challenge(router, twin, msg)
+                    response = challenge(router, twin, msg.id)
                 else
                     identity_upgrade(router, twin, msg, id, authenticate=false)
                     continue
@@ -945,7 +1012,7 @@ function zeromq_receiver(router::Router)
                     if key_file(router, msg.cid) !== nothing
                         # check if challenge was already sent
                         if !haskey(twin.session, "challenge")
-                            response = challenge(router, twin, msg)
+                            response = challenge(router, twin, msg.id)
                             transport_send(twin, router.zmqsocket, response)
                         end
                     else
@@ -957,28 +1024,31 @@ function zeromq_receiver(router::Router)
                         pong(twin.socket, msg.id, id)
                     end
                 end
+            elseif isa(msg, Attestation)
+                identity_upgrade(router, twin, msg, id, authenticate=true)
             elseif isa(msg, Register)
                 response = register(router, msg)
                 put!(twin.process.inbox, response)
-            elseif isa(msg, Unregister)
-                response = unregister(router, twin, msg)
-                put!(twin.process.inbox, response)
-            elseif isa(msg, Attestation)
-                identity_upgrade(router, twin, msg, id, authenticate=true)
-            elseif isa(msg, ResMsg)
-                rpc_response(router, twin, msg)
-            elseif isa(msg, AdminReqMsg)
-                admin_msg(router, twin, msg)
-            elseif isa(msg, RpcReqMsg)
-                rpc_request(router, twin, msg)
-            elseif isa(msg, PubSubMsg)
-                pubsub_msg(router, twin, msg)
-            elseif isa(msg, AckMsg)
-                ack_msg(twin, msg)
             elseif isa(msg, Close)
                 offline!(twin)
-                #            elseif isa(msg, Remove)
-                #                destroy_twin(twin, router)
+            elseif commands_permitted(twin)
+                if isa(msg, Unregister)
+                    response = unregister(router, twin, msg)
+                    put!(twin.process.inbox, response)
+                elseif isa(msg, ResMsg)
+                    rpc_response(router, twin, msg)
+                elseif isa(msg, AdminReqMsg)
+                    admin_msg(router, twin, msg)
+                elseif isa(msg, RpcReqMsg)
+                    rpc_request(router, twin, msg)
+                elseif isa(msg, PubSubMsg)
+                    pubsub_msg(router, twin, msg)
+                elseif isa(msg, AckMsg)
+                    ack_msg(twin, msg)
+                end
+            else
+                @info "[$twin]: [$msg] not authorized"
+                offline!(twin)
             end
         catch e
             if isa(e, Visor.ProcessInterrupt) || isa(e, ZMQ.StateError)
@@ -1019,7 +1089,8 @@ Disconnect the twin from the ws/tcp channel.
 function detach(twin)
     if twin.socket !== nothing
         if !isa(twin.socket, ZMQ.Socket)
-            flush(twin.socket.io)
+            ## TBD: check if neeeded
+            #flush(twin.socket.io)
             close(twin.socket)
         end
         twin.socket = nothing
@@ -1217,7 +1288,14 @@ function caronte_reset(broker_name="caronte")
 end
 
 """
-    caronte(; wait=true, debug=false; plugin=nothing, context=nothing, args=Dict())
+    caronte(;
+        wait=true,
+        mode=nothing,
+        log="info",
+        plugin=nothing,
+        context=nothing,
+        args=Dict()
+    )
 
 Start the broker.
 
@@ -1226,14 +1304,19 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 Overwrite command line arguments if args is not empty.
 """
 function caronte(;
-    wait=true, debug=TRACE_INFO, plugin=nothing, context=nothing, args=Dict()
+    wait=true,
+    mode=nothing,
+    log=TRACE_INFO,
+    plugin=nothing,
+    context=nothing,
+    args=Dict()
 )
     if isempty(args)
         args = command_line()
     end
     sv_name = get(args, "name", "caronte")
     setup(CONFIG)
-    CONFIG.log_level = String(debug)
+    CONFIG.log_level = String(log)
 
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.log_level = TRACE_DEBUG
@@ -1245,6 +1328,10 @@ function caronte(;
     issecure = get(args, "secure", false)
 
     router = Router(plugin, context)
+
+    if mode !== nothing
+        router.mode = string_to_enum(mode)
+    end
 
     tasks = [process(broker, args=(router,)), supervisor("twins", terminateif=:shutdown)]
 
@@ -1313,7 +1400,7 @@ end
 Start an embedded server and accept connections.
 """
 function serve(
-    server::Server; wait=true, debug=TRACE_INFO, args=Dict()
+    server::Server; wait=true, mode=nothing, log=TRACE_INFO, args=Dict()
 )
     if isempty(args)
         args = command_line("server")
@@ -1329,12 +1416,16 @@ function serve(
 
     secure = get(args, "secure", false)
 
+    setup(CONFIG)
+    if mode !== nothing
+        server.mode = string_to_enum(mode)
+    end
+
     embedded_sv = from(name)
 
     if embedded_sv === nothing
         # first server process
-        setup(CONFIG)
-        CONFIG.log_level = String(debug)
+        CONFIG.log_level = String(log)
 
         if haskey(args, "debug") && args["debug"] === true
             CONFIG.log_level = TRACE_DEBUG
@@ -1401,16 +1492,27 @@ function prettystr(msg::PubSubMsg)
     end
 end
 
+#=
+Entry point of a new connection request from a node.
+=#
 function client_receiver(router::Router, sock)
-    cid = string(uuid4())
+    uid = uuid4()
+    cid = string(uid)
     twin = create_twin(cid, router)
     @debug "[anonymous] client bound to twin id [$cid]"
-
-    # start the trusted client task
+    # start the twin client task
     twin.socket = sock
 
-    # ws/tcp socket receiver task
-    authtwin = anonymous_twin_receiver(router, twin)
+    if router.mode === authenticated
+        @debug "only authenticated nodes allowed"
+        response = challenge(router, twin, CONNECTION_ID)
+        put!(twin.process.inbox, response)
+        authtwin = authenticate_twin_receiver(router, twin)
+    else
+        # ws/tcp socket receiver task
+        authtwin = anonymous_twin_receiver(router, twin)
+    end
+
 
     # upgrade to named or authenticated twin if it returns true
     if (authtwin !== nothing)
@@ -1440,7 +1542,7 @@ function identity_check(router, twin, msg; paging=true)::IdentityReturn
         # check if cid is registered
         if key_file(router, msg.cid) !== nothing
             # authentication mode, send the challenge
-            response = challenge(router, twin, msg)
+            response = challenge(router, twin, msg.id)
             respond(router, response, twin)
             return IdentityReturn(STS_CHALLENGE, nothing)
         else

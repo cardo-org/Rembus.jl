@@ -16,7 +16,7 @@ const REMBUS_CA = "rembus-ca.crt"
 
 results = []
 
-macro start_caronte(init, args, reset)
+macro start_caronte(init, args, reset, mode)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
         params = $(esc(args))
@@ -28,7 +28,7 @@ macro start_caronte(init, args, reset)
                 fn()
             end
 
-            Rembus.caronte(wait=false, args=params)
+            Rembus.caronte(wait=false, mode=$(esc(mode)), args=params)
         end
     end
 end
@@ -67,13 +67,14 @@ end
 function execute(
     fn,
     testname;
+    mode="anonymous",
     reset=true,
     setup=nothing,
     args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002, "http" => 9000)
 )
     Rembus.setup(Rembus.CONFIG)
 
-    @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset
+    @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset mode
     sleep(0.5)
     Rembus.logging()
     @info "[$testname] start"

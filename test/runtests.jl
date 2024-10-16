@@ -180,6 +180,35 @@ const GROUP = get(ENV, "GROUP", "all")
             include("integration/test_forever.jl")
         end
     end
+    if GROUP == "all" || GROUP == "security"
+        @time @safetestset "nocommands_authenticated" begin
+            include("security/test_nocommands_authenticated.jl")
+        end
+        @time @safetestset "register_authenticated" begin
+            include("security/test_register_authenticated.jl")
+        end
+        @time @safetestset "connect_authenticated" begin
+            include("security/test_connect_authenticated.jl")
+        end
+        @time @safetestset "connect_anonymous" begin
+            include("security/test_connect_anonymous.jl")
+        end
+        @time @safetestset "test_challenge_not_sent" begin
+            include("security/test_challenge_not_sent.jl")
+        end
+        @time @safetestset "test_inquiry_not_sent" begin
+            include("security/test_inquiry_not_sent.jl")
+        end
+        @time @safetestset "unauth_command" begin
+            include("security/test_unauth_command.jl")
+        end
+        @time @safetestset "auth_failed" begin
+            include("security/test_auth_failed.jl")
+        end
+        @time @safetestset "unregister_authenticated" begin
+            include("security/test_unregister_authenticated.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "future"
         @time @safetestset "future" begin
             include("future/test_future.jl")
