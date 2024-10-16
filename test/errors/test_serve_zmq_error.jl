@@ -19,6 +19,7 @@ function run()
     close_zmq_router_socket()
     sleep(3)
     @test from("caronte.serve_zeromq").task !== zeromq_task
+    shutdown()
 end
 
 @info "[test_serve_zmq_error] start"

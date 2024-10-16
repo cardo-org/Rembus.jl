@@ -4,8 +4,8 @@ function run()
     # connect but not send any packet
     rb = Rembus.RBConnection("tcp://localhost:8001")
     Rembus._connect(rb, Rembus.NullProcess(rb.client.id))
+    sleep(0.1)
     close(rb)
-    sleep(1)
 end
 
 try
