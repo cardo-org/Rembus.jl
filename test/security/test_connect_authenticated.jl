@@ -24,7 +24,7 @@ function run()
     @test_throws ErrorException Rembus.connect()
 
     # connect without sending any packet
-    sock = Sockets.connect("localhost", 8001)
+    sock = Sockets.connect("127.0.0.1", 8001)
     close(sock)
 end
 
