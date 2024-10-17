@@ -4,6 +4,12 @@
 
 - Improve server api.
 
+- Improve message persistence logic.
+
+- Configurable authenticated and anonymous connection modes.
+
+- [#32](https://github.com/cardo-org/Rembus.jl/issues/32) Update for julia 1.11. 
+
 ## 0.3.0 (2 July, 2024)
 
 - HTTP api (GET for RPC, POST for Pub/Sub).
