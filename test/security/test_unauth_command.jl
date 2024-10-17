@@ -7,6 +7,10 @@ function run()
     rb = connect()
     @test_throws RembusTimeout rpc(rb, "version")
     close(rb)
+
+    rb = connect("zmq://:8002/")
+    @test_throws RembusTimeout rpc(rb, "version")
+    close(rb)
 end
 
 try
