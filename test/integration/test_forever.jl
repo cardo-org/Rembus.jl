@@ -18,11 +18,7 @@ function run()
 
     @test Rembus.islistening(
         wait=30,
-        procs=[
-            "$(BROKER_NAME).serve_ws",
-            "$(BROKER_NAME).serve_tcp",
-            "$(BROKER_NAME).serve_zeromq"
-        ]
+        procs=["$(BROKER_NAME).serve_ws"]
     )
 
     @async test_forever()
@@ -30,4 +26,4 @@ function run()
     shutdown()
 end
 
-execute(run, "test_forever")
+execute(run, "test_forever", args=Dict("ws" => 8000))
