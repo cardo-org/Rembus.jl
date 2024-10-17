@@ -1,17 +1,19 @@
 include("../utils.jl")
 
+using Sockets
+
 node = "authenticated_node"
 
 function run()
     authenticated!()
-    rb = connect(node)
+    rb = Rembus.connect(node)
 
     # send a command
     response = rpc(rb, "version")
     @test isa(response, String)
     close(rb)
 
-    rb = connect("zmq://localhost:8002/$node")
+    rb = Rembus.connect("zmq://localhost:8002/$node")
     sleep(2)
     # send a command
     response = rpc(rb, "version")
@@ -19,7 +21,11 @@ function run()
     close(rb)
 
     # anonymous components not allowed
-    @test_throws ErrorException connect()
+    @test_throws ErrorException Rembus.connect()
+
+    # connect without sending any packet
+    sock = Sockets.connect("localhost", 8001)
+    close(sock)
 end
 
 try
