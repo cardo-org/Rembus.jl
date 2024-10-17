@@ -1762,11 +1762,6 @@ function pkfile(name)
 end
 
 function resend_attestate(rb, response)
-    # gate for anonymous node
-    if rb.client.id == "rembus"
-        return nothing
-    end
-
     try
         msg = attestate(rb, response)
         put!(rb.msgch, msg)

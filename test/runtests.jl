@@ -205,9 +205,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "unregister_authenticated" begin
             include("security/test_unregister_authenticated.jl")
         end
-        #        @time @safetestset "nocommands_authenticated" begin
-        #            include("security/test_nocommands_authenticated.jl")
-        #        end
+        @time @safetestset "nocommands_authenticated" begin
+            include("security/test_nocommands_authenticated.jl")
+        end
     end
     if GROUP == "all" || GROUP == "future"
         @time @safetestset "future" begin
@@ -343,6 +343,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "errors"
+        @time @safetestset "invalid_mode" begin
+            include("errors/test_invalid_mode.jl")
+        end
         @time @safetestset "unknown_broker_msg" begin
             include("errors/test_unknown_broker_msg.jl")
         end

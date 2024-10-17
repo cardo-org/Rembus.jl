@@ -92,7 +92,7 @@ function string_to_enum(connection_mode)
     elseif connection_mode == "authenticated"
         return authenticated
     else
-        error("connection_mode: invalid value [$connection_mode]")
+        error("invalid connection_mode [$connection_mode]")
     end
 end
 

@@ -17,6 +17,9 @@ function run()
     response = rpc(rb, "version")
     @test isa(response, String)
     close(rb)
+
+    # anonymous components not allowed
+    @test_throws ErrorException connect()
 end
 
 try

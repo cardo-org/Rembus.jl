@@ -1982,8 +1982,6 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
     server = nothing
     try
         IP = "0.0.0.0"
-        setphase(pd, :listen)
-
         if issecure
             proto = "tls"
             sslconfig = secure_config(router)
@@ -1992,6 +1990,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
         router.server = server
         @info "$(pd.supervisor) up and running at port $proto:$caronte_port"
+        setphase(pd, :listen)
         while true
             sock = accept(server)
             if issecure
