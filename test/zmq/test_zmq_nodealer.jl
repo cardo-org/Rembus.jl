@@ -16,4 +16,4 @@ function run()
     sleep(1)
 end
 
-execute(run, "test_zmq_nodealer", args=Dict("zmq" => 8002))
+execute(run, "test_zmq_nodealer", args=Dict("zmq" => 8002), islistening=["serve_zeromq"])

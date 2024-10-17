@@ -36,4 +36,6 @@ function run()
     @test !called
 end
 
-execute(run, "test_transport_send_error", args=Dict("tcp" => 9000))
+execute(
+    run, "test_transport_send_error", args=Dict("tcp" => 9000), islistening=["test_tcp"]
+)

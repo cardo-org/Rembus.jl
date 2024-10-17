@@ -9,7 +9,12 @@ function run()
 end
 
 try
-    execute(run, "test_nocommands_authenticated", mode="authenticated")
+    execute(
+        run,
+        "test_nocommands_authenticated",
+        mode="authenticated",
+        islistening=["serve_tcp"]
+    )
     @test true
 catch e
     @error "[test_nocommands_authenticated]: $e"
