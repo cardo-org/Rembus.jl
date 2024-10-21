@@ -1467,7 +1467,6 @@ end
 
 Start an embedded server and accept connections.
 """
-#function forever( server::Server; wait=true, name="server", mode=nothing, log=TRACE_INFO, args=Dict()
 function forever(rb::Server)
 
     if !isinteractive()

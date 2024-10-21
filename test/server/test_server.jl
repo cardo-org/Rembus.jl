@@ -31,7 +31,8 @@ function start_server()
     expose(emb, rpc_service)
     expose(emb, rpc_fault)
     expose(emb, signal)
-    @info "server setup completed"
+    @info "$emb setup completed"
+    forever(emb)
 end
 
 
