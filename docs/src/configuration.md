@@ -6,7 +6,7 @@ The broker setup is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
-|`REMBUS_ROOT_DIR`|\$HOME/.config/rembus|data root directory|
+|`REMBUS_DIR`|\$HOME/.config/rembus|data root directory|
 |`BROKER_WS_PORT`|8000|default port for serving WebSocket protocol|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
 |`REMBUS_KEYSTORE`|\$REMBUS\_ROOT\_DIR/keystore| Directory of broker/server certificate `rembus.crt` and broker/server secret key `rembus.key`|
@@ -17,7 +17,7 @@ A Rembus component is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
-|`REMBUS_ROOT_DIR`|\$HOME/.config/rembus|data root directory|
+|`REMBUS_DIR`|\$HOME/.config/rembus|data root directory|
 |`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
 |`REMBUS_DEBUG`|| "1": enable debug traces|
 |`REMBUS_TIMEOUT`|5| Maximum number of seconds waiting for rpc responses|
@@ -35,7 +35,7 @@ broker --name my_broker
 ```
 
 In the following it is assumed the default `caronte` name for the broker: in this
-case the directory `$REMBUS_ROOT_DIR/caronte` contains the broker settings and secret materials.
+case the directory `$REMBUS_DIR/caronte` contains the broker settings and secret materials.
 
 ```sh
 > cd ~/.config/rembus/caronte
@@ -158,51 +158,47 @@ register(component_name, uid, pin, key_type=SIG_RSA)
 
 `key_type` may be equal to `SIG_RSA` for RSA Encryption and equal to `SIG_ECDSA` for Elliptic Curve Digital Signature Algorithm.
 
-`register` requires a username and a pin that must match with one of the users defined in `tenants.json` file. 
+`register` requires a tenant and a pin that must match with one of the users defined in `tenants.json` file. 
 
 `tenants.json` file example:
 
 ```json
 [
     {
-        "uid": "paperoga@topolinia.com",
-        "name": "Fethry Duck",
+        "tenant": "A",
         "pin": "482dc7eb",
         "enabled": true
     },
     {
-        "uid": "paperino@topolinia.com",
-        "name": "Donald Fauntleroy Duck",
+        "tenant": "B",
         "pin": "58e26283",
-        "enabled": true
     },
 
 ]
 ```
 
-`uid` is the username.
+`tenant` is the tenant identifier.
 
 `pin` is a secret token used for authentication. The `pin` column is a 8 digits string 
 composed of numbers and the characters `[a-f]`. 
 
-`name` is an optional string describing the user.
+`enabled` consent to disable the tenant and this does not allow to register new components.
 
-`enabled` consent to disable the user for
-registering components. `enabled` is optional and if not present it defaults to `true`.
+`enabled` is optional and if not present it defaults to `true`.
 
 ### Components ownership
 
-`component_owner.json` contains the mapping between the registered components and
-the user that performed the registration with `register` API.
+`tenant_component.json` contains the mapping between the registered component and
+the tenant to which it belong.
 
-`uid` is the user identity and `component` is the component identifier.
+`tenant` is the tenant identifier and `component` is the component identifier.
 
-For example if the user Paperoga registered the component `foo` then `component_owner.json` 
+For example if the tenant `A` registered the component `foo` then `tenant_component.json` 
 will be:
 
 ```json
 [
-    {"uid": "paperoga@topolinia.com","component": "foo"}    
+    {"tenant": "A","component": "foo"}    
 ]
 ```
 
@@ -210,6 +206,6 @@ will be:
 
 `twins.json` get saved at broker shutdown and contains, for each component,
 the reference for the last message delivered to the component.
-It is a file managed by the broker, do no edit this file. 
+It is a file managed by the broker, do no edit this file.
 
 the files in `messages` directory are parquet files that get saved periodically and at broker shutdown and contain all the published messages.

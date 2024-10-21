@@ -5,8 +5,7 @@ Test a IdentityMsg response timeout
 =#
 
 function run()
-    srv = server()
-    serve(srv, wait=false, args=Dict("ws" => 9000))
+    server(args=Dict("ws" => 9000))
     router = caronte(wait=false, args=Dict("reset" => true, "name" => BROKER_NAME))
     add_server(router, "ws://:9000/s1")
 

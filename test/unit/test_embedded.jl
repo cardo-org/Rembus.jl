@@ -1,9 +1,7 @@
 using Rembus
 using Test
 
-emb = server()
-
-serve(emb, wait=false)
+server()
 @test from("server") !== nothing
 
 shutdown()

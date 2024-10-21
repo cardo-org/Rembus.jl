@@ -75,7 +75,74 @@ end
 
 Initialize a server for brokerless rpc and one way pub/sub.
 """
-server(ctx=nothing) = Server(ctx)
+function server(ctx=nothing; name="server", mode=nothing, log=TRACE_INFO, args=Dict())
+    rb = Server(ctx)
+    if isempty(args)
+        args = command_line(name)
+    end
+
+    expose(rb, "version", (ctx, cmp) -> VERSION)
+
+    name = get(args, "name", name)
+    port = get(args, "ws", nothing)
+    if port === nothing
+        port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+    end
+
+    secure = get(args, "secure", false)
+
+    setup(CONFIG)
+    if mode !== nothing
+        rb.mode = string_to_enum(mode)
+    end
+
+    embedded_sv = from(name)
+
+    if embedded_sv === nothing
+        # first rb process
+        CONFIG.log_level = String(log)
+
+        if haskey(args, "debug") && args["debug"] === true
+            CONFIG.log_level = TRACE_DEBUG
+        end
+
+        init_log()
+        tasks = [
+            supervisor("twins", terminateif=:shutdown),
+            process(
+                "serve:$port",
+                serve_ws,
+                args=(rb, port, secure),
+                restart=:transient,
+                stop_waiting_after=2.0
+            ),
+        ]
+        supervise(
+            [supervisor(name, tasks, strategy=:one_for_one)],
+            intensity=5,
+            wait=false
+        )
+    else
+        p = process(
+            "serve:$port",
+            serve_ws,
+            args=(rb, port, secure),
+            restart=:transient,
+            stop_waiting_after=2.0
+        )
+        Visor.add_node(embedded_sv, p)
+        Visor.start(p)
+    end
+    rb.process = from(name)
+    rb.owners = load_tenants(rb)
+    rb.component_owner = load_token_app(rb)
+
+    #if wait
+    #    supervise()
+    #end
+
+    return rb
+end
 
 msg_dataframe() = DataFrame(
     ptr=UInt[], ts=UInt[], uid=UInt[], topic=String[], pkt=String[]
@@ -1306,6 +1373,7 @@ Overwrite command line arguments if args is not empty.
 function caronte(;
     wait=true,
     mode=nothing,
+    name="caronte",
     log=TRACE_INFO,
     plugin=nothing,
     context=nothing,
@@ -1314,7 +1382,7 @@ function caronte(;
     if isempty(args)
         args = command_line()
     end
-    sv_name = get(args, "name", "caronte")
+    sv_name = get(args, "name", name)
     setup(CONFIG)
     CONFIG.log_level = String(log)
 
@@ -1395,74 +1463,15 @@ function caronted()::Cint
 end
 
 """
-    serve(server::Server; wait=true, secure=false)
+    forever(server::Server; wait=true, secure=false)
 
 Start an embedded server and accept connections.
 """
-function serve(
-    server::Server; wait=true, mode=nothing, log=TRACE_INFO, args=Dict()
-)
-    if isempty(args)
-        args = command_line("server")
-    end
+#function forever( server::Server; wait=true, name="server", mode=nothing, log=TRACE_INFO, args=Dict()
+function forever(rb::Server)
 
-    expose(server, "version", (ctx, cmp) -> VERSION)
-
-    name = get(args, "name", "server")
-    port = get(args, "ws", nothing)
-    if port === nothing
-        port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
-    end
-
-    secure = get(args, "secure", false)
-
-    setup(CONFIG)
-    if mode !== nothing
-        server.mode = string_to_enum(mode)
-    end
-
-    embedded_sv = from(name)
-
-    if embedded_sv === nothing
-        # first server process
-        CONFIG.log_level = String(log)
-
-        if haskey(args, "debug") && args["debug"] === true
-            CONFIG.log_level = TRACE_DEBUG
-        end
-
-        init_log()
-        tasks = [
-            supervisor("twins", terminateif=:shutdown),
-            process(
-                "serve:$port",
-                serve_ws,
-                args=(server, port, secure),
-                restart=:transient,
-                stop_waiting_after=2.0
-            ),
-        ]
-        supervise(
-            [supervisor(name, tasks, strategy=:one_for_one)],
-            intensity=5,
-            wait=false
-        )
-    else
-        p = process(
-            "serve:$port",
-            serve_ws,
-            args=(server, port, secure),
-            restart=:transient,
-            stop_waiting_after=2.0
-        )
-        Visor.add_node(embedded_sv, p)
-        Visor.start(p)
-    end
-    server.process = from(name)
-    server.owners = load_tenants(server)
-    server.component_owner = load_token_app(server)
-    if wait
-        supervise()
+    if !isinteractive()
+        wait(Visor.root_supervisor(rb.process))
     end
 
     return nothing
@@ -1595,7 +1604,7 @@ function listener(proc, caronte_port, router, sslconfig)
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
     router.ws_server = server
     proto = (sslconfig === nothing) ? "ws" : "wss"
-    @info "$(proc.supervisor) up and running at port $proto:$caronte_port"
+    @info "$(proc.supervisor) listening at port $proto:$caronte_port"
 
     setphase(proc, :listen)
 
@@ -1958,7 +1967,7 @@ function serve_zeromq(pd, router, port)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
 
     try
-        @info "$(pd.supervisor) up and running at port zmq:$port"
+        @info "$(pd.supervisor) listening at port zmq:$port"
         setphase(pd, :listen)
         zeromq_receiver(router)
     catch e
@@ -1989,7 +1998,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
         router.server = server
-        @info "$(pd.supervisor) up and running at port $proto:$caronte_port"
+        @info "$(pd.supervisor) listening at port $proto:$caronte_port"
         setphase(pd, :listen)
         while true
             sock = accept(server)

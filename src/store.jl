@@ -20,14 +20,14 @@ function load_tenants(router)
             if !isempty(df)
                 # if not found then set default tenant
                 if columnindex(df, :tenant) == 0
-                    @info "setting default tenant: [$(router.process.supervisor.id)]"
+                    @debug "setting default tenant: [$(router.process.supervisor.id)]"
                     df[!, :tenant] .= router.process.supervisor.id
                 end
                 return df
             end
         end
         @debug "$TENANTS_FILE empty/not found"
-        return DataFrame(pin=String[], tenant=String[], name=[], enabled=Bool[])
+        return DataFrame(pin=String[], tenant=String[], enabled=Bool[])
     finally
         close(db)
     end
@@ -70,7 +70,6 @@ function save_tenants(router, tenants::AbstractString)
     db = DuckDB.DB()
     try
         open(fn, "w") do f
-            #write(f, arraytable(owners_df))
             write(f, tenants)
         end
     catch e
@@ -86,7 +85,7 @@ end
 Return the component_owner dataframe
 =#
 function load_token_app(router)
-    fn = joinpath(broker_dir(router), COMPONENT_TENANT)
+    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
     db = DuckDB.DB()
     try
         if isfile(fn)
@@ -95,7 +94,7 @@ function load_token_app(router)
                 return df
             end
         end
-        @debug "$COMPONENT_TENANT empty/not found"
+        @debug "$TENANT_COMPONENT empty/not found"
         return DataFrame(tenant=String[], component=String[])
     finally
         close(db)
@@ -108,7 +107,7 @@ end
 Save the component_owner table.
 =#
 function save_token_app(router, df)
-    fn = joinpath(broker_dir(router), COMPONENT_TENANT)
+    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
     db = DuckDB.DB()
     try
         open(fn, "w") do f

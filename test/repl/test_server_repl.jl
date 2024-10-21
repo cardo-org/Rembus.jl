@@ -14,9 +14,8 @@ function rpc_service(ctx, session, x, y)
 end
 
 function start_server()
-    emb = server()
-    expose(emb, rpc_service)
-    serve(emb, wait=true, args=Dict("debug" => false))
+    rb = server(args=Dict("debug" => false))
+    expose(rb, rpc_service)
 end
 
 

@@ -186,10 +186,9 @@ end
 mytopic(ctx, rb, n) = nothing
 
 function broker_server()
-    srv = server()
+    srv = server(mode="anonymous", log="error", args=Dict("ws" => 10000))
     expose(srv, mymethod)
     subscribe(srv, mytopic)
-    serve(srv, wait=false, mode="anonymous", log="error", args=Dict("ws" => 10000))
 
     p = from("caronte.broker")
     router = p.args[1]

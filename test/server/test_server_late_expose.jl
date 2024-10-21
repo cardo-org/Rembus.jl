@@ -10,9 +10,8 @@ global emb
 
 function start_server()
     global emb
-    emb = server()
+    emb = server(args=Dict("debug" => true))
     expose(emb, rpc_service)
-    serve(emb, wait=true, args=Dict("debug" => true))
 end
 
 function run()

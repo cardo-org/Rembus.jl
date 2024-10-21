@@ -28,10 +28,9 @@ end
 
 function run()
     ctx = TestBag()
-    srv = server(ctx)
+    srv = server(ctx, mode="anonymous", args=Dict("ws" => 9000))
     expose(srv, mymethod)
     subscribe(srv, mytopic)
-    serve(srv, wait=false, args=Dict("ws" => 9000))
     caronte(wait=false, args=Dict("name" => BROKER_NAME))
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])

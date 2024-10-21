@@ -25,8 +25,7 @@ end
 function run_embedded()
     try
         # set name to BROKER_NAME to get the secret
-        rb = server()
-        serve(rb, name=BROKER_NAME, wait=false)
+        server(name=BROKER_NAME)
 
         connect(cid)
         @test false

@@ -264,7 +264,7 @@ A server accepting connections may be setup with these lines:
     expose(rb, power)
     expose(rb, set_exponent)
     
-    serve(rb, wait=true)
+    forever(rb)
 ```
 
 The exposed method have the following signature:

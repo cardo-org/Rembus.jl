@@ -26,7 +26,7 @@ const SIG_ECDSA = 0x2
 const CONNECTION_ID = 0x12345678961deadbeef123456789
 
 const TENANTS_FILE = "tenants.json"
-const COMPONENT_TENANT = "tenant_component.json"
+const TENANT_COMPONENT = "tenant_component.json"
 
 const BROKER_CONFIG = "__config__"
 const CID = "cid"

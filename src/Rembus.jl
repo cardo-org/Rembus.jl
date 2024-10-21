@@ -52,7 +52,6 @@ export component
 export connect
 export isauthenticated
 export server
-export serve
 export expose, unexpose
 export subscribe, unsubscribe
 export direct
@@ -1124,7 +1123,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
             @info "[$pd] reconnected"
             last_error.msg = nothing
         end
-
+        setphase(pd, :up)
         for msg in pd.inbox
             @debug "[$pd] recv: $msg"
             if isshutdown(msg)
@@ -1132,7 +1131,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
             elseif isa(msg, Exception)
                 throw(msg)
             elseif isrequest(msg)
-                setphase(pd, :up)
+                #setphase(pd, :up)
                 req = msg.request
                 if isa(req, SetHolder)
                     result = shared(rb, msg.request.shared)
@@ -1538,12 +1537,14 @@ function read_socket(socket, process, rb, isconnected::Condition)
         end
     catch e
         @debug "[$(rb.client.id)] connection closed: $e"
-        if !isa(e, HTTP.WebSockets.WebSocketError) ||
-           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
-           e.message.status != 1000
-            @showerror e
-            processput!(process, e)
-        end
+        processput!(process, e)
+        @showerror e
+        #        if !isa(e, HTTP.WebSockets.WebSocketError) ||
+        #           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
+        #           e.message.status != 1000
+        #            @showerror e
+        #            processput!(process, e)
+        #        end
     end
 end
 
@@ -1786,7 +1787,7 @@ end
 function attestate(rb, response)
     file = pkfile(rb.client.id)
     if !isfile(file)
-        error("unable to find $(rb.client.id) secret")
+        error("missing/invalid $(rb.client.id) secret")
     end
 
     try

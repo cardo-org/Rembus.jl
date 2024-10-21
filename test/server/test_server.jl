@@ -31,17 +31,19 @@ function start_server()
     expose(emb, rpc_service)
     expose(emb, rpc_fault)
     expose(emb, signal)
-    serve(emb, wait=true, args=Dict("debug" => true))
+    @info "server setup completed"
 end
 
 
 function run()
     try
+        # set large timeout because coverage.jl is slow
+        @rpc_timeout 30
+
         @async start_server()
-        sleep(2)
+        is_up = Rembus.islistening(procs=["server.serve:8000"])
         result = @rpc rpc_service(1, 2)
         @test result == 3
-
         df = @rpc df_service()
         @test isa(df, DataFrame)
 

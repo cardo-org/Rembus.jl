@@ -7,7 +7,7 @@ using DataFrames
 function init(server_name, tenant, pin)
     broker_dir = Rembus.broker_dir(server_name)
     df = DataFrame(
-        pin=String[pin], tenant=String[tenant], name=["Test"], enabled=Bool[true]
+        pin=String[pin], tenant=String[tenant], enabled=Bool[true]
     )
     if !isdir(broker_dir)
         mkdir(broker_dir)
@@ -24,8 +24,7 @@ function run()
 
     init(server_name, tenant, pin)
 
-    srv = server()
-    serve(srv, wait=false, args=Dict("name" => server_name))
+    server(args=Dict("name" => server_name))
 
     Rembus.register(cid, pin, tenant=tenant)
 
@@ -58,8 +57,7 @@ function login_failed()
         write(server_side_secret, "aaa")
         write(Rembus.pkfile(cid), "bbb")
 
-        srv = server()
-        serve(srv, wait=false, args=Dict("name" => server_name))
+        server(args=Dict("name" => server_name))
         @test_throws RembusError connect(cid)
     finally
         rm(server_side_secret)

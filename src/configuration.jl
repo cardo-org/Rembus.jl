@@ -105,7 +105,7 @@ function setup(setting)
     setting.ws_ping_interval = get(cfg, "ws_ping_interval",
         parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
 
-    setting.rembus_dir = get(cfg, "rembus_dir", get(ENV, "REMBUS_ROOT_DIR", rembus_dir()))
+    setting.rembus_dir = get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", rembus_dir()))
     setting.log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)
@@ -142,4 +142,6 @@ function setup(setting)
     return nothing
 end
 
-const global CONFIG = Rembus.Settings()
+#
+#const global CONFIG = Rembus.Settings()
+const CONFIG = Settings()
