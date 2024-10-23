@@ -2,8 +2,8 @@ include("../utils.jl")
 
 function run()
     url = "ws://:9000/s1"
-    server(args=Dict("ws" => 9000))
-    router = caronte(wait=false, args=Dict("name" => BROKER_NAME, "reset" => true))
+    server(ws=9000)
+    router = caronte(wait=false, name=BROKER_NAME, reset=true)
     add_server(router, url)
     @test isa(from(url), Visor.Process)
     sleep(1)

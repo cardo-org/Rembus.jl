@@ -68,5 +68,5 @@ end
 
 # for coverage runs
 ENV["REMBUS_TIMEOUT"] = 30
-execute(run, "test_http")
+execute(run, "test_http", http=9000)
 delete!(ENV, "REMBUS_TIMEOUT")

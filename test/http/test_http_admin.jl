@@ -116,8 +116,7 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        args = Dict("secure" => true, "http" => 9000)
-        execute(run, "test_http_admin", setup=setup_admin, args=args)
+        execute(run, "test_http_admin", setup=setup_admin, secure=true, http=9000)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

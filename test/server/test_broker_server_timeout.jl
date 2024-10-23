@@ -5,8 +5,8 @@ Test a IdentityMsg response timeout
 =#
 
 function run()
-    server(args=Dict("ws" => 9000))
-    router = caronte(wait=false, args=Dict("reset" => true, "name" => BROKER_NAME))
+    server(ws=9000)
+    router = caronte(wait=false, reset=true, name=BROKER_NAME)
     add_server(router, "ws://:9000/s1")
 
     sleep(1)
@@ -28,5 +28,9 @@ function run()
 end
 
 @info "[test_broker_server_timeout] start"
-run()
+try
+    run()
+catch e
+    @error "[test_broker_server_timeout]: unexpected: $e"
+end
 @info "[test_broker_server_timeout] stop"

@@ -25,4 +25,4 @@ function run()
 end
 
 connection_failed()
-execute(run, "test_simple_rpc", args=Dict("ws" => 8000))
+execute(run, "test_simple_rpc", ws=8000)

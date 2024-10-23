@@ -1,17 +1,21 @@
 include("../utils.jl")
 
-function rpc_service(ctx, session, x, y)
+function rpc_service(x, y)
     return x + y
 end
 
-late_topic(ctx, rb) = return 100;
+late_topic() = return 100;
 
 global emb
 
 function start_server()
     global emb
-    emb = server(args=Dict("debug" => true))
-    expose(emb, rpc_service)
+    try
+        emb = server(log="debug")
+        expose(emb, rpc_service)
+    catch e
+        @error "[test_server_late_expose] error: $e"
+    end
 end
 
 function run()

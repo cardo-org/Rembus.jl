@@ -72,7 +72,7 @@ function run()
         wait=false,
         plugin=CarontePlugin,
         context=PluginCtx(nothing),
-        args=Dict("name" => BROKER_NAME)
+        name=BROKER_NAME
     )
     sleep(2)
 

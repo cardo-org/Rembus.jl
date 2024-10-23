@@ -5,16 +5,16 @@ using HTTP
 
 Base.isinteractive() = true
 
-function rpc_service(ctx, session, x)
+function rpc_service(x)
     return x
 end
 
-function rpc_service(ctx, session, x, y)
+function rpc_service(x, y)
     return x + y
 end
 
 function start_server()
-    rb = server(args=Dict("debug" => false))
+    rb = server(log="debug")
     expose(rb, rpc_service)
 end
 

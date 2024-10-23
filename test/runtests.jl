@@ -218,6 +218,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "supervised_api" begin
             include("api/test_supervised_api.jl")
         end
+        @time @safetestset "component_tomany" begin
+            include("api/test_component_tomany.jl")
+        end
         @time @safetestset "component" begin
             include("api/test_component.jl")
         end

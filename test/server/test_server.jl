@@ -3,22 +3,22 @@ include("../utils.jl")
 using DataFrames
 using HTTP
 
-function df_service(ctx, session)
+function df_service()
     DataFrame(x=1:10)
 end
 
-function rpc_service(ctx, session, x, y)
+function rpc_service(x, y)
     return x + y
 end
 
-function rpc_fault(ctx, session, x::Integer, y::Integer)
+function rpc_fault(x::Integer, y::Integer)
     return x // y
 end
 
 smoke_message = "ola"
 received = false
 
-function signal(ctx, session, name)
+function signal(name)
     global received
     @atest name == smoke_message "expected name == $smoke_message"
     received = true
@@ -26,7 +26,7 @@ end
 
 
 function start_server()
-    emb = server()
+    emb = server(ws=8000, tcp=8001)
     expose(emb, df_service)
     expose(emb, rpc_service)
     expose(emb, rpc_fault)

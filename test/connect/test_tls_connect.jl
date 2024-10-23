@@ -35,17 +35,16 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        args = Dict("secure" => true, "tcp" => 8001, "ws" => 8000)
-        execute(run, "test_tls_connect", args=args)
+        execute(run, "test_tls_connect", secure=true, tcp=8001, ws=8000)
 
         delete!(ENV, "HTTP_CA_BUNDLE")
-        execute(no_cacert, "test_tls_connect_no_cacert", args=args)
+        execute(no_cacert, "test_tls_connect_no_cacert", secure=true, tcp=8001, ws=8000)
 
         # test rembus_ca() method
         target_dir = joinpath(Rembus.rembus_dir(), "ca")
         mkpath(target_dir)
         mv(joinpath(test_keystore, REMBUS_CA), joinpath(target_dir, REMBUS_CA), force=true)
-        execute(run, "test_tls_connect", args=args)
+        execute(run, "test_tls_connect", secure=true, tcp=8001, ws=8000)
 
         # create a ca cert that does not signed the original certificate
         cacert = joinpath(target_dir, REMBUS_CA)
@@ -56,7 +55,7 @@ else
             -subj "/CN=Rembus/C=IT/L=Trento" \
             -keyout /dev/null -out $cacert`)
 
-        execute(no_cacert, "test_tls_connect_invalid_cacert", args=args)
+        execute(no_cacert, "test_tls_connect_invalid_cacert", secure=true, tcp=8001, ws=8000)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

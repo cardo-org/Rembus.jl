@@ -1,14 +1,14 @@
 include("../utils.jl")
 
-function myservice1(ctx, session, x)
+function myservice1(x)
     sleep(1)
     x + 1
 end
 
-myservice2(ctx, session, x) = x * x
+myservice2(x) = x * x
 
 function start_server(port, fn)
-    emb = server(args=Dict("ws" => port))
+    emb = server(ws=port)
     expose(emb, "myservice", fn)
 end
 

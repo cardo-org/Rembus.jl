@@ -26,4 +26,4 @@ function run()
     shutdown()
 end
 
-execute(run, "test_forever", args=Dict("ws" => 8000))
+execute(run, "test_forever", ws=8000)

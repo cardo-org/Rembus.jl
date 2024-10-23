@@ -76,7 +76,7 @@ function run(client_url, server1_url, server2_url, server3_url)
     end
 end
 
-ENV["BROKER_BALANCER"] = "round_robin"
+ENV["REMBUS_BALANCER"] = "round_robin"
 
 function run()
     run("rr_client", "rr_server_1", "rr_server_2", "rr_server_3")
@@ -84,4 +84,4 @@ function run()
 end
 
 execute(run, "test_round_robin")
-ENV["BROKER_BALANCER"] = "first_up"
+ENV["REMBUS_BALANCER"] = "first_up"

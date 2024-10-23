@@ -54,7 +54,7 @@ else
         execute(
             () -> run(cid), "test_wrong_secret",
             setup=() -> setup(cid),
-            args=Dict("secure" => true, "ws" => 9000)
+            secure=true, ws=9000
         )
 
     finally

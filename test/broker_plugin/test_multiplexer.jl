@@ -31,14 +31,14 @@ function run(exposer_url, secure=false)
     # main broker
     caronte(
         wait=false,
-        args=Dict("name" => "main_broker", "reset" => true, "secure" => secure)
+        name="main_broker", reset=true, secure=secure
     )
     yield()
 
     caronte(
         wait=false,
         plugin=Broker,
-        args=Dict("name" => "edge_broker", "ws" => 9000, "secure" => secure))
+        name="edge_broker", ws=9000, secure=secure)
     yield()
 
     if secure
@@ -49,7 +49,7 @@ function run(exposer_url, secure=false)
         broker_url = "ws://:8000/combo"
     end
 
-    Rembus.egress(broker_url, "edge_broker")
+    Rembus.connect_to(broker_url, "edge_broker")
 
     @component exposer_url
     @expose foo
@@ -68,9 +68,11 @@ end
 
 ENV["REMBUS_CONNECT_TIMEOUT"] = 10
 
-run("ws://:9000/server")
-shutdown()
-Visor.dump()
+try
+    run("ws://:9000/server")
+finally
+    shutdown()
+end
 
 if Base.Sys.iswindows()
     @info "Windows platform detected: skipping test_multiplexer"
@@ -84,7 +86,6 @@ else
         Base.run(`$script -k $test_keystore`)
         run("wss://:9000/server", true)
         shutdown()
-        Visor.dump()
         # unsetting HTTP_CA_BUNDLE implies that ws_connect throws an error
         delete!(ENV, "HTTP_CA_BUNDLE")
         run("wss://:9000/server", true)

@@ -116,7 +116,7 @@ function run(ok_cid, ko_cid)
         wait=false,
         plugin=CarontePlugin,
         context=ctx,
-        args=Dict("name" => BROKER_NAME)
+        name=BROKER_NAME
     )
     sleep(2)
 

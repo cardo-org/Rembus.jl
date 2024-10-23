@@ -32,21 +32,20 @@ end
 function run(exposer_url)
     # main broker
     caronte(
-        wait=false,
-        args=Dict("name" => "main_broker", "reset" => true)
+        wait=false, name="main_broker", reset=true
     )
     yield()
 
     caronte(
         wait=false,
         plugin=Broker,
-        args=Dict("name" => "edge_broker", "ws" => 9000))
+        name="edge_broker", ws=9000)
     yield()
 
     #    cli_url = "ws://:8000/client"
     broker_url = "ws://:8000/combo"
 
-    Rembus.egress(broker_url, "edge_broker")
+    Rembus.connect_to(broker_url, "edge_broker")
     sleep(1)
     @info "shutting down main broker"
 
@@ -62,7 +61,7 @@ function run(exposer_url)
     # reconnect
     caronte(
         wait=false,
-        args=Dict("name" => "main_broker", "reset" => true)
+        name="main_broker", reset=true
     )
     sleep(5)
     p = from(broker_url)
@@ -70,6 +69,9 @@ function run(exposer_url)
 end
 
 ENV["REMBUS_CONNECT_TIMEOUT"] = 20
-run("ws://:9000/server")
-shutdown()
+try
+    run("ws://:9000/server")
+finally
+    shutdown()
+end
 delete!(ENV, "REMBUS_CONNECT_TIMEOUT")

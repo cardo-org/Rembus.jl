@@ -37,5 +37,5 @@ function run()
 end
 
 execute(
-    run, "test_transport_send_error", args=Dict("tcp" => 9000), islistening=["test_tcp"]
+    run, "test_transport_send_error", tcp=9000, ws=nothing, zmq=nothing, islistening=["test_tcp"]
 )

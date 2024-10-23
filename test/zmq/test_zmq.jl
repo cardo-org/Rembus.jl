@@ -31,7 +31,7 @@ function run()
 
     # restart caronte
     # trigger a resend_attestate()
-    Rembus.caronte(wait=false, args=Dict("name" => BROKER_NAME, "zmq" => 8002))
+    Rembus.caronte(wait=false, name=BROKER_NAME, zmq=8002)
     sleep(2)
 end
 

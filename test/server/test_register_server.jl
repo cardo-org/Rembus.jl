@@ -24,7 +24,7 @@ function run()
 
     init(server_name, tenant, pin)
 
-    server(args=Dict("name" => server_name))
+    server(name=server_name)
 
     Rembus.register(cid, pin, tenant=tenant)
 
@@ -57,7 +57,7 @@ function login_failed()
         write(server_side_secret, "aaa")
         write(Rembus.pkfile(cid), "bbb")
 
-        server(args=Dict("name" => server_name))
+        server(name=server_name)
         @test_throws RembusError connect(cid)
     finally
         rm(server_side_secret)
@@ -69,4 +69,6 @@ end
 
 run()
 
+@info "[test_register_server] start"
 login_failed()
+@info "[test_register_server] stop"

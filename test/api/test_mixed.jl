@@ -48,5 +48,5 @@ function run()
 end
 
 ENV["REMBUS_DEBUG"] = "1"
-execute(run, "test_mixed", args=Dict("ws" => 8000, "zmq" => 8002, "debug" => true))
+execute(run, "test_mixed", ws=8000, zmq=8002, log="debug")
 delete!(ENV, "REMBUS_DEBUG")

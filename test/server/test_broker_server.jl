@@ -1,10 +1,10 @@
 include("../utils.jl")
 
-function mymethod(ctx, rb, n)
+function mymethod(ctx, n)
     return n + 1
 end
 
-function mytopic(ctx, rb, n)
+function mytopic(ctx, n)
     ctx.n = n
 end
 
@@ -28,10 +28,10 @@ end
 
 function run()
     ctx = TestBag()
-    srv = server(ctx, mode="anonymous", args=Dict("ws" => 9000))
+    srv = server(ctx, mode="anonymous", ws=9000)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
-    caronte(wait=false, args=Dict("name" => BROKER_NAME))
+    caronte(wait=false, name=BROKER_NAME)
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
 

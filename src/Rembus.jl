@@ -140,6 +140,8 @@ end
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
+cid(c::Component) = brokerurl(c) * "/$(c.id)"
+
 mutable struct DBHandler
     db::DuckDB.DB
     msg_stmt::DuckDB.Stmt
@@ -212,7 +214,7 @@ end
 Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
 
 opstatus(rb::RBHandle) = isconnected(rb) ? '👍' : '👎'
-rbinfo(rb::RBHandle) = "$(rb.client.id)$(opstatus(rb))"
+rbinfo(rb::RBHandle) = "$(cid(rb.client))$(opstatus(rb))"
 rbinfo(rb::Visor.Process) = "$rb$(opstatus(rb.args[1]))"
 
 function Base.show(io::IO, rb::RBConnection)
@@ -232,17 +234,20 @@ end
 abstract type AbstractRouter end
 
 mutable struct Server <: AbstractRouter
+    shared::Any
     mode::ConnectionMode
     start_ts::Float64
     topic_function::Dict{String,Function}
     subinfo::Dict{String,Bool}
     id_twin::Dict
-    context::Any
     process::Visor.Supervisor
+    server::Sockets.TCPServer
+    http_server::HTTP.Server
     ws_server::Sockets.TCPServer
+    zmqsocket::ZMQ.Socket
     owners::DataFrame
     component_owner::DataFrame
-    Server(context=nothing) = new(anonymous, time(), Dict(), Dict(), Dict(), context)
+    Server(shared=missing) = new(shared, anonymous, time(), Dict(), Dict(), Dict())
 end
 
 function Base.show(io::IO, srv::Server)
@@ -262,7 +267,7 @@ mutable struct RBServerConnection <: RBHandle
     isauth::Bool
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
-    context::Union{Nothing,ZMQ.Context}
+    #context::Union{Nothing,ZMQ.Context}
     RBServerConnection(server::Server, name::String) = new(
         nothing,
         server,
@@ -276,12 +281,12 @@ mutable struct RBServerConnection <: RBHandle
         false,
         Dict(),
         Dict(),
-        nothing
+        #nothing
     )
 end
 
 function Base.show(io::IO, rb::RBServerConnection)
-    return print(io, "srv component [$(rb.client.id)], isconnected: $(isconnected(rb))")
+    return print(io, "srv component [$(cid(rb.client))], isconnected: $(isconnected(rb))")
 end
 
 mutable struct RBPool <: RBHandle
@@ -1120,7 +1125,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
         @debug "starting rembus process: $pd, protocol:$protocol"
         init_fn(pd, rb)
         if last_error.msg !== nothing
-            @info "[$pd] reconnected"
+            @debug "[$pd] (re)connected"
             last_error.msg = nothing
         end
         setphase(pd, :up)
@@ -1280,9 +1285,17 @@ end
 
 function invoke(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
     if isa(msg.data, Vector)
-        return STS_SUCCESS, get_callback(rb, topic)(rb.router.context, rb, msg.data...)
+        if rb.router.shared === missing
+            return STS_SUCCESS, get_callback(rb, topic)(msg.data...)
+        else
+            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, msg.data...)
+        end
     else
-        return STS_SUCCESS, get_callback(rb, topic)(rb.router.context, rb, msg.data)
+        if rb.router.shared === missing
+            return STS_SUCCESS, get_callback(rb, topic)(msg.data)
+        else
+            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, msg.data)
+        end
     end
 end
 
@@ -1315,14 +1328,25 @@ end
 
 function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
     if isa(msg.data, Vector)
-        return STS_SUCCESS, Base.invokelatest(
-            get_callback(rb, topic), rb.router.context, rb, msg.data...
-        )
+        if rb.router.shared === missing
+            return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data...)
+        else
+            return (
+                STS_SUCCESS, Base.invokelatest(
+                    get_callback(rb, topic), rb.router.shared, msg.data...
+                )
+            )
+        end
     else
-        return STS_SUCCESS, Base.invokelatest(
-            get_callback(rb, topic), rb.router.context, rb, msg.data
-        )
+        if rb.router.shared === missing
+            return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data)
+        else
+            return STS_SUCCESS, Base.invokelatest(
+                get_callback(rb, topic), rb.router.shared, msg.data
+            )
+        end
     end
+
 end
 
 #=
@@ -1369,7 +1393,7 @@ function rembus_handler(rb::RBHandle, msg, receiver)
 end
 
 function handle_input(rb, msg)
-    #@debug "<< [$(rb.client.id)] <- $msg"
+    #@debug "<< [$(cid(rb.client))] <- $msg"
     if rb.ingress !== nothing
         msg = rb.ingress(rb, msg)
         if msg === nothing
@@ -1531,12 +1555,12 @@ function read_socket(socket, process, rb, isconnected::Condition)
             if !isempty(response)
                 parse_msg(rb, response)
             else
-                @debug "[$(rb.client.id)] connection closed"
+                @debug "[$(cid(rb.client))] connection closed"
                 close(socket)
             end
         end
     catch e
-        @debug "[$(rb.client.id)] connection closed: $e"
+        @debug "[$(cid(rb.client))] connection closed: $e"
         processput!(process, e)
         @showerror e
         #        if !isa(e, HTTP.WebSockets.WebSocketError) ||
@@ -1598,7 +1622,7 @@ function read_socket(socket, process, rb::RBServerConnection)
             end
         end
     catch e
-        @debug "[$(rb.client.id)] connection closed: $e"
+        @debug "[$(cid(rb.client))] connection closed: $e"
         if isa(e, EOFError) ||
            (
             isa(e, HTTP.WebSockets.WebSocketError) &&
@@ -1650,7 +1674,7 @@ function write_task(rb::RBHandle)
         rb.socket = nothing
         close(rb.msgch)
     end
-    @debug "[$(rb.client.id)] write_task done"
+    @debug "[$(cid(rb.client))] write_task done"
 end
 
 function ws_connect(rb, process, isconnected::Condition)
@@ -1900,7 +1924,7 @@ function ws_ping(rb)
 end
 
 function rembus_write(rb::RBHandle, msg)
-    @debug ">> [$(rb.client.id)] -> $msg"
+    @debug ">> [$(cid(rb.client))] -> $msg"
     return transport_send(rb, rb.socket, msg)
 end
 
@@ -1936,10 +1960,10 @@ function connect(rb::RBConnection)
                 error("anonymous components not allowed")
             end
             task = @async connection_inquiry(rb)
-            _connect(rb, NullProcess(rb.client.id))
+            _connect(rb, NullProcess(cid(rb.client)))
             wait(task)
         else
-            _connect(rb, NullProcess(rb.client.id))
+            _connect(rb, NullProcess(cid(rb.client)))
             authenticate(rb)
         end
     end
@@ -2279,14 +2303,37 @@ until successful outcome.
 """
 function component(url=getcomponent())
     rb = Rembus.RBConnection(url)
+    return component(rb)
+end
 
-    p = process(rb.client.id, Rembus.client_task,
+function component(rb::RBConnection)
+    p = process(cid(rb.client), Rembus.client_task,
         args=(rb,), debounce_time=2, restart=:transient)
 
     supervise(
         p, intensity=3, wait=false
     )
     return p
+end
+
+function component(rb::RBPool)
+    for c in rb.connections
+        component(c)
+    end
+
+    return rb
+end
+
+"""
+    component(urls::Vector)
+
+Connect component to remotes defined be `urls` array.
+
+The connection pool is supervised.
+"""
+function component(urls::Vector)
+    pool = RBPool([RBConnection(url) for url in urls])
+    return component(pool)
 end
 
 terminate(proc::Visor.Process) = shutdown(proc)
@@ -2482,7 +2529,7 @@ function zmq_ping(rb::RBConnection)
             CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     catch e
-        @debug "[$(rb.client.id)]: pong not received"
+        @debug "[$(cid(rb.client))]: pong not received"
         @showerror e
     end
 
@@ -2676,20 +2723,50 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     return res
 end
 
+
+function pick_connections(handle::RBPool, msg)
+    if CONFIG.balancer === "first_up"
+        return [first_up(handle, msg.topic, handle.connections)]
+    elseif CONFIG.balancer === "round_robin"
+        return [round_robin(handle, msg.topic, handle.connections)]
+    elseif CONFIG.balancer === "less_busy"
+        return [less_busy(handle, msg.topic, handle.connections)]
+    end
+
+    # pick all
+    return handle.connections
+end
+
 # Send a RpcReqMsg message to rembus and return the response.
 function rpcreq(
     handle::RBHandle, msg;
     exceptionerror=true, timeout=request_timeout(), wait=true
 )
     !isconnected(handle) && error("connection is down")
-
+    #@info "$msg: BALANCER=$(CONFIG.balancer)"
     if isa(handle, RBPool)
         if CONFIG.balancer === "first_up"
             rb = first_up(handle, msg.topic, handle.connections)
         elseif CONFIG.balancer === "round_robin"
             rb = round_robin(handle, msg.topic, handle.connections)
-        else
+        elseif CONFIG.balancer === "less_busy"
             rb = less_busy(handle, msg.topic, handle.connections)
+        else
+            responses = []
+            for rb in handle.connections
+                if wait
+                    response = wait_response(rb, msg, timeout)
+                    result = get_response(rb, msg, response, exceptionerror=exceptionerror)
+                    value = isa(result, RembusTimeout) ? missing : result
+                    push!(
+                        responses,
+                        value
+                    )
+                else
+                    push!(responses, send_request(rb, msg))
+                end
+            end
+            return responses
         end
     else
         rb = handle
@@ -2701,6 +2778,27 @@ function rpcreq(
     else
         return send_request(rb, msg)
     end
+
+
+
+    #    if isa(handle, RBPool)
+    #        if CONFIG.balancer === "first_up"
+    #            rb = first_up(handle, msg.topic, handle.connections)
+    #        elseif CONFIG.balancer === "round_robin"
+    #            rb = round_robin(handle, msg.topic, handle.connections)
+    #        else
+    #            rb = less_busy(handle, msg.topic, handle.connections)
+    #        end
+    #    else
+    #        rb = handle
+    #    end
+    #
+    #    if wait
+    #        response = wait_response(rb, msg, timeout)
+    #        return get_response(rb, msg, response, exceptionerror=exceptionerror)
+    #    else
+    #        return send_request(rb, msg)
+    #    end
 end
 
 function get_response(rb, msg, response; exceptionerror=true)
@@ -2790,13 +2888,11 @@ end
             wait=false,
             mode="anonymous",
             log="error",
-            args=Dict(
-                "ws" => 8000,
-                "tcp" => 8001,
-                "zmq" => 8002,
-                "http" => 9000,
-                "reset" => true
-            )
+            ws=8000,
+            tcp=8001,
+            zmq=8002,
+            http=9000,
+            reset=true
         )
         yield()
         Rembus.islistening(wait=20)

@@ -44,7 +44,7 @@ else
         execute(
             () -> run(cid), "test_no_http_ca_bundle",
             setup=() -> setup(cid),
-            args=Dict("secure" => true, "ws" => 9000)
+            secure=true, ws=9000
         )
 
     finally

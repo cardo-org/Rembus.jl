@@ -16,22 +16,33 @@ const REMBUS_CA = "rembus-ca.crt"
 
 results = []
 
-macro start_caronte(init, args, reset, mode)
+macro start_caronte(init, secure, ws, tcp, zmq, http, name, reset, mode, log)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
-        params = $(esc(args))
         if !running
-            name = get(params, "name", BROKER_NAME)
-            $(esc(reset)) && Rembus.caronte_reset(name)
+            if $(esc(reset))
+                Rembus.caronte_reset($(esc(name)))
+            end
             fn = $(esc(init))
             if fn !== nothing
                 fn()
             end
 
-            Rembus.caronte(wait=false, mode=$(esc(mode)), args=params)
+            Rembus.caronte(
+                wait=false,
+                secure=$(esc(secure)),
+                ws=$(esc(ws)),
+                tcp=$(esc(tcp)),
+                zmq=$(esc(zmq)),
+                http=$(esc(http)),
+                name=$(esc(name)),
+                mode=$(esc(mode)),
+                log=$(esc(log))
+            )
         end
     end
 end
+
 
 macro atest(expr, descr=nothing)
     if descr === nothing
@@ -71,11 +82,16 @@ function execute(
     reset=true,
     setup=nothing,
     islistening=["serve_ws"],
-    args=Dict("ws" => 8000, "tcp" => 8001, "zmq" => 8002, "http" => 9000)
+    ws=8000,
+    tcp=8001,
+    zmq=8002,
+    http=nothing,
+    secure=false,
+    log="info"
 )
     Rembus.setup(Rembus.CONFIG)
 
-    @start_caronte setup merge(args, Dict("name" => BROKER_NAME)) reset mode
+    @start_caronte setup secure ws tcp zmq http BROKER_NAME reset mode log
     sleep(0.5)
     procs = ["$BROKER_NAME.$proc" for proc in islistening]
     Rembus.islistening(

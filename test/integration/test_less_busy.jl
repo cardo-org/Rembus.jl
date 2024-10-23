@@ -60,7 +60,7 @@ function run(client_url, server1_url, server2_url, server3_url)
     end
 end
 
-ENV["BROKER_BALANCER"] = "less_busy"
+ENV["REMBUS_BALANCER"] = "less_busy"
 
 function run()
     run("lb_client", "lb_server_1", "lb_server_2", "lb_server_3")
@@ -68,4 +68,4 @@ function run()
 end
 
 execute(run, "test_less_busy")
-ENV["BROKER_BALANCER"] = "first_up"
+ENV["REMBUS_BALANCER"] = "first_up"

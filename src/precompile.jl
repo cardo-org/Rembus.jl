@@ -179,14 +179,14 @@ function types()
     @terminate TYPE_LISTENER
 end
 
-function mymethod(ctx, rb, n)
+function mymethod(n)
     return n + 1
 end
 
-mytopic(ctx, rb, n) = nothing
+mytopic(n) = nothing
 
 function broker_server()
-    srv = server(mode="anonymous", log="error", args=Dict("ws" => 10000))
+    srv = server(mode="anonymous", log="error", ws=10000)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
 

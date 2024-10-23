@@ -71,33 +71,105 @@ struct SentData
 end
 
 """
-    server(ctx=nothing)
+    server(
+        ctx=nothing;
+        secure=false,
+        ws=nothing,
+        tcp=nothing,
+        name="server",
+        mode=nothing,
+        log=TRACE_INFO
+    )
 
-Initialize a server for brokerless rpc and one way pub/sub.
+Initialize a server node.
 """
-function server(ctx=nothing; name="server", mode=nothing, log=TRACE_INFO, args=Dict())
-    rb = Server(ctx)
-    if isempty(args)
-        args = command_line(name)
-    end
+function server(
+    shared=missing;
+    secure=false,
+    ws=nothing,
+    tcp=nothing,
+    http=nothing,
+    name="server",
+    mode=nothing,
+    log=TRACE_INFO
+)
+    rb = Server(shared)
 
-    expose(rb, "version", (ctx, cmp) -> VERSION)
+    args = command_line(name)
 
-    name = get(args, "name", name)
-    port = get(args, "ws", nothing)
-    if port === nothing
-        port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
-    end
+    expose(rb, "version", () -> VERSION)
 
-    secure = get(args, "secure", false)
+    name = getparam(args, "name", name)
+    ws_port = getparam(args, "ws", ws)
+
+    issecure = getparam(args, "secure", secure)
 
     setup(CONFIG)
     if mode !== nothing
         rb.mode = string_to_enum(mode)
     end
 
-    embedded_sv = from(name)
+    acceptors = []
 
+    http_port = getparam(args, "http", http)
+    if http_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_http,
+                args=(rb, http_port, issecure),
+                restart=:transient
+            )
+        )
+    end
+
+    tcp_port = getparam(args, "tcp", tcp)
+    if tcp_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_tcp,
+                args=(rb, tcp_port, issecure),
+                restart=:transient
+            )
+        )
+    end
+
+    #=
+    zmq_port = getparam(args, "zmq", zmq)
+    if zmq_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_zeromq,
+                args=(rb, zmq_port),
+                restart=:transient,
+                debounce_time=2
+            )
+        )
+        end
+    =#
+
+
+    ws_port = getparam(args, "ws", ws)
+    if ws_port !== nothing || tcp_port === nothing
+        if ws_port === nothing
+            ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+        end
+
+        push!(
+            acceptors,
+            process(
+                "serve:$ws_port",
+                serve_ws,
+                args=(rb, ws_port, issecure),
+                restart=:transient,
+                stop_waiting_after=2.0
+            )
+        )
+    end
+
+    embedded_sv = from(name)
     if embedded_sv === nothing
         # first rb process
         CONFIG.log_level = String(log)
@@ -107,39 +179,22 @@ function server(ctx=nothing; name="server", mode=nothing, log=TRACE_INFO, args=D
         end
 
         init_log()
-        tasks = [
-            supervisor("twins", terminateif=:shutdown),
-            process(
-                "serve:$port",
-                serve_ws,
-                args=(rb, port, secure),
-                restart=:transient,
-                stop_waiting_after=2.0
-            ),
-        ]
+        tasks = Visor.Supervised[supervisor("twins", terminateif=:shutdown)]
+        append!(tasks, acceptors)
         supervise(
             [supervisor(name, tasks, strategy=:one_for_one)],
             intensity=5,
             wait=false
         )
     else
-        p = process(
-            "serve:$port",
-            serve_ws,
-            args=(rb, port, secure),
-            restart=:transient,
-            stop_waiting_after=2.0
-        )
-        Visor.add_node(embedded_sv, p)
-        Visor.start(p)
+        for acceptor in acceptors
+            Visor.add_node(embedded_sv, acceptor)
+            Visor.start(acceptor)
+        end
     end
     rb.process = from(name)
     rb.owners = load_tenants(rb)
     rb.component_owner = load_token_app(rb)
-
-    #if wait
-    #    supervise()
-    #end
 
     return rb
 end
@@ -400,7 +455,7 @@ session(twin::Twin) = twin.session
 
 named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothing
 
-function create_twin(id, router)
+function create_twin(id, router::Router)
     if haskey(router.id_twin, id)
         return router.id_twin[id]
     else
@@ -1354,6 +1409,17 @@ function caronte_reset(broker_name="caronte")
     end
 end
 
+#=
+    If value is nothing returns the value of the args dictionary key.
+=#
+function getparam(args, key, value)
+    if value !== nothing
+        return value
+    else
+        return get(args, key, nothing)
+    end
+end
+
 """
     caronte(;
         wait=true,
@@ -1372,28 +1438,33 @@ Overwrite command line arguments if args is not empty.
 """
 function caronte(;
     wait=true,
-    mode=nothing,
+    secure=false,
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    http=nothing,
     name="caronte",
+    mode=nothing,
+    reset=false,
     log=TRACE_INFO,
     plugin=nothing,
-    context=nothing,
-    args=Dict()
+    context=nothing
 )
-    if isempty(args)
-        args = command_line()
-    end
-    sv_name = get(args, "name", name)
+    args = command_line()
+
+    sv_name = getparam(args, "name", name)
     setup(CONFIG)
     CONFIG.log_level = String(log)
 
     if haskey(args, "debug") && args["debug"] === true
         CONFIG.log_level = TRACE_DEBUG
     end
-    if haskey(args, "reset") && args["reset"] === true
+    rst = getparam(args, "reset", reset)
+    if rst
         Rembus.caronte_reset(sv_name)
     end
 
-    issecure = get(args, "secure", false)
+    issecure = getparam(args, "secure", secure)
 
     router = Router(plugin, context)
 
@@ -1403,47 +1474,52 @@ function caronte(;
 
     tasks = [process(broker, args=(router,)), supervisor("twins", terminateif=:shutdown)]
 
-    if get(args, "http", nothing) !== nothing
+    http_port = getparam(args, "http", http)
+    if http_port !== nothing
         push!(
             tasks,
             process(
                 serve_http,
-                args=(router, args["http"], issecure),
+                args=(router, http_port, issecure),
                 restart=:transient
             )
         )
     end
-    if get(args, "tcp", nothing) !== nothing
+
+    tcp_port = getparam(args, "tcp", tcp)
+    if tcp_port !== nothing
         push!(
             tasks,
             process(
                 serve_tcp,
-                args=(router, args["tcp"], issecure),
+                args=(router, tcp_port, issecure),
                 restart=:transient
             )
         )
     end
-    if get(args, "zmq", nothing) !== nothing
+
+    zmq_port = getparam(args, "zmq", zmq)
+    if zmq_port !== nothing
         push!(
             tasks,
             process(
                 serve_zeromq,
-                args=(router, args["zmq"]),
+                args=(router, zmq_port),
                 restart=:transient,
                 debounce_time=2)
         )
     end
-    if get(args, "ws", nothing) !== nothing ||
-       (get(args, "zmq", nothing) === nothing && get(args, "tcp", nothing) === nothing)
-        wsport = get(args, "ws", nothing)
-        if wsport === nothing
-            wsport = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+
+    ws_port = getparam(args, "ws", ws)
+    if ws_port !== nothing || (zmq_port === nothing && tcp_port === nothing)
+        if ws_port === nothing
+            ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
         end
         push!(
             tasks,
             process(
                 serve_ws,
-                args=(router, wsport, issecure),
+                args=(router, ws_port, issecure),
                 restart=:transient,
                 stop_waiting_after=2.0)
         )
@@ -1644,7 +1720,7 @@ function verify_basic_auth(router, authorization)
     return cid
 end
 
-function authenticate(router::Router, req::HTTP.Request)
+function authenticate(router::AbstractRouter, req::HTTP.Request)
     auth = HTTP.header(req, "Authorization")
 
     if auth !== ""
@@ -1656,7 +1732,7 @@ function authenticate(router::Router, req::HTTP.Request)
     return cid
 end
 
-function authenticate_admin(router::Router, req::HTTP.Request)
+function authenticate_admin(router::AbstractRouter, req::HTTP.Request)
     cid = authenticate(router, req)
     if !(cid in router.admins)
         error("$cid authentication failed")
@@ -1685,23 +1761,44 @@ function command(router::Router, req::HTTP.Request, cmd::Dict)
     return HTTP.Response(sts, [])
 end
 
-function http_subscribe(router::Router, req::HTTP.Request)
+function http_subscribe(router::AbstractRouter, req::HTTP.Request)
     return command(router, req, Dict(COMMAND => SUBSCRIBE_CMD))
 end
 
-function http_unsubscribe(router::Router, req::HTTP.Request)
+function http_unsubscribe(router::AbstractRouter, req::HTTP.Request)
     return command(router, req, Dict(COMMAND => UNSUBSCRIBE_CMD))
 end
 
-function http_expose(router::Router, req::HTTP.Request)
+function http_expose(router::AbstractRouter, req::HTTP.Request)
     return command(router, req, Dict(COMMAND => EXPOSE_CMD))
 end
 
-function http_unexpose(router::Router, req::HTTP.Request)
+function http_unexpose(router::AbstractRouter, req::HTTP.Request)
     return command(router, req, Dict(COMMAND => UNEXPOSE_CMD))
 end
 
-function http_publish(router::Router, req::HTTP.Request)
+function http_publish(server::Server, req::HTTP.Request)
+    try
+        cid = authenticate(server, req)
+        topic = HTTP.getparams(req)["topic"]
+        if isempty(req.body)
+            content = []
+        else
+            content = JSON3.read(req.body, Any)
+        end
+
+        if haskey(server.topic_function, topic)
+            server.topic_function[topic](content...)
+        end
+
+        return HTTP.Response(200, [])
+    catch e
+        @error "http::publish: $e"
+        return HTTP.Response(403, [])
+    end
+end
+
+function http_publish(router::AbstractRouter, req::HTTP.Request)
     try
         cid = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
@@ -1719,6 +1816,35 @@ function http_publish(router::Router, req::HTTP.Request)
     catch e
         @error "http::publish: $e"
         return HTTP.Response(403, [])
+    end
+end
+
+function http_rpc(server::Server, req::HTTP.Request)
+    try
+        authenticate(server, req)
+        topic = HTTP.getparams(req)["topic"]
+        if isempty(req.body)
+            content = []
+        else
+            content = JSON3.read(req.body, Any)
+        end
+
+        sts = 403
+        retval = []
+        if haskey(server.topic_function, topic)
+            retval = server.topic_function[topic](content...)
+            sts = 200
+        end
+
+        return HTTP.Response(
+            sts,
+            ["Content_type" => "application/json"],
+            JSON3.write(retval)
+        )
+    catch e
+        @error "http::rpc: $e"
+        showerror(stdout, e, catch_backtrace())
+        return HTTP.Response(404, [])
     end
 end
 
@@ -1766,7 +1892,7 @@ function http_rpc(router::Router, req::HTTP.Request)
 end
 
 function http_admin_command(
-    router::Router, req::HTTP.Request, cmd::Dict, topic="__config__"
+    router::AbstractRouter, req::HTTP.Request, cmd::Dict, topic="__config__"
 )
     try
         cid = authenticate_admin(router, req)
@@ -1789,7 +1915,7 @@ function http_admin_command(
     end
 end
 
-function http_admin_command(router::Router, req::HTTP.Request)
+function http_admin_command(router::AbstractRouter, req::HTTP.Request)
     try
         authenticate_admin(router, req)
         cmd = HTTP.getparams(req)["cmd"]
@@ -1803,17 +1929,17 @@ function http_admin_command(router::Router, req::HTTP.Request)
 
 end
 
-function http_private_topic(router::Router, req::HTTP.Request)
+function http_private_topic(router::AbstractRouter, req::HTTP.Request)
     topic = HTTP.getparams(req)["topic"]
     return http_admin_command(router, req, Dict(COMMAND => PRIVATE_TOPIC_CMD), topic)
 end
 
-function http_public_topic(router::Router, req::HTTP.Request)
+function http_public_topic(router::AbstractRouter, req::HTTP.Request)
     topic = HTTP.getparams(req)["topic"]
     return http_admin_command(router, req, Dict(COMMAND => PUBLIC_TOPIC_CMD), topic)
 end
 
-function http_authorize(router::Router, req::HTTP.Request)
+function http_authorize(router::AbstractRouter, req::HTTP.Request)
     topic = HTTP.getparams(req)["topic"]
     return http_admin_command(
         router,
@@ -1823,7 +1949,7 @@ function http_authorize(router::Router, req::HTTP.Request)
     )
 end
 
-function http_unauthorize(router::Router, req::HTTP.Request)
+function http_unauthorize(router::AbstractRouter, req::HTTP.Request)
     topic = HTTP.getparams(req)["topic"]
     return http_admin_command(
         router,
@@ -1841,7 +1967,44 @@ function body(response::HTTP.Response)
     end
 end
 
-function serve_http(td, router, port, issecure=false)
+function _serve_http(td, router::AbstractRouter, http_router, port, issecure)
+    try
+        sslconfig = nothing
+        if issecure
+            sslconfig = secure_config(router)
+        end
+
+        router.http_server = HTTP.serve!(
+            http_router, ip"0.0.0.0", port, sslconfig=sslconfig
+        )
+        for msg in td.inbox
+            if isshutdown(msg)
+                break
+            end
+        end
+    catch e
+        @error "[serve_http] error: $e"
+    finally
+        @info "[serve_http] closed"
+        setphase(td, :terminate)
+        isdefined(router, :http_server) && close(router.http_server)
+    end
+end
+
+function serve_http(td, router::Server, port, issecure=false)
+    @info "[serve_http] starting at port $port"
+
+    # define REST endpoints to dispatch rembus functions
+    http_router = HTTP.Router()
+    # publish
+    HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
+    # rpc
+    HTTP.register!(http_router, "GET", "{topic}", req -> http_rpc(router, req))
+
+    _serve_http(td, router, http_router, port, issecure)
+end
+
+function serve_http(td, router::Router, port, issecure=false)
     @info "[serve_http] starting at port $port"
 
     # define REST endpoints to dispatch rembus functions
@@ -1902,25 +2065,7 @@ function serve_http(td, router, port, issecure=false)
         req -> http_unauthorize(router, req)
     )
 
-    try
-        sslconfig = nothing
-        if issecure
-            sslconfig = secure_config(router)
-        end
-
-        router.http_server = HTTP.serve!(
-            http_router, ip"0.0.0.0", port, sslconfig=sslconfig
-        )
-        for msg in td.inbox
-            if isshutdown(msg)
-                break
-            end
-        end
-    finally
-        @info "[serve_http] closed"
-        setphase(td, :terminate)
-        isdefined(router, :http_server) && close(router.http_server)
-    end
+    _serve_http(td, router, http_router, port, issecure)
 end
 
 function router_ready(router)
@@ -1997,6 +2142,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
         router.server = server
+
         @info "$(pd.supervisor) listening at port $proto:$caronte_port"
         setphase(pd, :listen)
         while true
@@ -2060,7 +2206,6 @@ function round_robin(router, topic, implementors)
                 target = impl
                 router.last_invoked[topic] = current_index
             end
-            @info "[$topic]: no exposers available"
         else
             cursor = 1
             current_index = current_index >= len ? 1 : current_index + 1
@@ -2460,7 +2605,7 @@ function init(router)
 end
 
 function ws_connect(
-    egress::Visor.Process, twin::Twin, broker::Component, isconnected::Condition
+    process::Visor.Process, twin::Twin, broker::Component, isconnected::Condition
 )
     try
         url = brokerurl(broker)
@@ -2476,14 +2621,14 @@ function ws_connect(
                     twin.socket = socket
                     notify(isconnected)
                     twin_receiver(twin.router, twin)
-                    put!(egress.inbox, "connection closed")
+                    put!(process.inbox, "connection closed")
                 end, url)
         elseif uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     twin.socket = socket
                     notify(isconnected)
                     twin_receiver(twin.router, twin)
-                    put!(egress.inbox, "connection closed")
+                    put!(process.inbox, "connection closed")
                 end, url, idle_timeout=1, forcenew=true)
         else
             error("ws endpoint: wrong $(uri.scheme) scheme")
@@ -2530,7 +2675,7 @@ Add a server.
 =#
 function add_server(router, url)
     # connect
-    egress(router, url)
+    connect_to(router, url)
     push!(router.servers, url)
 end
 
@@ -2570,7 +2715,7 @@ function egress_task(proc, twin::Twin, remote::Component)
         # the only message is an error condition
         error(msg)
     end
-    @debug "[$proc] egress done"
+    @debug "[$proc] connect_to done"
 end
 
 #=
@@ -2578,7 +2723,7 @@ Connect to server or broker extracted from remote_url.
 
 Loopback connection is not permitted.
 =#
-function egress(
+function connect_to(
     router::Router, remote_url::AbstractString
 )
     # setup the twin
@@ -2596,7 +2741,7 @@ function egress(
     twin = create_twin(remote.id, router)
     twin.hasname = true
 
-    # start the egress process
+    # start the process that setup the connection with remote acceptor.
     startup(
         router.process.supervisor.supervisor,
         process(remote_url, egress_task, args=(twin, remote), debounce_time=6)
@@ -2605,10 +2750,10 @@ function egress(
     return nothing
 end
 
-function egress(
+function connect_to(
     remote_url::AbstractString, broker_name::AbstractString="caronte"
 )
     proc = from("$broker_name.broker")
     router = proc.args[1]
-    return egress(router, remote_url)
+    return connect_to(router, remote_url)
 end
