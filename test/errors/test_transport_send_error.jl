@@ -6,8 +6,8 @@ using HTTP
 using Sockets
 
 function Rembus.transport_send(
+    ::Val{Rembus.socket},
     twin::Rembus.Twin,
-    sock::TCPSocket,
     msg::Rembus.PubSubMsg
 )
     @info "generate a transport exception broker side: $(typeof(msg))"

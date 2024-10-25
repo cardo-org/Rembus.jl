@@ -125,6 +125,18 @@ function admin_command(router, twin, msg::AdminReqMsg)
                 else
                     router.topic_impls[msg.topic] = Set([twin])
                 end
+                # TODO: apply to subscribe, unsubscribe and unexpose
+                # broadcast to all
+                for tw in values(router.id_twin)
+                    if tw.type !== loopback && tw.id !== twin.id
+                        @debug "[$tw] broadcasting $msg"
+                        if tw.socket === nothing
+                            @debug "[$tw] expose not sent: socket is nothing"
+                        else
+                            transport_send(Val(tw.type), tw, msg)
+                        end
+                    end
+                end
             end
         else
             sts = STS_GENERIC_ERROR

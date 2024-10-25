@@ -12,7 +12,7 @@ identity = UInt8[0, 1, 2, 3, 4]
 router = Rembus.Router()
 proc = process("router", task, args=(router,))
 
-twin = Rembus.Twin(router, "twin")
+twin = Rembus.Twin(router, "twin", Rembus.loopback)
 supervise([
         supervisor("mybroker", [
             proc,

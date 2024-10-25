@@ -50,7 +50,7 @@ function run()
     sleep(0.2)
 
     # triggers a warning log when closing the rembus handler
-    close(rb.context)
+    close(rb.zmqcontext)
     close(rb)
 
     # wrong zmq endpoint does not trigger error

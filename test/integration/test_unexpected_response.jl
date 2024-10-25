@@ -5,7 +5,7 @@ include("../utils.jl")
 function run()
     rb = connect()
     msg = Rembus.ResMsg(UInt128(0), Rembus.STS_SUCCESS, nothing)
-    Rembus.transport_send(rb, rb.socket, msg)
+    Rembus.transport_send(Val(Rembus.socket), rb, msg)
     close(rb)
 end
 

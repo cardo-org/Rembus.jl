@@ -1,23 +1,5 @@
 include("../utils.jl")
 
-module Broker
-
-using Rembus
-
-function expose_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-function subscribe_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-function reactive_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-end # module Broker
-
 function foo(x)
     @info "[foo] arg:$x"
     return x + 1
@@ -35,11 +17,11 @@ function run(exposer_url, secure=false)
     )
     yield()
 
-    caronte(
+    edge_broker = caronte(
         wait=false,
-        plugin=Broker,
         name="edge_broker", ws=9000, secure=secure)
     yield()
+    sleep(1)
 
     if secure
         cli_url = "wss://:8000/client"
@@ -49,7 +31,9 @@ function run(exposer_url, secure=false)
         broker_url = "ws://:8000/combo"
     end
 
-    Rembus.connect_to(broker_url, "edge_broker")
+    # to be invoked in the edge_broker application
+    # it connect from edge_broker to main_broker.
+    connect(edge_broker, broker_url)
 
     @component exposer_url
     @expose foo
@@ -92,7 +76,6 @@ else
 
     catch e
         @error "[test_multiplexer]: $e"
-        showerror(stdout, e, stacktrace())
     finally
         shutdown()
         delete!(ENV, "REMBUS_KEYSTORE")

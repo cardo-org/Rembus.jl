@@ -140,7 +140,18 @@ end
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-cid(c::Component) = brokerurl(c) * "/$(c.id)"
+cid(c::Component) = "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
+
+function nodetype(c::Component)
+    if c.protocol === :ws || c.protocol === :wss ||
+       c.protocol === :tcp || c.protocol === :tls
+        return socket
+    elseif c.protocol === :zmq
+        return zdealer
+    end
+
+    return loopback
+end
 
 mutable struct DBHandler
     db::DuckDB.DB
@@ -162,10 +173,12 @@ function rembus_db(cid::AbstractString)
     return DBHandler(db, stmt)
 end
 
+@enum NodeType socket zdealer zrouter loopback
 
 abstract type RBHandle end
 
 mutable struct RBConnection <: RBHandle
+    type::NodeType
     duck::Union{Nothing,DBHandler}
     shared::Any
     egress::Union{Nothing,Function}
@@ -178,23 +191,28 @@ mutable struct RBConnection <: RBHandle
     subinfo::Dict{String,Float64}
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
-    context::Union{Nothing,ZMQ.Context}
-    RBConnection(name::String) = new(
-        nothing,
-        missing,
-        nothing,
-        nothing,
-        nothing,
-        Channel(MESSAGE_CHANNEL_SZ),
-        false,
-        Component(name),
-        Dict(),
-        Dict(),
-        Dict(),
-        Dict(),
-        nothing
-    )
+    zmqcontext::Union{Nothing,ZMQ.Context}
+    function RBConnection(name::String)
+        c = Component(name)
+        new(
+            nodetype(c),
+            nothing,
+            missing,
+            nothing,
+            nothing,
+            nothing,
+            Channel(MESSAGE_CHANNEL_SZ),
+            false,
+            c,
+            Dict(),
+            Dict(),
+            Dict(),
+            Dict(),
+            nothing
+        )
+    end
     RBConnection(client=getcomponent()) = new(
+        nodetype(client),
         nothing,
         missing,
         nothing,
@@ -221,7 +239,7 @@ function Base.show(io::IO, rb::RBConnection)
     return print(io, rbinfo(rb))
 end
 
-function egress_interceptor(rb::RBConnection, func)
+function egress_interceptor(rb, func)
     @debug "[$rb] setting egress: $func"
     rb.egress = func
 end
@@ -240,6 +258,9 @@ mutable struct Server <: AbstractRouter
     topic_function::Dict{String,Function}
     subinfo::Dict{String,Bool}
     id_twin::Dict
+    address2twin::Dict{Vector{UInt8},RBHandle} # zeromq address => twin
+    twin2address::Dict{String,Vector{UInt8}} # twin id => zeromq address
+    mid2address::Dict{UInt128,Vector{UInt8}} # message.id => zeromq connection address
     process::Visor.Supervisor
     server::Sockets.TCPServer
     http_server::HTTP.Server
@@ -247,7 +268,9 @@ mutable struct Server <: AbstractRouter
     zmqsocket::ZMQ.Socket
     owners::DataFrame
     component_owner::DataFrame
-    Server(shared=missing) = new(shared, anonymous, time(), Dict(), Dict(), Dict())
+    Server(shared=missing) = new(
+        shared, anonymous, time(), Dict(), Dict(), Dict(), Dict(), Dict(), Dict()
+    )
 end
 
 function Base.show(io::IO, srv::Server)
@@ -255,6 +278,7 @@ function Base.show(io::IO, srv::Server)
 end
 
 mutable struct RBServerConnection <: RBHandle
+    type::NodeType
     duck::Union{Nothing,DBHandler}
     router::Server
     session::Dict{String,Any}
@@ -267,8 +291,8 @@ mutable struct RBServerConnection <: RBHandle
     isauth::Bool
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
-    #context::Union{Nothing,ZMQ.Context}
-    RBServerConnection(server::Server, name::String) = new(
+    RBServerConnection(server::Server, name::String, type::NodeType) = new(
+        type,
         nothing,
         server,
         Dict(),
@@ -1561,14 +1585,12 @@ function read_socket(socket, process, rb, isconnected::Condition)
         end
     catch e
         @debug "[$(cid(rb.client))] connection closed: $e"
-        processput!(process, e)
-        @showerror e
-        #        if !isa(e, HTTP.WebSockets.WebSocketError) ||
-        #           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
-        #           e.message.status != 1000
-        #            @showerror e
-        #            processput!(process, e)
-        #        end
+        if !isa(e, HTTP.WebSockets.WebSocketError) ||
+           !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
+           e.message.status != 1000
+            @showerror e
+            processput!(process, e)
+        end
     end
 end
 
@@ -1644,8 +1666,8 @@ function write_task(rb::RBHandle)
             if isa(msg, CloseConnection)
                 if rb.socket !== nothing
                     if isa(rb.socket, ZMQ.Socket)
-                        transport_send(rb, rb.socket, Close())
-                        close(rb.context)
+                        transport_send(Val(rb.type), rb, Close())
+                        close(rb.zmqcontext)
                     else
                         close(rb.socket)
                     end
@@ -1677,9 +1699,15 @@ function write_task(rb::RBHandle)
     @debug "[$(cid(rb.client))] write_task done"
 end
 
+function setup_receiver(process, socket, rb::RBConnection, isconnected)
+    read_socket(socket, process, rb, isconnected)
+end
+
+brokerurl(rb::RBConnection) = brokerurl(rb.client)
+
 function ws_connect(rb, process, isconnected::Condition)
     try
-        url = brokerurl(rb.client)
+        url = brokerurl(rb)
         uri = URI(url)
 
         if uri.scheme == "wss"
@@ -1689,13 +1717,13 @@ function ws_connect(rb, process, isconnected::Condition)
             end
             @debug "cacert: $(ENV["HTTP_CA_BUNDLE"])"
             HTTP.WebSockets.open(socket -> begin
-                    read_socket(socket, process, rb, isconnected)
+                    setup_receiver(process, socket, rb, isconnected)
                 end, url)
         elseif uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     ## Sockets.nagle(socket.io.io, false)
                     ## Sockets.quickack(socket.io.io, true)
-                    read_socket(socket, process, rb, isconnected)
+                    setup_receiver(process, socket, rb, isconnected)
                 end, url, idle_timeout=1, forcenew=true)
         else
             error("ws endpoint: wrong $(uri.scheme) scheme")
@@ -1724,10 +1752,10 @@ function zmq_receive(rb)
 end
 
 function zmq_connect(rb)
-    rb.context = ZMQ.Context()
-    rb.socket = ZMQ.Socket(rb.context, DEALER)
+    rb.zmqcontext = ZMQ.Context()
+    rb.socket = ZMQ.Socket(rb.zmqcontext, DEALER)
     rb.socket.linger = 1
-    url = brokerurl(rb.client)
+    url = brokerurl(rb)
     ZMQ.connect(rb.socket, url)
     @async zmq_receive(rb)
     return nothing
@@ -1735,7 +1763,7 @@ end
 
 function tcp_connect(rb, process, isconnected::Condition)
     try
-        url = brokerurl(rb.client)
+        url = brokerurl(rb)
         uri = URI(url)
         @debug "connecting to $(uri.scheme):$(uri.host):$(uri.port)"
         if uri.scheme == "tls"
@@ -1769,10 +1797,10 @@ function tcp_connect(rb, process, isconnected::Condition)
             MbedTLS.set_bio!(ctx, sock)
             MbedTLS.handshake(ctx)
 
-            @async read_socket(ctx, process, rb, isconnected)
+            setup_receiver(process, ctx, rb, isconnected)
         elseif uri.scheme == "tcp"
             sock = Sockets.connect(uri.host, parse(Int, uri.port))
-            @async read_socket(sock, process, rb, isconnected)
+            setup_receiver(process, sock, rb, isconnected)
         else
             error("tcp endpoint: wrong $(uri.scheme) scheme")
         end
@@ -1885,27 +1913,34 @@ function connect_timeout(rb, isconnected)
     end
 end
 
-function _connect(rb, process)
-    # manage reconnections events
+function setup_channel(rb::RBConnection)
     if !isopen(rb.msgch)
         rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
     end
+end
 
-    if rb.client.protocol === :ws || rb.client.protocol === :wss
+protocol(rb::RBConnection) = rb.client.protocol
+
+function _connect(rb, process)
+    # useful for reconnections
+    setup_channel(rb)
+
+    proto = protocol(rb)
+    if proto === :ws || proto === :wss
         isconnected = Condition()
         t = Timer((tim) -> connect_timeout(rb, isconnected), connect_request_timeout())
         @async ws_connect(rb, process, isconnected)
         wait(isconnected)
         close(t)
-    elseif rb.client.protocol === :tcp || rb.client.protocol === :tls
+    elseif proto === :tcp || proto === :tls
         isconnected = Condition()
         @async tcp_connect(rb, process, isconnected)
         wait(isconnected)
-    elseif rb.client.protocol === :zmq
+    elseif proto === :zmq
         zmq_connect(rb)
     else
         throw(ErrorException(
-            "wrong protocol $(rb.client.protocol): must be tcp|tls|zmq|ws|wss"
+            "wrong protocol $proto: must be tcp|tls|zmq|ws|wss"
         ))
     end
 
@@ -1925,7 +1960,7 @@ end
 
 function rembus_write(rb::RBHandle, msg)
     @debug ">> [$(cid(rb.client))] -> $msg"
-    return transport_send(rb, rb.socket, msg)
+    return transport_send(Val(rb.type), rb, msg)
 end
 
 function isconnected(rb::RBConnection)

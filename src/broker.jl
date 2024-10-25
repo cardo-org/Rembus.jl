@@ -20,23 +20,28 @@ Twin is the broker-side image of a component.
 For ZMQ sockets one socket is shared between all twins.
 =#
 mutable struct Twin
+    type::NodeType
     router::AbstractRouter
     id::String
     session::Dict{String,Any}
     hasname::Bool
     isauth::Bool
     mark::UInt64
+    egress::Union{Nothing,Function}
+    ingress::Union{Nothing,Function}
     socket::Any
     msg_from::Dict{String,Float64}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
-    out::Dict{UInt128,Threads.Condition}
+    out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
     qos::QoS
     reactive::Bool
     ack_cond::Dict{UInt128,Threads.Condition}
+    zmqcontext::Union{Nothing,ZMQ.Context}
     process::Visor.Process
 
-    Twin(router, id) = new(
+    Twin(router, id, type::NodeType) = new(
+        type,
         router,
         id,
         Dict(),
@@ -44,13 +49,16 @@ mutable struct Twin
         false,
         0,
         nothing,
+        nothing,
+        nothing,
         Dict(),
         Dict(),
         Dict(),
         Dict(),
         fast,
         false,
-        Dict()
+        Dict(),
+        nothing
     )
 end
 
@@ -68,135 +76,6 @@ struct SentData
     sending_ts::Float64
     request::Msg
     timer::Timer
-end
-
-"""
-    server(
-        ctx=nothing;
-        secure=false,
-        ws=nothing,
-        tcp=nothing,
-        name="server",
-        mode=nothing,
-        log=TRACE_INFO
-    )
-
-Initialize a server node.
-"""
-function server(
-    shared=missing;
-    secure=false,
-    ws=nothing,
-    tcp=nothing,
-    http=nothing,
-    name="server",
-    mode=nothing,
-    log=TRACE_INFO
-)
-    rb = Server(shared)
-
-    args = command_line(name)
-
-    expose(rb, "version", () -> VERSION)
-
-    name = getparam(args, "name", name)
-    ws_port = getparam(args, "ws", ws)
-
-    issecure = getparam(args, "secure", secure)
-
-    setup(CONFIG)
-    if mode !== nothing
-        rb.mode = string_to_enum(mode)
-    end
-
-    acceptors = []
-
-    http_port = getparam(args, "http", http)
-    if http_port !== nothing
-        push!(
-            acceptors,
-            process(
-                serve_http,
-                args=(rb, http_port, issecure),
-                restart=:transient
-            )
-        )
-    end
-
-    tcp_port = getparam(args, "tcp", tcp)
-    if tcp_port !== nothing
-        push!(
-            acceptors,
-            process(
-                serve_tcp,
-                args=(rb, tcp_port, issecure),
-                restart=:transient
-            )
-        )
-    end
-
-    #=
-    zmq_port = getparam(args, "zmq", zmq)
-    if zmq_port !== nothing
-        push!(
-            acceptors,
-            process(
-                serve_zeromq,
-                args=(rb, zmq_port),
-                restart=:transient,
-                debounce_time=2
-            )
-        )
-        end
-    =#
-
-
-    ws_port = getparam(args, "ws", ws)
-    if ws_port !== nothing || tcp_port === nothing
-        if ws_port === nothing
-            ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
-        end
-
-        push!(
-            acceptors,
-            process(
-                "serve:$ws_port",
-                serve_ws,
-                args=(rb, ws_port, issecure),
-                restart=:transient,
-                stop_waiting_after=2.0
-            )
-        )
-    end
-
-    embedded_sv = from(name)
-    if embedded_sv === nothing
-        # first rb process
-        CONFIG.log_level = String(log)
-
-        if haskey(args, "debug") && args["debug"] === true
-            CONFIG.log_level = TRACE_DEBUG
-        end
-
-        init_log()
-        tasks = Visor.Supervised[supervisor("twins", terminateif=:shutdown)]
-        append!(tasks, acceptors)
-        supervise(
-            [supervisor(name, tasks, strategy=:one_for_one)],
-            intensity=5,
-            wait=false
-        )
-    else
-        for acceptor in acceptors
-            Visor.add_node(embedded_sv, acceptor)
-            Visor.start(acceptor)
-        end
-    end
-    rb.process = from(name)
-    rb.owners = load_tenants(rb)
-    rb.component_owner = load_token_app(rb)
-
-    return rb
 end
 
 msg_dataframe() = DataFrame(
@@ -455,14 +334,15 @@ session(twin::Twin) = twin.session
 
 named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothing
 
-function create_twin(id, router::Router)
+function create_twin(id, router::Router, type::NodeType)
     if haskey(router.id_twin, id)
-        return router.id_twin[id]
+        tw = router.id_twin[id]
+        tw.type = type
+        return tw
     else
-        twin = Twin(router, id)
+        twin = Twin(router, id, type)
         spec = process(id, twin_task, args=(twin,))
-        sv = router.process.supervisor
-        startup(Visor.from_supervisor(sv, "twins"), spec)
+        startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
         yield()
         router.id_twin[id] = twin
         twin_initialize(router.context, twin)
@@ -521,6 +401,7 @@ function destroy_twin(twin, router)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
+    delete!(router.id_twin, twin.id)
     return nothing
 end
 
@@ -559,7 +440,7 @@ Update twin identity parameters.
 =#
 function setidentity(router, twin, msg; isauth=false, paging=true)
     # get the eventually created twin associate with cid
-    namedtwin = create_twin(msg.cid, router)
+    namedtwin = create_twin(msg.cid, router, twin.type)
     # move the opened socket
     namedtwin.socket = twin.socket
     if !isa(twin.socket, ZMQ.Socket)
@@ -608,12 +489,12 @@ function attestation(router, twin, msg, authenticate=true)
             login(router, twin, msg)
         end
         authtwin = setidentity(router, twin, msg, isauth=authenticate)
-        transport_send(authtwin, authtwin.socket, ResMsg(msg.id, sts, reason))
+        transport_send(Val(authtwin.type), authtwin, ResMsg(msg.id, sts, reason))
     catch e
         @error "[$(msg.cid)] attestation: $e"
         sts = STS_GENERIC_ERROR
         reason = isa(e, ErrorException) ? e.msg : string(e)
-        transport_send(twin, twin.socket, ResMsg(msg.id, sts, reason))
+        transport_send(Val(twin.type), twin, ResMsg(msg.id, sts, reason))
     end
 
     if sts !== STS_SUCCESS
@@ -640,7 +521,7 @@ function attestation(router::Server, rb::RBServerConnection, msg)
 
     response = ResMsg(msg.id, sts, reason)
     #@mlog("[$twin] -> $response")
-    transport_send(rb, rb.socket, response)
+    transport_send(Val(rb.type), rb, response)
     if sts !== STS_SUCCESS
         close(rb)
     end
@@ -746,9 +627,7 @@ end
 
 function rpc_response(router, twin, msg)
     if haskey(twin.out, msg.id)
-        lock(twin.out[msg.id]) do
-            notify(twin.out[msg.id], msg)
-        end
+        put!(twin.out[msg.id], msg)
     end
 
     if haskey(twin.sent, msg.id)
@@ -1091,7 +970,7 @@ function commands_permitted(twin)
     return true
 end
 
-function zeromq_receiver(router::Router)
+function zeromq_receiver(router)
     pkt = ZMQPacket()
     while true
         try
@@ -1103,7 +982,7 @@ function zeromq_receiver(router::Router)
             else
                 @debug "creating anonymous twin from identity $id ($(bytes2zid(id)))"
                 # create the twin
-                twin = create_twin(string(bytes2zid(id)), router)
+                twin = create_twin(string(bytes2zid(id)), router, zrouter)
                 @debug "[anonymous] client bound to twin id [$twin]"
                 router.address2twin[id] = twin
                 router.twin2address[twin.id] = id
@@ -1124,7 +1003,7 @@ function zeromq_receiver(router::Router)
                     continue
                 end
                 #@mlog("[ZMQ][$twin] -> $response")
-                transport_send(twin, router.zmqsocket, response)
+                transport_send(Val(twin.type), twin, response)
             elseif isa(msg, PingMsg)
                 if (twin.id != msg.cid)
 
@@ -1135,7 +1014,7 @@ function zeromq_receiver(router::Router)
                         # check if challenge was already sent
                         if !haskey(twin.session, "challenge")
                             response = challenge(router, twin, msg.id)
-                            transport_send(twin, router.zmqsocket, response)
+                            transport_send(Val(twin.type), twin, response)
                         end
                     else
                         identity_upgrade(router, twin, msg, id, authenticate=false)
@@ -1237,7 +1116,7 @@ function twin_task(self, twin)
                 break
             elseif isa(msg, ResMsg)
                 #@mlog("[$(twin.id)] -> $msg")
-                transport_send(twin, twin.socket, msg, true)
+                transport_send(Val(twin.type), twin, msg, true)
             else
                 signal!(twin, msg)
             end
@@ -1313,7 +1192,7 @@ function signal!(twin, msg::Msg)
         # retry until outcome is true (ack message received)
         outcome = false
         while !outcome
-            outcome = transport_send(twin, twin.socket, pkt)
+            outcome = transport_send(Val(twin.type), twin, pkt)
         end
         if isa(pkt, PubSubMsg)
             twin.mark = msg.counter
@@ -1438,14 +1317,14 @@ Overwrite command line arguments if args is not empty.
 """
 function caronte(;
     wait=true,
-    secure=false,
+    secure=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
     http=nothing,
     name="caronte",
     mode=nothing,
-    reset=false,
+    reset=nothing,
     log=TRACE_INFO,
     plugin=nothing,
     context=nothing
@@ -1539,6 +1418,133 @@ function caronted()::Cint
 end
 
 """
+    server(
+        ctx=nothing;
+        secure=false,
+        ws=nothing,
+        tcp=nothing,
+        name="server",
+        mode=nothing,
+        log=TRACE_INFO
+    )
+
+Initialize a server node.
+"""
+function server(
+    shared=missing;
+    secure=false,
+    ws=nothing,
+    tcp=nothing,
+    http=nothing,
+    zmq=nothing,
+    name="server",
+    mode=nothing,
+    log=TRACE_INFO
+)
+    rb = Server(shared)
+
+    args = command_line(name)
+
+    expose(rb, "version", () -> VERSION)
+
+    name = getparam(args, "name", name)
+    ws_port = getparam(args, "ws", ws)
+
+    issecure = getparam(args, "secure", secure)
+
+    setup(CONFIG)
+    if mode !== nothing
+        rb.mode = string_to_enum(mode)
+    end
+
+    acceptors = []
+
+    http_port = getparam(args, "http", http)
+    if http_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_http,
+                args=(rb, http_port, issecure),
+                restart=:transient
+            )
+        )
+    end
+
+    tcp_port = getparam(args, "tcp", tcp)
+    if tcp_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_tcp,
+                args=(rb, tcp_port, issecure),
+                restart=:transient
+            )
+        )
+    end
+
+    zmq_port = getparam(args, "zmq", zmq)
+    if zmq_port !== nothing
+        push!(
+            acceptors,
+            process(
+                serve_zeromq,
+                args=(rb, zmq_port),
+                restart=:transient,
+                debounce_time=2
+            )
+        )
+    end
+
+    ws_port = getparam(args, "ws", ws)
+    if ws_port !== nothing || tcp_port === nothing
+        if ws_port === nothing
+            ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
+        end
+
+        push!(
+            acceptors,
+            process(
+                "serve:$ws_port",
+                serve_ws,
+                args=(rb, ws_port, issecure),
+                restart=:transient,
+                stop_waiting_after=2.0
+            )
+        )
+    end
+
+    embedded_sv = from(name)
+    if embedded_sv === nothing
+        # first rb process
+        CONFIG.log_level = String(log)
+
+        if haskey(args, "debug") && args["debug"] === true
+            CONFIG.log_level = TRACE_DEBUG
+        end
+
+        init_log()
+        tasks = Visor.Supervised[supervisor("twins", terminateif=:shutdown)]
+        append!(tasks, acceptors)
+        supervise(
+            [supervisor(name, tasks, strategy=:one_for_one)],
+            intensity=5,
+            wait=false
+        )
+    else
+        for acceptor in acceptors
+            Visor.add_node(embedded_sv, acceptor)
+            Visor.start(acceptor)
+        end
+    end
+    rb.process = from(name)
+    rb.owners = load_tenants(rb)
+    rb.component_owner = load_token_app(rb)
+
+    return rb
+end
+
+"""
     forever(server::Server; wait=true, secure=false)
 
 Start an embedded server and accept connections.
@@ -1582,7 +1588,7 @@ Entry point of a new connection request from a node.
 function client_receiver(router::Router, sock)
     uid = uuid4()
     cid = string(uid)
-    twin = create_twin(cid, router)
+    twin = create_twin(cid, router, socket)
     @debug "[anonymous] client bound to twin id [$cid]"
     # start the twin client task
     twin.socket = sock
@@ -1597,8 +1603,7 @@ function client_receiver(router::Router, sock)
         authtwin = anonymous_twin_receiver(router, twin)
     end
 
-
-    # upgrade to named or authenticated twin if it returns true
+    # upgrade receiver if twin is related to a named or authenticated node
     if (authtwin !== nothing)
         twin_receiver(router, authtwin)
     end
@@ -1640,7 +1645,7 @@ end
 
 function client_receiver(router::Server, ws)
     id = string(uuid4())
-    rb = RBServerConnection(router, id)
+    rb = RBServerConnection(router, id, socket)
     rb.socket = ws
     spec = process(id, server_task, args=(rb,))
     sv = router.process
@@ -1751,7 +1756,7 @@ function command(router::Router, req::HTTP.Request, cmd::Dict)
     sts = 403
     cid = HTTP.getparams(req)["cid"]
     topic = HTTP.getparams(req)["topic"]
-    twin = create_twin(cid, router)
+    twin = create_twin(cid, router, loopback)
     twin.hasname = true
     msg = AdminReqMsg(topic, cmd)
     response = http_admin_msg(router, twin, msg)
@@ -1807,7 +1812,7 @@ function http_publish(router::AbstractRouter, req::HTTP.Request)
         else
             content = JSON3.read(req.body, Any)
         end
-        twin = create_twin(cid, router)
+        twin = create_twin(cid, router, loopback)
         msg = PubSubMsg(topic, content)
         pubsub_msg(router, twin, msg)
         Visor.shutdown(twin.process)
@@ -1843,7 +1848,6 @@ function http_rpc(server::Server, req::HTTP.Request)
         )
     catch e
         @error "http::rpc: $e"
-        showerror(stdout, e, catch_backtrace())
         return HTTP.Response(404, [])
     end
 end
@@ -1860,7 +1864,7 @@ function http_rpc(router::Router, req::HTTP.Request)
         if haskey(router.id_twin, cid)
             error("component $cid not available for rpc via http")
         else
-            twin = create_twin(cid, router)
+            twin = create_twin(cid, router, loopback)
             twin.socket = Condition()
             msg = RpcReqMsg(topic, content)
             rpc_request(router, twin, msg)
@@ -1896,7 +1900,7 @@ function http_admin_command(
 )
     try
         cid = authenticate_admin(router, req)
-        twin = create_twin(cid, router)
+        twin = create_twin(cid, router, loopback)
         msg = AdminReqMsg(topic, cmd)
         response = http_admin_msg(router, twin, msg)
         Visor.shutdown(twin.process)
@@ -2604,47 +2608,9 @@ function init(router)
     return nothing
 end
 
-function ws_connect(
-    process::Visor.Process, twin::Twin, broker::Component, isconnected::Condition
-)
-    try
-        url = brokerurl(broker)
-        uri = URI(url)
-
-        if uri.scheme == "wss"
-
-            if !haskey(ENV, "HTTP_CA_BUNDLE")
-                ENV["HTTP_CA_BUNDLE"] = rembus_ca()
-            end
-
-            HTTP.WebSockets.open(socket -> begin
-                    twin.socket = socket
-                    notify(isconnected)
-                    twin_receiver(twin.router, twin)
-                    put!(process.inbox, "connection closed")
-                end, url)
-        elseif uri.scheme == "ws"
-            HTTP.WebSockets.open(socket -> begin
-                    twin.socket = socket
-                    notify(isconnected)
-                    twin_receiver(twin.router, twin)
-                    put!(process.inbox, "connection closed")
-                end, url, idle_timeout=1, forcenew=true)
-        else
-            error("ws endpoint: wrong $(uri.scheme) scheme")
-        end
-    catch e
-        notify(isconnected, e, error=true)
-        @showerror e
-    end
-end
-
-function response_timeout(condition::Threads.Condition, msg::RembusMsg)
+function response_timeout(condition::Distributed.Future, msg::RembusMsg)
     descr = "[$msg]: request timeout"
-    lock(condition) do
-        notify(condition, RembusTimeout(descr), error=true)
-    end
-
+    put!(condition, RembusTimeout(descr))
     return nothing
 end
 
@@ -2656,15 +2622,16 @@ when a broker connects to a component that acts as an Acceptor
 =#
 function wait_response(twin::Twin, msg::Msg, timeout)
     mid::UInt128 = msg.content.id
-    resp_cond = Threads.Condition()
+    resp_cond = Distributed.Future()
     twin.out[mid] = resp_cond
     t = Timer((tim) -> response_timeout(resp_cond, msg.content), timeout)
     push!(twin.process.inbox, msg)
-    lock(resp_cond)
-    res = wait(resp_cond)
-    unlock(resp_cond)
+    res = fetch(resp_cond)
     close(t)
     delete!(twin.out, mid)
+    if isa(res, Exception)
+        throw(res)
+    end
     return res
 end
 
@@ -2674,8 +2641,7 @@ end
 Add a server.
 =#
 function add_server(router, url)
-    # connect
-    connect_to(router, url)
+    connect(router, url)
     push!(router.servers, url)
 end
 
@@ -2692,20 +2658,23 @@ function remove_server(router, url)
     delete!(router.servers, url)
 end
 
+function setup_receiver(process, socket, twin::Twin, isconnected)
+    twin.socket = socket
+    notify(isconnected)
+    twin_receiver(twin.router, twin)
+    put!(process.inbox, "connection closed")
+end
+
+brokerurl(rb::Twin) = brokerurl(Component(rb.id))
+
+setup_channel(::Twin) = nothing
+protocol(rb::Twin) = Component(rb.id).protocol
+
 function egress_task(proc, twin::Twin, remote::Component)
-    isconnected = Condition()
-    t = Timer((tim) -> connect_timeout(twin, isconnected), connect_request_timeout())
-    @async ws_connect(proc, twin, remote, isconnected)
-    wait(isconnected)
-    close(t)
+    _connect(twin, proc)
 
-    # The name of this component is the broker name and it is
-    # communicated to remote component
-    msg = IdentityMsg(twin.router.process.supervisor.id)
+    msg = IdentityMsg(Component(twin.id).id)
     wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
-
-    # The context to pass to the plugin callbacks.
-    twin.router.context = twin.socket
 
     msg = take!(proc.inbox)
     if isshutdown(msg)
@@ -2715,7 +2684,7 @@ function egress_task(proc, twin::Twin, remote::Component)
         # the only message is an error condition
         error(msg)
     end
-    @debug "[$proc] connect_to done"
+    @debug "[$proc] connect to broker done"
 end
 
 #=
@@ -2723,7 +2692,7 @@ Connect to server or broker extracted from remote_url.
 
 Loopback connection is not permitted.
 =#
-function connect_to(
+function connect(
     router::Router, remote_url::AbstractString
 )
     # setup the twin
@@ -2738,10 +2707,11 @@ function connect_to(
         end
     end
 
-    twin = create_twin(remote.id, router)
+    # TODO: test ZMQ and TCP connections
+    twin = create_twin(remote_url, router, nodetype(remote))
     twin.hasname = true
 
-    # start the process that setup the connection with remote acceptor.
+    # start the process which setup the connection with remote acceptor.
     startup(
         router.process.supervisor.supervisor,
         process(remote_url, egress_task, args=(twin, remote), debounce_time=6)
@@ -2750,10 +2720,10 @@ function connect_to(
     return nothing
 end
 
-function connect_to(
-    remote_url::AbstractString, broker_name::AbstractString="caronte"
+function connect(
+    remote_url::AbstractString, source_broker::AbstractString
 )
-    proc = from("$broker_name.broker")
+    proc = from("$source_broker.broker")
     router = proc.args[1]
-    return connect_to(router, remote_url)
+    return connect(router, remote_url)
 end

@@ -258,7 +258,7 @@ function load_impl_table(router)
         for (topic, twin_ids) in table
             twins = Set{Twin}()
             for tid in twin_ids
-                twin = create_twin(tid, router)
+                twin = create_twin(tid, router, loopback)
                 push!(twins, twin)
             end
             if !isempty(twins)
@@ -307,7 +307,7 @@ function load_twins(router)
 
     twins = Dict()
     for (cid, topicsdict) in twin_topicsdict
-        twin = create_twin(cid, router)
+        twin = create_twin(cid, router, loopback)
         twin.hasname = true
         twin.msg_from = topicsdict
 

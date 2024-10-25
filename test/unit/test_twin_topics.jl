@@ -15,9 +15,9 @@ proc = process("router", task, args=(router,))
 topic_1 = "topic_1"
 topic_2 = "topic_2"
 
-twin1 = Rembus.Twin(router, "twin1")
-twin2 = Rembus.Twin(router, "twin2")
-twin3 = Rembus.Twin(router, "twin3")
+twin1 = Rembus.Twin(router, "twin1", Rembus.loopback)
+twin2 = Rembus.Twin(router, "twin2", Rembus.loopback)
+twin3 = Rembus.Twin(router, "twin3", Rembus.loopback)
 
 router.topic_interests[topic_1] = Set([twin1, twin2])
 router.topic_interests[topic_2] = Set([twin2, twin3])

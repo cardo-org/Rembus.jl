@@ -45,7 +45,7 @@ function run(exposer_url)
     #    cli_url = "ws://:8000/client"
     broker_url = "ws://:8000/combo"
 
-    Rembus.connect_to(broker_url, "edge_broker")
+    Rembus.connect(broker_url, "edge_broker")
     sleep(1)
     @info "shutting down main broker"
 

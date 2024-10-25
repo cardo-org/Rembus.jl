@@ -17,8 +17,8 @@ Base.isopen(socket::FakeSocket) = socket.connected
 
 router = Rembus.Router()
 
-twin1 = Rembus.Twin(router, "twin1")
-twin2 = Rembus.Twin(router, "twin2")
+twin1 = Rembus.Twin(router, "twin1", Rembus.loopback)
+twin2 = Rembus.Twin(router, "twin2", Rembus.loopback)
 
 twin1.socket = FakeSocket()
 twin2.socket = FakeSocket()

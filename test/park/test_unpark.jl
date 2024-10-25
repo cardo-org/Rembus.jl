@@ -1,8 +1,8 @@
 include("../utils.jl")
 
 function Rembus.transport_send(
+    ::Val{Rembus.socket},
     twin::Rembus.Twin,
-    ws::WebSockets.WebSocket,
     msg::Rembus.PubSubMsg{UInt32}
 )
     global counter
@@ -12,7 +12,7 @@ function Rembus.transport_send(
     if counter == 5
         error("I dont like packet number five")
     end
-    Rembus.broker_transport_write(ws, pkt)
+    Rembus.broker_transport_write(twin.socket, pkt)
     return true
 end
 
