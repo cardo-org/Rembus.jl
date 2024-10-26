@@ -91,6 +91,8 @@ export LastReceived, Now
 # if mode is anonymous then authenticated mode is available.
 @enum ConnectionMode anonymous authenticated
 
+@enum NodeType socket zdealer zrouter loopback
+
 struct IdentityReturn
     sts::UInt8
     value::Any
@@ -136,6 +138,10 @@ mutable struct Component
         end
         return new(name, protocol, host, port, props)
     end
+
+    function Component(id::String, type::NodeType)
+
+    end
 end
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
@@ -173,8 +179,6 @@ function rembus_db(cid::AbstractString)
     return DBHandler(db, stmt)
 end
 
-@enum NodeType socket zdealer zrouter loopback
-
 abstract type RBHandle end
 
 mutable struct RBConnection <: RBHandle
@@ -184,14 +188,14 @@ mutable struct RBConnection <: RBHandle
     egress::Union{Nothing,Function}
     ingress::Union{Nothing,Function}
     socket::Any
-    msgch::Channel
     reactive::Bool
     client::Component
     receiver::Dict{String,Function}
     subinfo::Dict{String,Float64}
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
-    zmqcontext::Union{Nothing,ZMQ.Context}
+    zcontext::Union{Nothing,ZMQ.Context}
+    process::Visor.Process
     function RBConnection(name::String)
         c = Component(name)
         new(
@@ -201,7 +205,6 @@ mutable struct RBConnection <: RBHandle
             nothing,
             nothing,
             nothing,
-            Channel(MESSAGE_CHANNEL_SZ),
             false,
             c,
             Dict(),
@@ -218,7 +221,6 @@ mutable struct RBConnection <: RBHandle
         nothing,
         nothing,
         nothing,
-        Channel(MESSAGE_CHANNEL_SZ),
         false,
         client,
         Dict(),
@@ -256,11 +258,11 @@ mutable struct Server <: AbstractRouter
     mode::ConnectionMode
     start_ts::Float64
     topic_function::Dict{String,Function}
-    subinfo::Dict{String,Bool}
+    topic_auth::Dict{String,Dict{String,Bool}} # topic => {twin.id => true}
+    subinfo::Dict{String,Float64}
     id_twin::Dict
     address2twin::Dict{Vector{UInt8},RBHandle} # zeromq address => twin
     twin2address::Dict{String,Vector{UInt8}} # twin id => zeromq address
-    mid2address::Dict{UInt128,Vector{UInt8}} # message.id => zeromq connection address
     process::Visor.Supervisor
     server::Sockets.TCPServer
     http_server::HTTP.Server
@@ -279,35 +281,37 @@ end
 
 mutable struct RBServerConnection <: RBHandle
     type::NodeType
-    duck::Union{Nothing,DBHandler}
     router::Server
+    client::Component
+    isauth::Bool
+    reactive::Bool
     session::Dict{String,Any}
     egress::Union{Nothing,Function}
     ingress::Union{Nothing,Function}
     socket::Any
-    msgch::Channel
-    reactive::Bool
-    client::Component
-    isauth::Bool
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
+    zaddress::Vector{UInt8}
+    duck::Union{Nothing,DBHandler}
+    process::Visor.Process
     RBServerConnection(server::Server, name::String, type::NodeType) = new(
         type,
-        nothing,
         server,
-        Dict(),
-        nothing,
-        nothing,
-        nothing,
-        Channel(MESSAGE_CHANNEL_SZ),
-        true, # reactive
         Component(name),
         false,
+        true, # reactive
+        Dict(),
+        nothing,
+        nothing,
+        nothing,
         Dict(),
         Dict(),
-        #nothing
+        UInt8[0, 0, 0, 0],
+        nothing,
     )
 end
+
+ucid(rb::RBServerConnection) = rb.client.id
 
 function Base.show(io::IO, rb::RBServerConnection)
     return print(io, "srv component [$(cid(rb.client))], isconnected: $(isconnected(rb))")
@@ -1147,6 +1151,8 @@ const last_error = LastErrorLog()
 function rembus_task(pd, rb, init_fn, protocol=:ws)
     try
         @debug "starting rembus process: $pd, protocol:$protocol"
+        setphase(pd, :init)
+        rb.process = pd
         init_fn(pd, rb)
         if last_error.msg !== nothing
             @debug "[$pd] (re)connected"
@@ -1159,8 +1165,9 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                 return
             elseif isa(msg, Exception)
                 throw(msg)
+            elseif isa(msg, RembusMsg)
+                send_message(rb, msg)
             elseif isrequest(msg)
-                #setphase(pd, :up)
                 req = msg.request
                 if isa(req, SetHolder)
                     result = shared(rb, msg.request.shared)
@@ -1197,7 +1204,6 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
                 end
                 reply(msg, result)
             else
-                setphase(pd, :up)
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
         end
@@ -1449,7 +1455,7 @@ function handle_input(rb, msg)
         end
     elseif isa(msg, AdminReqMsg)
         # currently ignore the message and return a success response
-        put!(rb.msgch, ResMsg(msg.id, STS_SUCCESS, nothing))
+        put!(rb.process.inbox, ResMsg(msg.id, STS_SUCCESS, nothing))
     elseif isa(msg, Ack2Msg)
         # remove message from already received cache
         remove_message(rb, msg)
@@ -1472,10 +1478,10 @@ function handle_input(rb, msg)
         if isa(msg, RpcReqMsg)
             response = ResMsg(msg.id, sts, result)
             @debug "response: $response"
-            put!(rb.msgch, response)
+            put!(rb.process.inbox, response)
         elseif isa(msg, PubSubMsg)
             if msg.flags > QOS0
-                put!(rb.msgch, AckMsg(msg.id))
+                put!(rb.process.inbox, AckMsg(msg.id))
                 if msg.flags == QOS2
                     save_message_mark(rb, msg)
                 end
@@ -1635,10 +1641,10 @@ function read_socket(socket, process, rb::RBServerConnection)
                 end
             elseif isa(msg, Register)
                 response = register(rb.router, msg)
-                put!(rb.msgch, response)
+                put!(rb.process.inbox, response)
             elseif isa(msg, Unregister)
                 response = unregister(rb.router, rb, msg)
-                put!(rb.msgch, response)
+                put!(rb.process.inbox, response)
             else
                 handle_input(rb, msg)
             end
@@ -1660,41 +1666,20 @@ function read_socket(socket, process, rb::RBServerConnection)
     end
 end
 
-function write_task(rb::RBHandle)
+function main_task(pd, rb::RBHandle)
     try
-        for msg in rb.msgch
-            if isa(msg, CloseConnection)
-                if rb.socket !== nothing
-                    if isa(rb.socket, ZMQ.Socket)
-                        transport_send(Val(rb.type), rb, Close())
-                        close(rb.zmqcontext)
-                    else
-                        close(rb.socket)
-                    end
-                end
-
+        rb.process = pd
+        for msg in pd.inbox
+            if isshutdown(msg)
                 break
-            elseif isa(msg, WsPing)
-                WebSockets.ping(rb.socket)
-            else
-                if rb.egress !== nothing
-                    msg = rb.egress(rb, msg)
-                end
-                if msg !== nothing
-                    outcome = false
-                    while !outcome
-                        # in the case of pubsub message
-                        # retry until the ack message is received
-                        outcome = rembus_write(rb, msg)
-                    end
-                end
+            elseif !send_message(rb, msg)
+                break
             end
         end
     catch e
         @error "write_task: $e"
     finally
-        rb.socket = nothing
-        close(rb.msgch)
+        close(rb.socket)
     end
     @debug "[$(cid(rb.client))] write_task done"
 end
@@ -1752,8 +1737,8 @@ function zmq_receive(rb)
 end
 
 function zmq_connect(rb)
-    rb.zmqcontext = ZMQ.Context()
-    rb.socket = ZMQ.Socket(rb.zmqcontext, DEALER)
+    rb.zcontext = ZMQ.Context()
+    rb.socket = ZMQ.Socket(rb.zcontext, DEALER)
     rb.socket.linger = 1
     url = brokerurl(rb)
     ZMQ.connect(rb.socket, url)
@@ -1817,7 +1802,7 @@ end
 function resend_attestate(rb, response)
     try
         msg = attestate(rb, response)
-        put!(rb.msgch, msg)
+        put!(rb.process.inbox, msg)
         if rb.client.protocol == :zmq
             CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
@@ -1913,28 +1898,19 @@ function connect_timeout(rb, isconnected)
     end
 end
 
-function setup_channel(rb::RBConnection)
-    if !isopen(rb.msgch)
-        rb.msgch = Channel(MESSAGE_CHANNEL_SZ)
-    end
-end
-
 protocol(rb::RBConnection) = rb.client.protocol
 
-function _connect(rb, process)
-    # useful for reconnections
-    setup_channel(rb)
-
+function _connect(rb, prc)
     proto = protocol(rb)
     if proto === :ws || proto === :wss
         isconnected = Condition()
         t = Timer((tim) -> connect_timeout(rb, isconnected), connect_request_timeout())
-        @async ws_connect(rb, process, isconnected)
+        @async ws_connect(rb, prc, isconnected)
         wait(isconnected)
         close(t)
     elseif proto === :tcp || proto === :tls
         isconnected = Condition()
-        @async tcp_connect(rb, process, isconnected)
+        @async tcp_connect(rb, prc, isconnected)
         wait(isconnected)
     elseif proto === :zmq
         zmq_connect(rb)
@@ -1948,9 +1924,16 @@ function _connect(rb, process)
     return rb
 end
 
+function _connect(rb)
+    prc = process(cid(rb.client), main_task, args=(rb,))
+    supervise([prc], wait=false)
+    yield()
+    return _connect(rb, prc)
+end
+
 function ws_ping(rb)
     try
-        put!(rb.msgch, WsPing())
+        put!(rb.process.inbox, WsPing())
     catch e
         @info "socket ping: $e"
     end
@@ -1959,7 +1942,7 @@ function ws_ping(rb)
 end
 
 function rembus_write(rb::RBHandle, msg)
-    @debug ">> [$(cid(rb.client))] -> $msg"
+    @debug ">> [$(cid(rb.client))] $(isdefined(msg, :id) ? msg.id : "") -> $msg"
     return transport_send(Val(rb.type), rb, msg)
 end
 
@@ -1995,10 +1978,10 @@ function connect(rb::RBConnection)
                 error("anonymous components not allowed")
             end
             task = @async connection_inquiry(rb)
-            _connect(rb, NullProcess(cid(rb.client)))
+            _connect(rb)
             wait(task)
         else
-            _connect(rb, NullProcess(cid(rb.client)))
+            _connect(rb)
             authenticate(rb)
         end
     end
@@ -2054,8 +2037,7 @@ The `url` argument string is formatted as:
 `<cid>` is the unique name of the component.
 """
 function connect(url::AbstractString)::RBHandle
-    process = NullProcess(url)
-    rb = RBConnection(process.id)
+    rb = RBConnection(url)
     return connect(rb)
 end
 
@@ -2077,7 +2059,7 @@ function connect(process::Visor.Supervised, rb::RBHandle)
 end
 
 function bind(process::Visor.Supervised, rb::RBServerConnection)
-    @async write_task(rb)
+    #@async write_task(rb)
     server = rb.router
     callbacks(rb, server.topic_function, server.subinfo)
     return rb
@@ -2090,14 +2072,14 @@ This happens just after a connection establishement.
 function callbacks(rb::RBHandle, fnmap, submap)
     for (name, fn) in fnmap
         if haskey(submap, name)
-            subscribe(rb, name, fn, from=submap[name], exceptionerror=false)
+            subscribe_server(rb, name, from=submap[name])
         else
-            expose(rb, name, fn, exceptionerror=false)
+            expose_server(rb, name)
         end
     end
 
     if rb.reactive
-        reactive(rb, exceptionerror=false)
+        reactive_server(rb)
     end
 end
 
@@ -2141,11 +2123,17 @@ end
 
 function Base.close(rb::RBHandle)
     if rb.socket !== nothing
-        # connection is established
-        put!(rb.msgch, CloseConnection())
-        while (isopen(rb.msgch))
-            sleep(0.05)
+        # TODO: check if race conditions may arise
+        #put!(rb.process.inbox, CloseConnection())
+
+        if isa(rb.socket, ZMQ.Socket)
+            transport_send(Val(rb.type), rb, Close())
+            close(rb.socket)
+            close(rb.zcontext)
+        else
+            close(rb.socket)
         end
+        rb.socket = nothing
     end
     return nothing
 end
@@ -2246,7 +2234,6 @@ function reactive(
 
     return response
 end
-
 
 #=
 The from keyword of the subscribe methods may assume the values:
@@ -2462,6 +2449,56 @@ function expose(rb::RBHandle, fn::Function; exceptionerror=true)
     return expose(rb, string(fn), fn; exceptionerror=exceptionerror)
 end
 
+function expose_server(rb::RBHandle, topic::AbstractString)
+    return send_request_direct(rb, AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)))
+end
+
+function subscribe_server(
+    rb::RBServerConnection, topic::AbstractString;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now()
+)
+    rb.router.subinfo[topic] = to_microseconds(from)
+    return send_request_direct(
+        rb,
+        AdminReqMsg(
+            topic, Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.router.subinfo[topic])
+        )
+    )
+end
+
+function subscribe_server(
+    rb::RBConnection, topic::AbstractString;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now()
+)
+    rb.subinfo[topic] = to_microseconds(from)
+    return send_request_direct(
+        rb,
+        AdminReqMsg(
+            topic, Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.subinfo[topic])
+        )
+    )
+end
+
+function reactive_server(
+    rb::RBHandle;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Day(1)
+)
+    send_request_direct(
+        rb,
+        AdminReqMsg(
+            BROKER_CONFIG,
+            Dict(
+                COMMAND => REACTIVE_CMD,
+                STATUS => true,
+                MSG_FROM => to_microseconds(from)
+            )
+        )
+    )
+    rb.reactive = true
+    return nothing
+end
+
+
 """
     unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
     unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
@@ -2613,7 +2650,11 @@ languages then data has to be a DataFrame or a primitive type that is
 [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
 function publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS0)
-    put!(rb.msgch, PubSubMsg(topic, data, qos))
+    if getphase(rb.process) !== :undef
+        send_message(rb, PubSubMsg(topic, data, qos))
+    else
+        put!(rb.process.inbox, PubSubMsg(topic, data, qos))
+    end
     return nothing
 end
 
@@ -2724,8 +2765,48 @@ function send_request(rb::RBHandle, msg::RembusMsg)
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
-    put!(rb.msgch, msg)
+    put!(rb.process.inbox, msg)
     return resp_cond
+end
+
+function send_request_direct(rb::RBHandle, msg::RembusMsg)
+    mid::UInt128 = msg.id
+    resp_cond = Distributed.Future()
+    rb.out[mid] = resp_cond
+    send_message(rb, msg)
+    return resp_cond
+end
+
+function send_message(rb::RBHandle, msg)
+    #    if isa(msg, CloseConnection)
+    #        if rb.socket !== nothing
+    #            if isa(rb.socket, ZMQ.Socket)
+    #                transport_send(Val(rb.type), rb, Close())
+    #                close(rb.zcontext)
+    #            else
+    #                close(rb.socket)
+    #            end
+    #        end
+    #
+    #        return false
+    #    elseif isa(msg, WsPing)
+    if isa(msg, WsPing)
+        WebSockets.ping(rb.socket)
+    else
+        if rb.egress !== nothing
+            msg = rb.egress(rb, msg)
+        end
+        if msg !== nothing
+            outcome = false
+            while !outcome
+                # in the case of pubsub message
+                # retry until the ack message is received
+                outcome = rembus_write(rb, msg)
+            end
+        end
+    end
+
+    return true
 end
 
 #=
@@ -2749,9 +2830,23 @@ function connection_inquiry(rb::RBHandle)
     return nothing
 end
 
+function phase(rb::RBHandle)
+    if isdefined(rb, :process)
+        return getphase(rb.process)
+    end
+    return :no_process
+end
+
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
-    resp_cond = send_request(rb, msg)
+    ph = phase(rb)
+    if ph !== :undef
+        # is a supervised component
+        resp_cond = send_request_direct(rb, msg)
+    else
+        resp_cond = send_request(rb, msg)
+    end
+
     t = Timer((tim) -> response_timeout(rb, resp_cond, msg), timeout)
     res = fetch(resp_cond)
     close(t)

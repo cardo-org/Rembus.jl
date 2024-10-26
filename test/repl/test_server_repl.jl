@@ -30,7 +30,7 @@ function run()
         @test result == 1
         close(rb)
     catch e
-        @error "[test_embedded] error: $e"
+        @error "[test_server_repl] error: $e"
         @test false
     finally
         shutdown()

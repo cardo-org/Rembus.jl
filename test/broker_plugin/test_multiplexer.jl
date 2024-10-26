@@ -52,6 +52,7 @@ end
 
 ENV["REMBUS_CONNECT_TIMEOUT"] = 10
 
+@info "[test_multipler] start"
 try
     run("ws://:9000/server")
 finally
@@ -85,3 +86,4 @@ else
 end
 
 delete!(ENV, "REMBUS_CONNECT_TIMEOUT")
+@info "[test_multipler] stop"

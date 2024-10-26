@@ -44,7 +44,6 @@ function run()
     @test !isfile(keyfn)
 
     close(rb)
-    shutdown()
 end
 
 function login_failed()
@@ -52,7 +51,7 @@ function login_failed()
     server_name = "server_test"
     kdir = Rembus.keys_dir(server_name)
     mkpath(kdir)
-    server_side_secret = joinpath(kdir, cid)
+    server_side_secret = joinpath(kdir, "$cid.rsa.pem")
     try
         write(server_side_secret, "aaa")
         write(Rembus.pkfile(cid), "bbb")
@@ -60,14 +59,21 @@ function login_failed()
         server(name=server_name)
         @test_throws RembusError connect(cid)
     finally
-        rm(server_side_secret)
-        rm(Rembus.pkfile(cid))
         shutdown()
     end
+    rm(server_side_secret)
+    rm(Rembus.pkfile(cid))
 
 end
 
-run()
+try
+    run()
+catch e
+    @error "[test_register_server]; $e"
+    @test false
+finally
+    shutdown()
+end
 
 @info "[test_register_server] start"
 login_failed()

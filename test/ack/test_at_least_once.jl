@@ -31,6 +31,7 @@ function pub(topic, num_msg)
     for i in 1:num_msg
         publish(pub, topic, i, qos=QOS1)
     end
+    sleep(1)
     close(pub)
 end
 

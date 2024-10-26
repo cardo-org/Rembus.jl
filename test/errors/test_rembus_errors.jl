@@ -44,8 +44,6 @@ function run()
     send_wrong_packet()
     sleep(0.2)
 
-    # triggers a warning log when closing the rembus handler
-    close(rb.zmqcontext)
     close(rb)
 
     # wrong zmq endpoint does not trigger error

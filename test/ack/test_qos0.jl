@@ -84,7 +84,7 @@ function run()
     close(pub_rb)
 end
 
-execute(run, "test_qos2")
+execute(run, "test_qos0")
 
 # On Windows this locks the file and prevents to remove it
 # This make fail the next test because caronte_reset() throw an error.

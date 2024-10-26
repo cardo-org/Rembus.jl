@@ -1,25 +1,6 @@
 using Rembus
 using Test
 
-module Broker
-
-using Rembus
-
-function expose_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-function subscribe_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-function reactive_handler(sock, router, component, message)
-    Rembus.transport_send(component, sock, message)
-end
-
-
-end # module Broker
-
 function foo(x)
     @info "[foo] arg:$x"
     return x + 1
@@ -36,27 +17,22 @@ function run(exposer_url)
     )
     yield()
 
-    caronte(
+    edge_broker = caronte(
         wait=false,
-        plugin=Broker,
         name="edge_broker", ws=9000)
     yield()
 
-    #    cli_url = "ws://:8000/client"
     broker_url = "ws://:8000/combo"
 
-    Rembus.connect(broker_url, "edge_broker")
+    connect(edge_broker, broker_url)
     sleep(1)
-    @info "shutting down main broker"
 
-    # shutting down the main_broker triggers an error on the edge_broker
-    # and the supervisor
+    connector = from(broker_url)
+
     main_broker = from("main_broker")
     shutdown(main_broker)
     sleep(1)
-
-    p = from(broker_url)
-    @test p.status === Visor.failed
+    @test connector.status === Visor.failed
 
     # reconnect
     caronte(

@@ -13,6 +13,21 @@ const HEADER_LEN4 = 0x8F
 
 zmqsocketlock = ReentrantLock()
 
+const MESSAGE_END = UInt8[0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef]
+
+const WAIT_ID = UInt8(1)
+const WAIT_EMPTY = UInt8(2)
+const WAIT_HEADER = UInt8(3)
+const WAIT_DATA = UInt8(4)
+
+mutable struct ZMQPacket
+    status::UInt8
+    identity::Vector{UInt8}
+    header::Vector{Any}
+    data::ZMQ.Message
+    ZMQPacket() = new(WAIT_ID, UInt8[], [], Message())
+end
+
 #=
     zmq_load(socket::ZMQ.Socket)
 
@@ -20,9 +35,13 @@ Get a Rembus message from a ZeroMQ multipart message.
 
 The decoding is performed at the client side.
 =#
-function zmq_load(socket::ZMQ.Socket)
 
+function zmq_load(socket::ZMQ.Socket)
     pkt = zmq_message(socket)
+    return zmq2msg(pkt)
+end
+
+function zmq2msg(pkt)
     header = pkt.header
     data::Vector{UInt8} = pkt.data
 
@@ -55,6 +74,10 @@ function zmq_load(socket::ZMQ.Socket)
     elseif ptype == TYPE_ACK2
         id = bytes2id(header[2])
         return Ack2Msg(id)
+    elseif ptype == TYPE_ADMIN
+        id = bytes2id(header[2])
+        topic = header[3]
+        return AdminReqMsg(id, topic, decode(data))
     else
         throw(ErrorException("unknown packet type $ptype"))
     end
@@ -201,21 +224,6 @@ end
 
 @inline tobytes(socket::Socket) = Vector{UInt8}(ZMQ.recv(socket))
 
-const MESSAGE_END = UInt8[0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef]
-
-const WAIT_ID = UInt8(1)
-const WAIT_EMPTY = UInt8(2)
-const WAIT_HEADER = UInt8(3)
-const WAIT_DATA = UInt8(4)
-
-mutable struct ZMQPacket
-    status::UInt8
-    identity::Vector{UInt8}
-    header::Vector{Any}
-    data::ZMQ.Message
-    ZMQPacket() = new(WAIT_ID, UInt8[], [], Message())
-end
-
 mutable struct ZMQDealerPacket
     header::Vector{Any}
     data::ZMQ.Message
@@ -235,7 +243,7 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
         if expect_empty
             msg = ZMQ.recv(socket)
             if !isempty(msg)
-                @error "ZMQ: expected empty message"
+                @error "ZMQ delear: expected empty message"
                 continue
             end
         else
@@ -252,13 +260,13 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
                     # data may be the empty message part of the next message
                     expect_empty = false
                 end
-                @error "ZMQ: expected end of message"
+                @error "ZMQ dealer: expected end of message"
                 continue
             end
             return ZMQDealerPacket(header, data)
 
         catch e
-            @error "ZMQ: wrong header $bval ($e)"
+            @error "ZMQ dealer: wrong header $bval ($e)"
             if isempty(bval)
                 expect_empty = false
             end
@@ -289,14 +297,14 @@ function zmq_message(router::AbstractRouter, pkt::ZMQPacket)::Bool
         msg = recv(router.zmqsocket)
         if pkt.status == WAIT_ID
             if length(msg) != 5 || msg[1] != 0
-                @error "ZMQ: expected identity, got: $msg"
+                @error "ZMQ router: expected identity, got: $msg"
             else
                 pkt.status = WAIT_EMPTY
                 pkt.identity = msg
             end
         elseif pkt.status == WAIT_EMPTY
             if !isempty(msg)
-                @error "ZMQ [$identity]: expected empty message"
+                @error "ZMQ router [$identity]: expected empty message"
                 if is_identity(msg)
                     pkt.identity = msg
                 else
@@ -374,7 +382,6 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         if isempty(cid)
             error("empty cid")
         end
-        router.mid2address[mid] = id
         return IdentityMsg(mid, cid)
     elseif ptype == TYPE_PUB
         if flags === QOS0
@@ -383,7 +390,6 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         else
             ack_id = bytes2id(pkt.header[2])
             topic = pkt.header[3]
-            router.mid2address[ack_id] = id
         end
         data = pkt.data
         return PubSubMsg(topic, data, flags, ack_id)
@@ -392,13 +398,11 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         topic = pkt.header[3]
         target = pkt.header[4]
         data = pkt.data
-        router.mid2address[mid] = id
         return RpcReqMsg(mid, topic, data, target, flags)
     elseif ptype == TYPE_ADMIN
         mid = bytes2id(pkt.header[2])
         topic = pkt.header[3]
         data = message2data(pkt.data)
-        router.mid2address[mid] = id
         return AdminReqMsg(mid, topic, data, flags)
     elseif ptype == TYPE_RESPONSE
         mid = bytes2id(pkt.header[2])
@@ -407,7 +411,6 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         return ResMsg(mid, status, data, flags)
     elseif ptype == TYPE_ACK
         mid = bytes2id(pkt.header[2])
-        router.mid2address[mid] = id
         return AckMsg(mid)
     elseif ptype == TYPE_REGISTER
         mid = bytes2id(pkt.header[2])
@@ -415,24 +418,20 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         tenant = pkt.header[4]
         type = pkt.header[5]
         pubkey::Vector{UInt8} = pkt.data
-        router.mid2address[mid] = id
         return Register(mid, cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
-        router.mid2address[mid] = id
         return Unregister(mid, cid)
     elseif ptype == TYPE_ATTESTATION
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         signature::Vector{UInt8} = pkt.data
-        router.mid2address[mid] = id
         return Attestation(mid, cid, signature)
     elseif ptype == TYPE_PING
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         @debug "ping from [$cid]"
-        router.mid2address[mid] = id
         return PingMsg(mid, cid)
         #    elseif ptype == TYPE_REMOVE
         #        return Remove()
@@ -533,17 +532,15 @@ function transport_send(
     if msg.flags > QOS0
         msgid = msg.id
 
-        ack_cond = Threads.Condition()
-        twin.ack_cond[msgid] = ack_cond
+        ack_cond = Distributed.Future()
+        twin.out[msgid] = ack_cond
         twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msgid
             ), ACK_WAIT_TIME)
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
         broker_transport_write(twin.socket, pkt)
-        outcome = lock(ack_cond) do
-            wait(ack_cond)
-        end
-        delete!(twin.ack_cond, msgid)
+        outcome = fetch(ack_cond)
+        delete!(twin.out, msgid)
     else
         pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
         broker_transport_write(twin.socket, pkt)
@@ -558,8 +555,9 @@ end
 Resend a PubSub message in case the acknowledge message is not received.
 =#
 function client_ack_timeout(tim, rb, msg, msgid)
-    if haskey(rb.acktimer, msgid) & isopen(rb.msgch)
-        put!(rb.msgch, msg)
+    # TODO: is isopen() control needed?
+    if haskey(rb.acktimer, msgid) & isopen(rb.process.inbox)
+        put!(rb.process.inbox, msg)
     end
 
     if haskey(rb.out, msgid)
@@ -627,8 +625,8 @@ function transport_send(::Val{zrouter}, twin, msg::PubSubMsg)
     data = data2message(msg.data)
     outcome = true
     if msg.flags > QOS0
-        ack_cond = Threads.Condition()
-        twin.ack_cond[msg.id] = ack_cond
+        ack_cond = Distributed.Future()
+        twin.out[msg.id] = ack_cond
 
         twin.acktimer[msg.id] = Timer((tim) -> handle_ack_timeout(
                 tim, twin, msg, msg.id
@@ -642,10 +640,8 @@ function transport_send(::Val{zrouter}, twin, msg::PubSubMsg)
             send(twin.socket, MESSAGE_END, more=false)
         end
 
-        outcome = lock(ack_cond) do
-            wait(ack_cond)
-        end
-        delete!(twin.ack_cond, msg.id)
+        outcome = fetch(ack_cond)
+        delete!(twin.out, msg.id)
     else
         header = encode([TYPE_PUB | msg.flags, msg.topic])
         lock(zmqsocketlock) do
@@ -727,7 +723,7 @@ function transport_send(::Val{zdealer}, rb, msg::RpcReqMsg)
 end
 
 function transport_send(::Val{zrouter}, twin, msg::ResMsg, enc=false)
-    address = twin.router.mid2address[msg.id]
+    address = twin.zaddress
     lock(zmqsocketlock) do
         send(twin.socket, address, more=true)
         send(twin.socket, Message(), more=true)
@@ -797,7 +793,7 @@ end
 
 function transport_send(::Val{zrouter}, rb, msg::AdminReqMsg)
     content = tagvalue_if_dataframe(msg.data)
-    address = rb.router.mid2address[msg.id]
+    address = rb.zaddress
     lock(zmqsocketlock) do
         send(rb.socket, address, more=true)
         send(rb.socket, Message(), more=true)
@@ -815,7 +811,7 @@ function transport_send(::Val{socket}, rb::Twin, msg::AckMsg)
 end
 
 function transport_send(::Val{zrouter}, twin, msg::AckMsg)
-    address = twin.router.mid2address[msg.id]
+    address = twin.zaddress
     lock(zmqsocketlock) do
         send(twin.socket, address, more=true)
         send(twin.socket, Message(), more=true)
@@ -833,7 +829,7 @@ function transport_send(::Val{socket}, rb::Twin, msg::Ack2Msg)
 end
 
 function transport_send(::Val{zrouter}, twin, msg::Ack2Msg)
-    address = twin.router.mid2address[msg.id]
+    address = twin.zaddress
     lock(zmqsocketlock) do
         send(twin.socket, address, more=true)
         send(twin.socket, Message(), more=true)
@@ -985,9 +981,17 @@ function ws_write(ws::WebSockets.WebSocket, payload)
     HTTP.WebSockets.send(ws, payload)
 end
 
+function broker_transport_write(::Nothing, pkt)
+    @warn "broker send $pkt failed: connection closed"
+end
+
 function broker_transport_write(ws::WebSockets.WebSocket, pkt)
     payload = encode_partial(pkt)
     ws_write(ws, payload)
+end
+
+function transport_write(::Nothing, pkt)
+    @warn "send $pkt failed: connection closed"
 end
 
 function transport_write(ws::WebSockets.WebSocket, pkt)

@@ -19,6 +19,7 @@ function run()
     sleep(1)
     publish(rb, "topic_1")
     publish(rb, "topic_2")
+    sleep(0.1)
     close(rb)
 
     # Only named component may receive message from past ...

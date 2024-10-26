@@ -65,9 +65,8 @@ function register(
     end
 
     @debug "connecting register"
-    process = NullProcess(cmp.id)
     rb = RBConnection(cmp)
-    _connect(rb, process)
+    _connect(rb)
 
     try
         @debug "registering $cid"
