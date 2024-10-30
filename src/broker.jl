@@ -1802,7 +1802,8 @@ function listener(proc, caronte_port, router, sslconfig)
         IP,
         caronte_port,
         server=server,
-        sslconfig=sslconfig
+        sslconfig=sslconfig,
+        verbose=-1
     ) do ws
         client_receiver(router, ws)
     end
