@@ -30,7 +30,7 @@ c = Rembus.Component("myc")
 @test Rembus.brokerurl(c) == "ws://127.0.0.1:8000"
 
 c = Rembus.Component("ws://127.0.0.1:8000")
-@test c.id == "rembus"
+@test !Rembus.hasname(c)
 @test c.port == 8000
 @test c.host == "127.0.0.1"
 @test c.protocol == :ws

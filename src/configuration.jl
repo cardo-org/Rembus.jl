@@ -5,8 +5,6 @@ Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
 Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
 =#
 
-const DEFAULT_APP_NAME = "rembus"
-
 macro showerror(e)
     quote
         if CONFIG.stacktrace
@@ -15,10 +13,10 @@ macro showerror(e)
     end
 end
 
+# Get the default name for component, mainly used by macro APIs
 function component_id(cfg)
-    url = get(cfg, "cid", get(ENV, "REMBUS_CID", DEFAULT_APP_NAME))
-    uri = URI(url)
-    return startswith(uri.path, "/") ? uri.path[2:end] : uri.path
+    url = get(cfg, "cid", get(ENV, "REMBUS_CID", ""))
+    return Component(url)
 end
 
 function default_rembus_dir()
@@ -49,7 +47,7 @@ mutable struct Settings
     stacktrace   # log stacktrace on error
     metering     # log in and out messages
     rawdump      # log in and out raw bytes
-    cid::String  # rembus default component cid
+    cid::Component
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
     save_messages::Bool
@@ -66,7 +64,7 @@ mutable struct Settings
         stacktrace = false
         metering = false
         rawdump = false
-        cid = DEFAULT_APP_NAME
+        cid = Component()
         connection_retry_period = 2.0
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
         new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log_destination, log_level,

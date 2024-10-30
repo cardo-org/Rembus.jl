@@ -36,7 +36,6 @@ mutable struct Twin
     mark::UInt64
     msg_from::Dict{String,Float64}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
-    zcontext::Union{Nothing,ZMQ.Context} # TODO: check if needed
     process::Visor.Process
 
     Twin(router, id, type::NodeType) = new(
@@ -55,8 +54,7 @@ mutable struct Twin
         UInt8[0, 0, 0, 0],
         0,
         Dict(),
-        Dict(),
-        nothing
+        Dict()
     )
 end
 
@@ -107,6 +105,7 @@ mutable struct Router <: AbstractRouter
     http_server::HTTP.Server
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
+    zmqcontext::ZMQ.Context
     owners::DataFrame
     component_owner::DataFrame
     Router(plugin=nothing, context=nothing) = new(
@@ -374,7 +373,7 @@ Unbind the ZMQ socket from the twin.
 function offline!(twin)
     @debug "[$twin] closing: going offline"
     twin.socket = nothing
-    delete!(twin.router.twin2address, twin.id)
+    delete!(twin.router.twin2address, ucid(twin))
     # Remove from address2twin
     filter!(((k, v),) -> twin != v, twin.router.address2twin)
     return nothing
@@ -1006,8 +1005,7 @@ function zeromq_receiver(router::Server)
                 twin.zaddress = id
             end
 
-            msg = zmq2msg(pkt)
-
+            msg = broker_parse(pkt, false)
             #@mlog("[ZMQ][$twin] <- $(prettystr(msg))")
 
             if isa(msg, IdentityMsg)
@@ -1023,7 +1021,7 @@ function zeromq_receiver(router::Server)
                 #@mlog("[ZMQ][$twin] -> $response")
                 transport_send(Val(twin.type), twin, response)
             elseif isa(msg, PingMsg)
-                if (twin.id != msg.cid)
+                if (ucid(twin) != msg.cid)
 
                     # broker restarted
                     # start the authentication flow if cid is registered
@@ -1104,7 +1102,7 @@ function zeromq_receiver(router::Router)
                 twin.socket = router.zmqsocket
             end
 
-            msg::RembusMsg = broker_parse(router, pkt)
+            msg::RembusMsg = broker_parse(pkt)
             #@mlog("[ZMQ][$twin] <- $(prettystr(msg))")
 
             if isa(msg, IdentityMsg)
@@ -1180,8 +1178,8 @@ function identity_upgrade(router, twin, msg, id; authenticate=false)
     newtwin = attestation(router, twin, msg, authenticate)
     if newtwin !== nothing
         router.address2twin[id] = newtwin
-        delete!(router.twin2address, twin.id)
-        router.twin2address[newtwin.id] = id
+        delete!(router.twin2address, ucid(twin))
+        router.twin2address[ucid(newtwin)] = id
     end
 
     return nothing
@@ -1766,8 +1764,7 @@ function client_receiver(router::Server, ws)
     router.id_twin[id] = rb
     read_socket(ws, p, rb)
     delete!(router.id_twin, id)
-    # TODO: return nothing?
-    return rb
+    return nothing
 end
 
 
@@ -2223,8 +2220,8 @@ end
 function serve_zeromq(pd, router, port)
     @debug "[serve_zeromq] starting"
     router_ready(router)
-    context = ZMQ.Context()
-    router.zmqsocket = Socket(context, ROUTER)
+    router.zmqcontext = ZMQ.Context()
+    router.zmqsocket = Socket(router.zmqcontext, ROUTER)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
 
     try
@@ -2241,6 +2238,7 @@ function serve_zeromq(pd, router, port)
     finally
         setphase(pd, :terminate)
         ZMQ.close(router.zmqsocket)
+        ZMQ.close(router.zmqcontext)
         ZMQ.close(context)
         @debug "[serve_zeromq] closed"
     end

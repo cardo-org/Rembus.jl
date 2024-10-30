@@ -20,7 +20,9 @@ const WAIT_EMPTY = UInt8(2)
 const WAIT_HEADER = UInt8(3)
 const WAIT_DATA = UInt8(4)
 
-mutable struct ZMQPacket
+abstract type ZMQAbstractPacket end
+
+mutable struct ZMQPacket <: ZMQAbstractPacket
     status::UInt8
     identity::Vector{UInt8}
     header::Vector{Any}
@@ -28,61 +30,21 @@ mutable struct ZMQPacket
     ZMQPacket() = new(WAIT_ID, UInt8[], [], Message())
 end
 
+mutable struct ZMQDealerPacket <: ZMQAbstractPacket
+    header::Vector{Any}
+    data::ZMQ.Message
+end
+
 #=
     zmq_load(socket::ZMQ.Socket)
 
 Get a Rembus message from a ZeroMQ multipart message.
 
-The decoding is performed at the client side.
+The decoding is performed at the component side or a server side.
 =#
-
 function zmq_load(socket::ZMQ.Socket)
     pkt = zmq_message(socket)
-    return zmq2msg(pkt)
-end
-
-function zmq2msg(pkt)
-    header = pkt.header
-    data::Vector{UInt8} = pkt.data
-
-    type = header[1]
-    ptype = type & 0x0f
-    flags = type & 0xf0
-    if ptype == TYPE_PUB
-        if flags == QOS0
-            ackid = 0
-            topic = header[2]
-        else
-            ackid = bytes2id(header[2])
-            topic = header[3]
-        end
-        msg = PubSubMsg(topic, dataframe_if_tagvalue(decode(data)), flags, ackid)
-    elseif ptype == TYPE_RPC
-        id = bytes2id(header[2])
-        topic = header[3]
-        target = header[4]
-        msg = RpcReqMsg(id, topic, dataframe_if_tagvalue(decode(data)), target, flags)
-    elseif ptype == TYPE_RESPONSE
-        id = bytes2id(header[2])
-        status = header[3]
-        # NOTE: for very large dataframes decode is slow, needs investigation.
-        val = decode(data)
-        msg = ResMsg(id, status, dataframe_if_tagvalue(val), flags)
-    elseif ptype == TYPE_ACK
-        id = bytes2id(header[2])
-        return AckMsg(id)
-    elseif ptype == TYPE_ACK2
-        id = bytes2id(header[2])
-        return Ack2Msg(id)
-    elseif ptype == TYPE_ADMIN
-        id = bytes2id(header[2])
-        topic = header[3]
-        return AdminReqMsg(id, topic, decode(data))
-    else
-        throw(ErrorException("unknown packet type $ptype"))
-    end
-
-    return msg
+    return broker_parse(pkt, false)
 end
 
 #=
@@ -224,11 +186,6 @@ end
 
 @inline tobytes(socket::Socket) = Vector{UInt8}(ZMQ.recv(socket))
 
-mutable struct ZMQDealerPacket
-    header::Vector{Any}
-    data::ZMQ.Message
-end
-
 #=
     zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
 
@@ -361,20 +318,17 @@ function zmq_message(router::AbstractRouter, pkt::ZMQPacket)::Bool
 end
 
 #=
-    broker_parse(router::Router, pkt::ZMQPacket)
+    broker_parse(pkt::ZMQPacket, isbroker=true)
 
 The Broker parser of ZeroMQ messages.
 
 `pkt` is the zeromq message decoded as `[identity, header, data]`.
 =#
-function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
-    id = pkt.identity
+function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
     type = pkt.header[1]
 
     ptype = type & 0x0f
     flags = type & 0xf0
-
-    @debug "[zmq parse] from $id recv type $type"
 
     if ptype == TYPE_IDENTITY
         mid = bytes2id(pkt.header[2])
@@ -392,13 +346,21 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
             topic = pkt.header[3]
         end
         data = pkt.data
-        return PubSubMsg(topic, data, flags, ack_id)
+        if isbroker
+            return PubSubMsg(topic, data, flags, ack_id)
+        else
+            return PubSubMsg(topic, dataframe_if_tagvalue(decode(data)), flags, ack_id)
+        end
     elseif ptype == TYPE_RPC
         mid = bytes2id(pkt.header[2])
         topic = pkt.header[3]
         target = pkt.header[4]
         data = pkt.data
-        return RpcReqMsg(mid, topic, data, target, flags)
+        if isbroker
+            return RpcReqMsg(mid, topic, data, target, flags)
+        else
+            return RpcReqMsg(mid, topic, dataframe_if_tagvalue(decode(data)), target, flags)
+        end
     elseif ptype == TYPE_ADMIN
         mid = bytes2id(pkt.header[2])
         topic = pkt.header[3]
@@ -408,7 +370,11 @@ function broker_parse(router::AbstractRouter, pkt::ZMQPacket)
         mid = bytes2id(pkt.header[2])
         status = pkt.header[3]
         data = pkt.data
-        return ResMsg(mid, status, data, flags)
+        if isbroker
+            return ResMsg(mid, status, data, flags)
+        else
+            return ResMsg(mid, status, dataframe_if_tagvalue(decode(data)), flags)
+        end
     elseif ptype == TYPE_ACK
         mid = bytes2id(pkt.header[2])
         return AckMsg(mid)

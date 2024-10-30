@@ -4,8 +4,8 @@ using ZMQ
 function run()
     rb = Rembus.RBConnection("zmq://:8002/myzmq")
 
-    rb.zcontext = ZMQ.Context()
-    rb.socket = ZMQ.Socket(rb.zcontext, REQ)
+    rb.zmqcontext = ZMQ.Context()
+    rb.socket = ZMQ.Socket(rb.zmqcontext, REQ)
     url = Rembus.brokerurl(rb.client)
     @info "url:$url"
     ZMQ.connect(rb.socket, url)

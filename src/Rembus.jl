@@ -100,6 +100,7 @@ end
 
 mutable struct Component
     id::String
+    hasname::Bool
     protocol::Symbol
     host::String
     port::UInt16
@@ -134,19 +135,22 @@ mutable struct Component
             error("wrong url $url: unknown protocol $proto")
         end
         if isempty(name)
-            name = "rembus"
+            name = string(uuid4())
+            hasname = false
+        else
+            hasname = true
         end
-        return new(name, protocol, host, port, props)
-    end
-
-    function Component(id::String, type::NodeType)
-
+        return new(name, hasname, protocol, host, port, props)
     end
 end
+
+Component() = Component("")
 
 brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
 cid(c::Component) = "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
+
+hasname(c::Component) = c.hasname
 
 function nodetype(c::Component)
     if c.protocol === :ws || c.protocol === :wss ||
@@ -194,7 +198,7 @@ mutable struct RBConnection <: RBHandle
     subinfo::Dict{String,Float64}
     out::Dict{UInt128,Distributed.Future}
     acktimer::Dict{UInt128,Timer}
-    zcontext::Union{Nothing,ZMQ.Context}
+    zmqcontext::Union{Nothing,ZMQ.Context}
     process::Visor.Process
     function RBConnection(name::String)
         c = Component(name)
@@ -268,6 +272,7 @@ mutable struct Server <: AbstractRouter
     http_server::HTTP.Server
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
+    zmqcontext::ZMQ.Context
     owners::DataFrame
     component_owner::DataFrame
     Server(shared=missing) = new(
@@ -516,7 +521,7 @@ connect_request_timeout() = parse(Float32, get(ENV, "REMBUS_CONNECT_TIMEOUT", "1
 
 call_timeout() = request_timeout() + 0.5
 
-getcomponent() = Component(Rembus.CONFIG.cid)
+getcomponent() = Rembus.CONFIG.cid
 
 function name2proc(name::AbstractString, startproc=false, setanonymous=false)
     cmp = Component(name)
@@ -533,7 +538,7 @@ end
 function name2proc(cmp::Component, startproc=false, setanonymous=false)
     proc = from(cmp.id)
     if proc === nothing
-        if setanonymous && CONFIG.cid == "rembus"
+        if setanonymous && !hasname(CONFIG.cid)
             proc = startup(rembus())
         end
     end
@@ -558,7 +563,7 @@ to the broker.
 """
 macro component(name)
     quote
-        Rembus.CONFIG.cid = $(esc(name))
+        Rembus.CONFIG.cid = Component($(esc(name)))
         Visor.startup(rembus())
     end
 end
@@ -573,7 +578,7 @@ Close the connection and terminate the component.
 macro terminate(name=nothing)
     quote
         shutdown(name2proc($(esc(name))))
-        Rembus.CONFIG.cid = "rembus"
+        Rembus.CONFIG.cid = Component()
         nothing
     end
 end
@@ -1126,12 +1131,11 @@ shared(rb::RBHandle, ctx) = rb.shared = ctx
 
 function rembus(cid=nothing)
     if cid === nothing
-        id = Rembus.CONFIG.cid
+        cmp = Rembus.CONFIG.cid
     else
-        id = cid
+        cmp = Component(cid)
     end
 
-    cmp = Component(id)
     rb = RBConnection(cmp)
     process(
         cmp.id,
@@ -1210,7 +1214,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
     catch e
         if isa(e, AlreadyConnected)
             @error "[$(e.cid)] already connected"
-            Rembus.CONFIG.cid = "rembus"
+            Rembus.CONFIG.cid = Component("")
             return
         end
 
@@ -1737,8 +1741,8 @@ function zmq_receive(rb)
 end
 
 function zmq_connect(rb)
-    rb.zcontext = ZMQ.Context()
-    rb.socket = ZMQ.Socket(rb.zcontext, DEALER)
+    rb.zmqcontext = ZMQ.Context()
+    rb.socket = ZMQ.Socket(rb.zmqcontext, DEALER)
     rb.socket.linger = 1
     url = brokerurl(rb)
     ZMQ.connect(rb.socket, url)
@@ -1846,7 +1850,7 @@ function attestate(rb, response)
 end
 
 function authenticate(rb)
-    if rb.client.id == "rembus"
+    if !hasname(rb.client)
         return nothing
     end
 
@@ -1973,7 +1977,7 @@ isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 function connect(rb::RBConnection)
     if !isconnected(rb)
         if rb.client.protocol !== :zmq && CONFIG.connection_mode === authenticated
-            if rb.client.id == "rembus"
+            if !hasname(rb.client)
                 close(rb)
                 error("anonymous components not allowed")
             end
@@ -2129,7 +2133,7 @@ function Base.close(rb::RBHandle)
         if isa(rb.socket, ZMQ.Socket)
             transport_send(Val(rb.type), rb, Close())
             close(rb.socket)
-            close(rb.zcontext)
+            close(rb.zmqcontext)
         else
             close(rb.socket)
         end
@@ -2782,7 +2786,7 @@ function send_message(rb::RBHandle, msg)
     #        if rb.socket !== nothing
     #            if isa(rb.socket, ZMQ.Socket)
     #                transport_send(Val(rb.type), rb, Close())
-    #                close(rb.zcontext)
+    #                close(rb.zmqcontext)
     #            else
     #                close(rb.socket)
     #            end

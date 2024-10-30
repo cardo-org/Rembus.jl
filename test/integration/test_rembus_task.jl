@@ -5,7 +5,8 @@ function run()
     # force a connection
     @rpc version()
 
-    proc = from("rembus")
+    # the first supervised process is caronte_test
+    proc = collect(values(from(".").processes))[2]
 
     Rembus.processput!(proc, ErrorException("boom"))
     sleep(1)
