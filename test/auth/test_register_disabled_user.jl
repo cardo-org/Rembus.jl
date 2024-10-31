@@ -17,7 +17,7 @@ function run(url)
     try
         Rembus.register(url, pin, tenant="A")
     catch e
-        @info "[test_register] expected error: $e"
+        @info "[test_register_disabled_user] expected error: $e"
         @test e.reason === "tenant [$tenant] not enabled"
     end
 end
@@ -28,9 +28,9 @@ pin = "11223344"
 
 setup() = disabled_user(tenant, pin)
 try
-    execute(() -> run(cid), "test_register", setup=setup)
+    execute(() -> run(cid), "test_register_disabled_user", setup=setup)
 catch e
-    @error "[test_register]: $e"
+    @error "[test_register_disabled_user]: $e"
     @test false
 finally
     remove_keys(cid)

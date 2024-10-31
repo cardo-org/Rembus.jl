@@ -15,7 +15,6 @@ end
 
 function run(url)
     cmp = Rembus.Component(url)
-
     # trigger a request timeout
     ENV["REMBUS_TIMEOUT"] = 0.0
     @test_throws RembusTimeout register(url, pin)

@@ -30,13 +30,13 @@ function run(url)
     Rembus.register(url, pin, tenant=tenant, scheme=Rembus.SIG_ECDSA)
 
     # private key was created
-    @info "[test_register#1]"
+    @info "[test_register_ecdsa#1]"
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
         Rembus.register(url, pin, tenant=tenant)
     catch e
-        @info "[test_register] expected error: $e"
+        @info "[test_register_ecdsa] expected error: $e"
     end
 
     # move private key to test the case another client try to register
@@ -48,7 +48,7 @@ function run(url)
         Rembus.register(url, pin, tenant=tenant, scheme=Rembus.SIG_RSA)
         @test false
     catch e
-        @info "[test_register#2] expected error: $e"
+        @info "[test_register_ecdsa#2] expected error: $e"
         @test true
     end
     mv("$pkfile.staged", pkfile, force=true)
@@ -56,13 +56,13 @@ function run(url)
     # check configuration
     # component_owner file contains the component component
     df = Rembus.load_token_app(BROKER_NAME)
-    @info "[test_register#3,4] component_owner: $df"
+    @info "[test_register_ecdsa#3,4] component_owner: $df"
     @test df[df.component.==cmp.id, :component][1] === cmp.id
     @test df[df.component.==cmp.id, :tenant][1] === tenant
 
     # public key was provisioned
     fname = Rembus.pubkey_file(BROKER_NAME, cmp.id)
-    @info "[test_register#5]"
+    @info "[test_register_ecdsa#5]"
     @test basename(fname) === "$(cmp.id).ecdsa.pem"
 end
 

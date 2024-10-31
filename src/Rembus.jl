@@ -2849,6 +2849,7 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
         resp_cond = send_request_direct(rb, msg)
     else
         resp_cond = send_request(rb, msg)
+        yield()
     end
 
     t = Timer((tim) -> response_timeout(rb, resp_cond, msg), timeout)

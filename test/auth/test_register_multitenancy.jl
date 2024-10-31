@@ -28,13 +28,13 @@ function run(url)
     Rembus.register(url, pin, tenant="A")
 
     # private key was created
-    @info "[test_register#1]"
+    @info "[test_register_multitenancy#1]"
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
         Rembus.register(url, pin, tenant="A")
     catch e
-        @info "[test_register] expected error: $e"
+        @info "[test_register_multitenancy] expected error: $e"
     end
 
     try
@@ -42,7 +42,7 @@ function run(url)
         Rembus.register("mycomponent", "00000000", tenant="A")
         @test false
     catch e
-        @info "[test_register#2] expected error: $e"
+        @info "[test_register_multitenancy#2] expected error: $e"
         @test true
     end
 
@@ -55,7 +55,7 @@ function run(url)
         Rembus.register(url, pin, tenant="A")
         @test false
     catch e
-        @info "[test_register#3] expected error: $e"
+        @info "[test_register_multitenancy#3] expected error: $e"
         @test true
     end
     mv("$pkfile.staged", pkfile, force=true)
@@ -63,13 +63,13 @@ function run(url)
     # check configuration
     # component_owner file contains the component component
     df = Rembus.load_token_app(BROKER_NAME)
-    @info "[test_register#4,5] component_owner: $df"
+    @info "[test_register_multitenancy#4,5] component_owner: $df"
     @test df[df.component.==cmp.id, :component][1] === cmp.id
     @test df[df.component.==cmp.id, :tenant][1] === "A"
 
     # public key was provisioned
     fname = Rembus.pubkey_file(BROKER_NAME, cmp.id)
-    @info "[test_register#6]"
+    @info "[test_register_multitenancy#6]"
     @test basename(fname) === "$(cmp.id).rsa.pem"
 end
 
@@ -80,7 +80,7 @@ function decommission(url)
         Rembus.unregister(client)
         @test false
     catch e
-        @info "[test_register#7] unregister expected error: $e"
+        @info "[test_register_multitenancy#7] unregister expected error: $e"
         @test true
     finally
         close(client)
@@ -93,7 +93,7 @@ function decommission(url)
         df = Rembus.load_token_app(BROKER_NAME)
 
         # the component was removed from component_owner file
-        @info "[test_register#8,9,10]"
+        @info "[test_register_multitenancy#8,9,10]"
         @test isempty(df[df.component.==cid, :])
 
         # the public key was removed
@@ -113,7 +113,7 @@ function decommission(url)
         Rembus.unregister(client)
         @test false
     catch e
-        @info "[test_register#10] unregister expected error: $e"
+        @info "[test_register_multitenancy#10] unregister expected error: $e"
         @test true
     finally
         close(client)
@@ -127,14 +127,14 @@ pin = "11223344"
 setup() = init(pin)
 try
     url = "zmq://:8002/$cid"
-    execute(() -> run(url), "test_register", setup=setup)
+    execute(() -> run(url), "test_register_multitenancy", setup=setup)
     execute(() -> decommission(url), "test_unregister", setup=setup)
 
     url = cid
-    execute(() -> run(cid), "test_register", setup=setup)
+    execute(() -> run(cid), "test_register_multitenancy", setup=setup)
 
 catch e
-    @error "[test_register]: $e"
+    @error "[test_register_multitenancy]: $e"
     @test false
 finally
     remove_keys(cid)
