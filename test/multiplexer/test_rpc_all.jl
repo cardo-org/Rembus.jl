@@ -1,32 +1,33 @@
 include("../utils.jl")
 
-
-myservice(ctx, rb) = 1
+yes() = "yes"
+no() = "no"
 
 function start_servers()
-    for port in [7000, 7001]
-        rb = server(ws=port)
-        expose(rb, myservice)
-    end
+    s1 = server(ws=7000)
+    expose(s1, "myservice", yes)
+
+    s2 = server(ws=7001)
+    expose(s2, "myservice", no)
 end
 
-function run()
-
-    start_servers()
-
-    set_balancer("all")
-    rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"])
-
+function policy_all()
+    rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"], :policy_all)
     results = rpc(rb, "myservice", timeout=3, exceptionerror=false)
-    @info "results: $results"
-
+    @test isequal(results, ["yes", missing, "no"])
     close(rb)
-    set_balancer("first_up")
 end
 
 
 @info "[test_rpc_all] start"
-run()
-@info "[test_rpc_all] stop"
+try
+    start_servers()
+    policy_all()
+catch e
+    @error "[test_rpc_all] error: $e"
+    @test false
+finally
+    shutdown()
+end
 
-shutdown()
+@info "[test_rpc_all] stop"

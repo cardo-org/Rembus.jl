@@ -324,8 +324,13 @@ end
 
 mutable struct RBPool <: RBHandle
     last_invoked::Dict{String,Int} # topic => index of last used connection
+    policy::Symbol
+    shared::Any
     connections::Vector{RBConnection}
-    RBPool(conns::Vector{RBConnection}=[]) = new(Dict(), conns)
+    RBPool(
+        policy=:policy_default,
+        conns::Vector{RBConnection}=[]) = new(Dict(), policy, missing, conns
+    )
 end
 
 struct WsPing end
@@ -1127,7 +1132,7 @@ exposed methods.
 
 See [`@shared`](@ref) for more details.
 """
-shared(rb::RBHandle, ctx) = rb.shared = ctx
+shared(rb, ctx) = rb.shared = ctx
 
 function rembus(cid=nothing)
     if cid === nothing
@@ -1430,9 +1435,10 @@ function handle_input(rb, msg)
     #@debug "<< [$(cid(rb.client))] <- $msg"
     if rb.ingress !== nothing
         msg = rb.ingress(rb, msg)
-        if msg === nothing
-            return nothing
-        end
+    end
+
+    if msg === nothing
+        return nothing
     end
 
     # True for AckMsg and ResMsg
@@ -2099,8 +2105,8 @@ function connect(rb::RBPool)
     return rb
 end
 
-function connect(urls::Vector)
-    pool = RBPool([RBConnection(url) for url in urls])
+function connect(urls::Vector, policy=:policy_default)
+    pool = RBPool(policy, [RBConnection(url) for url in urls])
     return connect(pool)
 end
 
@@ -2357,8 +2363,8 @@ Connect component to remotes defined be `urls` array.
 
 The connection pool is supervised.
 """
-function component(urls::Vector)
-    pool = RBPool([RBConnection(url) for url in urls])
+function component(urls::Vector, policy=:policy_default)
+    pool = RBPool(policy, [RBConnection(url) for url in urls])
     return component(pool)
 end
 
@@ -2653,12 +2659,28 @@ publish(rb, "mytopic")
 languages then data has to be a DataFrame or a primitive type that is
 [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
 """
-function publish(rb::RBHandle, topic::AbstractString, data=[]; qos=QOS0)
+function publish(rb::RBConnection, topic::AbstractString, data=[]; qos=QOS0)
+    publish(rb, PubSubMsg(topic, data, qos))
+    return nothing
+end
+
+function publish(rb::RBConnection, msg::PubSubMsg)
     if getphase(rb.process) !== :undef
-        send_message(rb, PubSubMsg(topic, data, qos))
+        send_message(rb, msg)
     else
-        put!(rb.process.inbox, PubSubMsg(topic, data, qos))
+        put!(rb.process.inbox, msg)
     end
+
+    return nothing
+end
+
+function publish(rb::RBPool, topic::AbstractString, data=[]; qos=QOS0)
+    msg = PubSubMsg(topic, data, qos)
+    conn = pick_connections(rb, msg)
+    for c in conn
+        publish(c, topic, data, qos=qos)
+    end
+
     return nothing
 end
 
@@ -2860,16 +2882,53 @@ end
 
 
 function pick_connections(handle::RBPool, msg)
-    if CONFIG.balancer === "first_up"
+    if handle.policy === :policy_first_up
         return [first_up(handle, msg.topic, handle.connections)]
-    elseif CONFIG.balancer === "round_robin"
+    elseif handle.policy === :policy_round_robin
         return [round_robin(handle, msg.topic, handle.connections)]
-    elseif CONFIG.balancer === "less_busy"
+    elseif handle.policy === :policy_less_busy
         return [less_busy(handle, msg.topic, handle.connections)]
+    elseif handle.policy === :policy_all
+        return handle.connections
+    elseif isa(msg, PubSubMsg)
+        # pick all if it is a publish message
+        return handle.connections
+    else
+        return [first_up(handle, msg.topic, handle.connections)]
     end
+end
 
-    # pick all
-    return handle.connections
+function do_request(
+    rb::RBConnection, msg::RembusMsg, wait::Bool, timeout, exceptionerror
+)
+    if wait
+        response = wait_response(rb, msg, timeout)
+        return get_response(rb, msg, response, exceptionerror=exceptionerror)
+    else
+        return send_request(rb, msg)
+    end
+end
+
+function do_request(
+    rbs::Vector{RBConnection}, msg::RembusMsg, wait::Bool, timeout, exceptionerror
+)
+    responses = []
+    for rb in rbs
+        if !isconnected(rb)
+            push!(responses, missing)
+        elseif wait
+            response = wait_response(rb, msg, timeout)
+            result = get_response(rb, msg, response, exceptionerror=exceptionerror)
+            value = isa(result, RembusTimeout) ? missing : result
+            push!(
+                responses,
+                value
+            )
+        else
+            push!(responses, send_request(rb, msg))
+        end
+    end
+    return responses
 end
 
 # Send a RpcReqMsg message to rembus and return the response.
@@ -2878,62 +2937,13 @@ function rpcreq(
     exceptionerror=true, timeout=request_timeout(), wait=true
 )
     !isconnected(handle) && error("connection is down")
-    #@info "$msg: BALANCER=$(CONFIG.balancer)"
     if isa(handle, RBPool)
-        if CONFIG.balancer === "first_up"
-            rb = first_up(handle, msg.topic, handle.connections)
-        elseif CONFIG.balancer === "round_robin"
-            rb = round_robin(handle, msg.topic, handle.connections)
-        elseif CONFIG.balancer === "less_busy"
-            rb = less_busy(handle, msg.topic, handle.connections)
-        else
-            responses = []
-            for rb in handle.connections
-                if wait
-                    response = wait_response(rb, msg, timeout)
-                    result = get_response(rb, msg, response, exceptionerror=exceptionerror)
-                    value = isa(result, RembusTimeout) ? missing : result
-                    push!(
-                        responses,
-                        value
-                    )
-                else
-                    push!(responses, send_request(rb, msg))
-                end
-            end
-            return responses
-        end
+        conn = pick_connections(handle::RBPool, msg)
     else
-        rb = handle
+        conn = handle
     end
 
-    if wait
-        response = wait_response(rb, msg, timeout)
-        return get_response(rb, msg, response, exceptionerror=exceptionerror)
-    else
-        return send_request(rb, msg)
-    end
-
-
-
-    #    if isa(handle, RBPool)
-    #        if CONFIG.balancer === "first_up"
-    #            rb = first_up(handle, msg.topic, handle.connections)
-    #        elseif CONFIG.balancer === "round_robin"
-    #            rb = round_robin(handle, msg.topic, handle.connections)
-    #        else
-    #            rb = less_busy(handle, msg.topic, handle.connections)
-    #        end
-    #    else
-    #        rb = handle
-    #    end
-    #
-    #    if wait
-    #        response = wait_response(rb, msg, timeout)
-    #        return get_response(rb, msg, response, exceptionerror=exceptionerror)
-    #    else
-    #        return send_request(rb, msg)
-    #    end
+    return do_request(conn, msg, wait, timeout, exceptionerror)
 end
 
 function get_response(rb, msg, response; exceptionerror=true)
