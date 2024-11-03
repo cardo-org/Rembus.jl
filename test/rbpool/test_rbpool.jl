@@ -16,11 +16,11 @@ function run()
     server_1 = start_server(9000, myservice1)
     server_2 = start_server(9001, myservice2)
     Rembus.islistening(wait=20, procs=["server.serve:9000", "server.serve:9001"])
-    #sleep(10)
 
     Visor.dump()
-    cli = connect(["ws://localhost:9000/cmp1", "ws://localhost:9001/cmp2"])
-    set_balancer("round_robin")
+    cli = connect(
+        ["ws://localhost:9000/cmp1", "ws://localhost:9001/cmp2"], :policy_round_robin
+    )
 
     res = rpc(cli, "myservice", 5)
     @info "result=$res"
@@ -30,7 +30,7 @@ function run()
     @info "result=$res"
     @test res == 25
 
-    set_balancer("first_up")
+    cli.policy = :policy_first_up
 
     res = rpc(cli, "myservice", 5)
     @info "result=$res"
@@ -47,7 +47,7 @@ function run()
     end
 
     yield()
-    set_balancer("less_busy")
+    cli.policy = :policy_less_busy
 
     res = rpc(cli, "myservice", 5)
     @info "[less_busy] result=$res"

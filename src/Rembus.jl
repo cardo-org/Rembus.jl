@@ -67,7 +67,6 @@ export close
 export isconnected
 export rembus
 export shared
-export set_balancer
 export forever
 export terminate
 export egress_interceptor, ingress_interceptor
@@ -327,10 +326,18 @@ mutable struct RBPool <: RBHandle
     policy::Symbol
     shared::Any
     connections::Vector{RBConnection}
+    process::Visor.Process
     RBPool(
         policy=:policy_default,
         conns::Vector{RBConnection}=[]) = new(Dict(), policy, missing, conns
     )
+end
+
+cid(rb::RBHandle) = cid(rb.client)
+
+function cid(rb::RBPool)
+    cids = [cid(conn) for conn in rb.connections]
+    return "pool:$(join(cids, ","))"
 end
 
 struct WsPing end
@@ -1169,7 +1176,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
         end
         setphase(pd, :up)
         for msg in pd.inbox
-            @debug "[$pd] recv: $msg"
+            @debug "rembus_task [$pd] recv: $msg"
             if isshutdown(msg)
                 return
             elseif isa(msg, Exception)
@@ -1266,6 +1273,32 @@ a client or a broker.
 function server_task(pd, rb, protocol=:ws)
     @debug "starting rembus process: $pd, protocol:$protocol"
     rembus_task(pd, rb, bind, protocol)
+end
+
+#=
+Task process that manages a pool of connections.
+=#
+function pool_task(pd, rb::RBPool)
+
+    # start a process for each RBPool item
+    processes = []
+    for c in rb.connections
+        push!(processes, component(c))
+    end
+
+    for msg in pd.inbox
+        @debug "pool_task [$pd] recv: $msg"
+
+        if isshutdown(msg)
+            return
+        elseif isrequest(msg)
+            req = msg.request
+            result = rpc(
+                rb, req.topic, req.data, exceptionerror=false
+            )
+            reply(msg, result)
+        end
+    end
 end
 
 mutable struct NullProcess <: Visor.Supervised
@@ -1980,6 +2013,8 @@ end
 
 isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 
+isconnected(p::Visor.Process) = isconnected(p.args[1])
+
 function connect(rb::RBConnection)
     if !isconnected(rb)
         if rb.client.protocol !== :zmq && CONFIG.connection_mode === authenticated
@@ -2339,21 +2374,25 @@ function component(url=getcomponent())
 end
 
 function component(rb::RBConnection)
-    p = process(cid(rb.client), Rembus.client_task,
+    p = process(cid(rb), Rembus.client_task,
         args=(rb,), debounce_time=2, restart=:transient)
 
     supervise(
         p, intensity=3, wait=false
     )
+    yield()
     return p
 end
 
 function component(rb::RBPool)
-    for c in rb.connections
-        component(c)
-    end
+    p = process(cid(rb), Rembus.pool_task,
+        args=(rb,), debounce_time=2, restart=:transient)
 
-    return rb
+    supervise(
+        p, intensity=3, wait=false
+    )
+    yield()
+    return p
 end
 
 """
@@ -2788,6 +2827,8 @@ function inquiry_timeout(rb, condition::Distributed.Future)
 end
 
 function send_request(rb::RBHandle, msg::RembusMsg)
+    # @info "[$rb] REQ INDIRECT: $msg"
+
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
@@ -2796,6 +2837,7 @@ function send_request(rb::RBHandle, msg::RembusMsg)
 end
 
 function send_request_direct(rb::RBHandle, msg::RembusMsg)
+    #@info "[$rb] REQ DIRECT: $msg"
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
@@ -2883,23 +2925,23 @@ end
 
 function pick_connections(handle::RBPool, msg)
     if handle.policy === :policy_first_up
-        return [first_up(handle, msg.topic, handle.connections)]
+        return first_up(handle, msg.topic, handle.connections)
     elseif handle.policy === :policy_round_robin
-        return [round_robin(handle, msg.topic, handle.connections)]
+        return round_robin(handle, msg.topic, handle.connections)
     elseif handle.policy === :policy_less_busy
-        return [less_busy(handle, msg.topic, handle.connections)]
+        return less_busy(handle, msg.topic, handle.connections)
     elseif handle.policy === :policy_all
         return handle.connections
     elseif isa(msg, PubSubMsg)
         # pick all if it is a publish message
         return handle.connections
     else
-        return [first_up(handle, msg.topic, handle.connections)]
+        return first_up(handle, msg.topic, handle.connections)
     end
 end
 
 function do_request(
-    rb::RBConnection, msg::RembusMsg, wait::Bool, timeout, exceptionerror
+    rb::RBHandle, msg::RembusMsg, wait::Bool, timeout, exceptionerror
 )
     if wait
         response = wait_response(rb, msg, timeout)
