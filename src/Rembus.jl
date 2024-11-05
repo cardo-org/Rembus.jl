@@ -1164,6 +1164,44 @@ end
 
 const last_error = LastErrorLog()
 
+function call_request(rb, msg)
+    req = msg.request
+    if isa(req, SetHolder)
+        result = shared(rb, msg.request.shared)
+    elseif isa(req, AddImpl)
+        result = expose(
+            rb, msg.request.topic, msg.request.fn, exceptionerror=false
+        )
+    elseif isa(req, RemoveImpl)
+        result = unexpose(rb, msg.request.fn, exceptionerror=false)
+    elseif isa(req, AddInterest)
+        result = subscribe(
+            rb,
+            msg.request.topic,
+            msg.request.fn,
+            from=msg.request.msg_from,
+            exceptionerror=false
+        )
+    elseif isa(req, RemoveInterest)
+        result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
+    elseif isa(req, Reactive)
+        if req.status
+            result = reactive(
+                rb,
+                from=msg.request.msg_from,
+                exceptionerror=false
+            )
+        else
+            result = unreactive(rb, exceptionerror=false)
+        end
+    else
+        result = rpc(
+            rb, msg.request.topic, msg.request.data, exceptionerror=false
+        )
+    end
+    reply(msg, result)
+end
+
 function rembus_task(pd, rb, init_fn, protocol=:ws)
     try
         @debug "starting rembus process: $pd, protocol:$protocol"
@@ -1184,41 +1222,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
             elseif isa(msg, RembusMsg)
                 send_message(rb, msg)
             elseif isrequest(msg)
-                req = msg.request
-                if isa(req, SetHolder)
-                    result = shared(rb, msg.request.shared)
-                elseif isa(req, AddImpl)
-                    result = expose(
-                        rb, msg.request.topic, msg.request.fn, exceptionerror=false
-                    )
-                elseif isa(req, RemoveImpl)
-                    result = unexpose(rb, msg.request.fn, exceptionerror=false)
-                elseif isa(req, AddInterest)
-                    result = subscribe(
-                        rb,
-                        msg.request.topic,
-                        msg.request.fn,
-                        from=msg.request.msg_from,
-                        exceptionerror=false
-                    )
-                elseif isa(req, RemoveInterest)
-                    result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
-                elseif isa(req, Reactive)
-                    if req.status
-                        result = reactive(
-                            rb,
-                            from=msg.request.msg_from,
-                            exceptionerror=false
-                        )
-                    else
-                        result = unreactive(rb, exceptionerror=false)
-                    end
-                else
-                    result = rpc(
-                        rb, msg.request.topic, msg.request.data, exceptionerror=false
-                    )
-                end
-                reply(msg, result)
+                @async call_request(rb, msg)
             else
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
@@ -1712,6 +1716,7 @@ end
 function main_task(pd, rb::RBHandle)
     try
         rb.process = pd
+        setphase(pd, :wswriter)
         for msg in pd.inbox
             if isshutdown(msg)
                 break
@@ -1720,7 +1725,7 @@ function main_task(pd, rb::RBHandle)
             end
         end
     catch e
-        @error "write_task: $e"
+        @error "[$rb] write_task: $e"
     finally
         close(rb.socket)
     end
@@ -1895,13 +1900,13 @@ function authenticate(rb)
 
     reason = nothing
     msg = IdentityMsg(rb.client.id)
-    response = response_or_timeout(rb, msg, request_timeout())
+    response = setup_request(rb, msg, request_timeout())
     if (response.status == STS_GENERIC_ERROR)
         close(rb.socket)
         throw(AlreadyConnected(rb.client.id))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)
-        response = response_or_timeout(rb, msg, request_timeout())
+        response = setup_request(rb, msg, request_timeout())
     end
 
     if (response.status != STS_SUCCESS)
@@ -2499,7 +2504,7 @@ function expose(rb::RBHandle, fn::Function; exceptionerror=true)
 end
 
 function expose_server(rb::RBHandle, topic::AbstractString)
-    return send_request_direct(rb, AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)))
+    return to_socket(rb, AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)))
 end
 
 function subscribe_server(
@@ -2507,7 +2512,7 @@ function subscribe_server(
     from::Union{Real,Period,Dates.CompoundPeriod}=Now()
 )
     rb.router.subinfo[topic] = to_microseconds(from)
-    return send_request_direct(
+    return to_socket(
         rb,
         AdminReqMsg(
             topic, Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.router.subinfo[topic])
@@ -2520,7 +2525,7 @@ function subscribe_server(
     from::Union{Real,Period,Dates.CompoundPeriod}=Now()
 )
     rb.subinfo[topic] = to_microseconds(from)
-    return send_request_direct(
+    return to_socket(
         rb,
         AdminReqMsg(
             topic, Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.subinfo[topic])
@@ -2532,7 +2537,7 @@ function reactive_server(
     rb::RBHandle;
     from::Union{Real,Period,Dates.CompoundPeriod}=Day(1)
 )
-    send_request_direct(
+    to_socket(
         rb,
         AdminReqMsg(
             BROKER_CONFIG,
@@ -2704,12 +2709,7 @@ function publish(rb::RBConnection, topic::AbstractString, data=[]; qos=QOS0)
 end
 
 function publish(rb::RBConnection, msg::PubSubMsg)
-    if getphase(rb.process) !== :undef
-        send_message(rb, msg)
-    else
-        put!(rb.process.inbox, msg)
-    end
-
+    put!(rb.process.inbox, msg)
     return nothing
 end
 
@@ -2810,8 +2810,23 @@ function response_timeout(rb, condition::Distributed.Future, msg::RembusMsg)
     return nothing
 end
 
-function response_or_timeout(rb::RBHandle, msg::RembusMsg, timeout)
-    response = wait_response(rb, msg, request_timeout())
+#=
+Send a message when the rembus task is initializing and it si not yet
+ready to pull messages from inbox.
+=#
+function setup_request(rb::RBHandle, msg::RembusMsg, timeout)
+    ph = phase(rb)
+    if ph === :wswriter
+        resp_cond = send_request(rb, msg)
+    else
+        resp_cond = to_socket(rb, msg)
+        yield()
+    end
+
+    t = Timer((tim) -> response_timeout(rb, resp_cond, msg), timeout)
+    response = fetch(resp_cond)
+    close(t)
+
     if isa(response, RembusTimeout)
         rb.socket !== nothing && close(rb.socket)
         throw(response)
@@ -2827,8 +2842,6 @@ function inquiry_timeout(rb, condition::Distributed.Future)
 end
 
 function send_request(rb::RBHandle, msg::RembusMsg)
-    # @info "[$rb] REQ INDIRECT: $msg"
-
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
@@ -2836,8 +2849,13 @@ function send_request(rb::RBHandle, msg::RembusMsg)
     return resp_cond
 end
 
-function send_request_direct(rb::RBHandle, msg::RembusMsg)
-    #@info "[$rb] REQ DIRECT: $msg"
+#=
+Write the message directly to the socket, bypassing the process dedicated
+to send the messages.
+
+To be used only for the initial setup phase.
+=#
+function to_socket(rb::RBHandle, msg::RembusMsg)
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
@@ -2892,7 +2910,7 @@ function connection_inquiry(rb::RBHandle)
         @info "[$rb] no inquiry from acceptor"
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)
-        response = response_or_timeout(rb, msg, request_timeout())
+        response = setup_request(rb, msg, request_timeout())
     end
 
     return nothing
@@ -2907,21 +2925,13 @@ end
 
 # https://github.com/JuliaLang/julia/issues/36217
 function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
-    ph = phase(rb)
-    if ph !== :undef
-        # is a supervised component
-        resp_cond = send_request_direct(rb, msg)
-    else
-        resp_cond = send_request(rb, msg)
-        yield()
-    end
-
+    resp_cond = send_request(rb, msg)
+    yield()
     t = Timer((tim) -> response_timeout(rb, resp_cond, msg), timeout)
     res = fetch(resp_cond)
     close(t)
     return res
 end
-
 
 function pick_connections(handle::RBPool, msg)
     if handle.policy === :policy_first_up

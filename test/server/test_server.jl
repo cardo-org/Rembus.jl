@@ -26,7 +26,7 @@ end
 
 
 function start_server()
-    emb = server(ws=8000, tcp=8001)
+    emb = server(ws=8000, tcp=8001, log="info")
     expose(emb, df_service)
     expose(emb, rpc_service)
     expose(emb, rpc_fault)
@@ -41,8 +41,8 @@ function run()
         # set large timeout because coverage.jl is slow
         @rpc_timeout 30
 
-        @async start_server()
         is_up = Rembus.islistening(procs=["server.serve:8000"])
+
         result = @rpc rpc_service(1, 2)
         @test result == 3
         df = @rpc df_service()
@@ -80,21 +80,23 @@ function run()
 
         # if an error on the server side occurred the connection is closed
         @test isconnected(rb)
+        sleep(0.5)
 
         close(rb)
         @info "second round"
         sleep(3)
         # reconnect
+
         rb = connect("mycomponent")
         @test isconnected(rb)
+        sleep(0.5)
         close(rb)
 
         rb = connect()
         publish(rb, "df_service")
-        sleep(0.5)
 
         # an invalid packet triggers a read_socket error on server
-        HTTP.WebSockets.send(rb.socket, [0x01])
+        HTTP.WebSockets.send(rb.socket, [0x01, 0x02, 0x03])
         sleep(0.5)
         @test !isopen(rb.socket)
     catch e
@@ -102,11 +104,11 @@ function run()
         @test false
     finally
         shutdown()
-        sleep(2)
     end
 
 end
 
+@async start_server()
 run()
 @test received
 testsummary()

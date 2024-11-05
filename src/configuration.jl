@@ -83,6 +83,16 @@ function string_to_enum(connection_mode)
     end
 end
 
+set_balancer(policy::AbstractString) = set_balancer(CONFIG, policy)
+
+function set_balancer(setting, policy)
+    if !(policy in ["first_up", "less_busy", "round_robin", "all"])
+        error("wrong balancer, must be one of all, first_up, less_busy, round_robin")
+    end
+    setting.balancer = policy
+    return nothing
+end
+
 function setup(setting)
     cfg = get(Base.get_preferences(), "Rembus", Dict())
 
@@ -123,6 +133,9 @@ function setup(setting)
     else
         setting.log_level = get(cfg, "log_level", TRACE_INFO)
     end
+
+    balancer = get(cfg, "balancer", get(ENV, "REMBUS_BALANCER", "first_up"))
+    set_balancer(setting, balancer)
 
     return nothing
 end

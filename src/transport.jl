@@ -70,8 +70,8 @@ function from_cbor(packet)
         end
     elseif ptype == TYPE_RPC
         data = dataframe_if_tagvalue(payload[5])
-        #                       id               topic
-        return RpcReqMsg(bytes2id(payload[2]), payload[3], data)
+        #                       id               topic             target
+        return RpcReqMsg(bytes2id(payload[2]), payload[3], data, payload[4], flags)
     elseif ptype == TYPE_RESPONSE
         data = dataframe_if_tagvalue(payload[4])
         #                          id        status
