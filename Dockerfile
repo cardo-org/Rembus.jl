@@ -1,6 +1,6 @@
 FROM julia:1.10.2
 
-WORKDIR /caronte
+WORKDIR /broker
 
 COPY build .
 
@@ -10,6 +10,6 @@ EXPOSE 8002
 
 ENV BROKER_DIR="/db"
 
-ENTRYPOINT ["bin/sv", "bin/caronte"]
+ENTRYPOINT ["bin/sv", "bin/broker"]
 
 

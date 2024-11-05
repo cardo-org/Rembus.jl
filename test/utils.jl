@@ -28,7 +28,7 @@ macro start_caronte(init, secure, ws, tcp, zmq, http, name, reset, mode, log)
                 fn()
             end
 
-            Rembus.caronte(
+            Rembus.broker(
                 wait=false,
                 secure=$(esc(secure)),
                 ws=$(esc(ws)),
@@ -55,7 +55,7 @@ function execute_caronte_process(fn, testname; setup=nothing)
     running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
 
     if !running
-        pth = joinpath(@__DIR__, "..", "..", "bin", "caronte")
+        pth = joinpath(@__DIR__, "..", "..", "bin", "broker")
         p = Base.run(Cmd(`$pth`, detach=true), wait=false)
     end
     sleep(10)

@@ -49,10 +49,10 @@ component_url = "[<protocol>://][<host>][:<port>/][<cid>]"
 For example:
 
 ```julia
-@component "ws://caronte.org:8000/myclient"
+@component "ws://broker.org:8000/myclient"
 ```
 
-defines the component `myclient` that communicates with the broker hosted on `caronte.org`, listening on port `8000` and accepting web socket connections.
+defines the component `myclient` that communicates with the broker hosted on `broker.org`, listening on port `8000` and accepting web socket connections.
 
 > **NOTE** Rembus is "lazy": declaring a component does not open a connection to the broker.
 > The connection will be opened when first needed.

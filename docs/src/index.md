@@ -34,10 +34,10 @@ Starting a `Broker` is simple as:
 ```julia
 using Rembus
 
-caronte()
+broker()
 ```
 
-A startup script could be useful and the following `caronte` script will do:
+A startup script could be useful and the following `broker` script will do:
 
 ```julia
 ##!/bin/bash
@@ -48,15 +48,15 @@ exec julia --threads auto --color=no -e "include(popfirst!(ARGS))" \
 =#
 using Rembus
 
-caronte()
+broker()
 ```
 
-`caronte` starts by default a WebSocket server listening on port 8000,
+`broker` starts by default a WebSocket server listening on port 8000,
 for enabling `tcp` and/or `zmq` transports use the appropriate arguments:
 
 ```text
-shell> ./caronte
-usage: caronte [-r] [-s] [-p HTTP] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
+shell> ./broker
+usage: broker [-r] [-s] [-p HTTP] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
 
 optional arguments:
   -r, --reset      factory reset, clean up broker configuration

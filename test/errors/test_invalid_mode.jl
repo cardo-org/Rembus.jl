@@ -1,3 +1,3 @@
 include("../utils.jl")
 
-@test_throws ErrorException caronte(mode="invalid_mode")
+@test_throws ErrorException broker(mode="invalid_mode")

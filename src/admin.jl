@@ -85,7 +85,7 @@ function unauthorize(router, twin, msg)
 end
 
 function shutdown_caronte(router)
-    @debug "shutting down caronte ..."
+    @debug "shutting down broker ..."
     try
         Visor.shutdown(router.process.supervisor)
         save_configuration(router)

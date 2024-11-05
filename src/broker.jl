@@ -196,7 +196,7 @@ function save_message(router, msg::PubSubMsg)
     return router.mcounter
 end
 
-function data_at_rest(fn, broker="caronte")
+function data_at_rest(fn, broker="broker")
     path = joinpath(messages_dir(broker), fn)
     df = DataFrame(read_parquet(path))
     df.msg = decode.(Vector{UInt8}.(df.pkt))
@@ -719,7 +719,7 @@ function msg_payload(io::IOBuffer)
     return payload
 end
 
-function get_router(broker="caronte")::Router
+function get_router(broker="broker")::Router
     p = from("$broker.broker")
     if p === nothing
         error("unknown broker: $broker")
@@ -1359,7 +1359,7 @@ function callback_and(
     end
 end
 
-function command_line(default_name="caronte")
+function command_line(default_name="broker")
     s = ArgParseSettings()
     @add_arg_table! s begin
         "--name", "-n"
@@ -1391,7 +1391,7 @@ function command_line(default_name="caronte")
     return parse_args(s)
 end
 
-function caronte_reset(broker_name="caronte")
+function caronte_reset(broker_name="broker")
     rm(messages_dir(broker_name), force=true, recursive=true)
     bdir = broker_dir(broker_name)
     if isdir(bdir)
@@ -1411,7 +1411,7 @@ function getparam(args, key, value)
 end
 
 """
-    caronte(;
+    broker(;
         wait=true,
         mode=nothing,
         log="info",
@@ -1426,14 +1426,14 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 
 Overwrite command line arguments if args is not empty.
 """
-function caronte(;
+function broker(;
     wait=true,
     secure=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
     http=nothing,
-    name="caronte",
+    name="broker",
     mode=nothing,
     reset=nothing,
     log=TRACE_INFO,
@@ -1462,7 +1462,7 @@ function caronte(;
         router.mode = string_to_enum(mode)
     end
 
-    tasks = [process(broker, args=(router,)), supervisor("twins", terminateif=:shutdown)]
+    tasks = [process("broker", broker_task, args=(router,)), supervisor("twins", terminateif=:shutdown)]
 
     http_port = getparam(args, "http", http)
     if http_port !== nothing
@@ -1523,8 +1523,8 @@ function caronte(;
     return router
 end
 
-function caronted()::Cint
-    caronte()
+function brokerd()::Cint
+    broker()
     return 0
 end
 
@@ -2280,7 +2280,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 end
 
 function islistening(
-    ; wait=5, procs=["caronte.serve_ws", "caronte.serve_tcp", "caronte.serve_zeromq"]
+    ; wait=5, procs=["broker.serve_ws", "broker.serve_tcp", "broker.serve_zeromq"]
 )
     tcount = 0
     while tcount < wait
@@ -2574,11 +2574,11 @@ function encode_message(msg::PubSubMsg)
 end
 
 #=
-    broker(self, router)
+    broker_task(self, router)
 
 Rembus broker main task.
 =#
-function broker(self, router)
+function broker_task(self, router)
     @debug "[broker] starting"
     window = 30
 

@@ -1,11 +1,11 @@
 include("../utils.jl")
 
-caronte(wait=false)
-@test from("caronte") !== nothing
+broker(wait=false)
+@test from("broker") !== nothing
 shutdown()
 
 sleep(1)
-@test from("caronte") === nothing
+@test from("broker") === nothing
 
 # do nothing
 @test Visor.shutdown(nothing) === nothing

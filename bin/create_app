@@ -7,7 +7,7 @@ cat << EOF | julia --startup-file=no --threads auto --project=${PKG_DIR}
 using PackageCompiler
 
 try
-    create_app(".", "build"; executables = ["caronte"=>"caronted"], force=true)
+    create_app(".", "build"; executables = ["broker"=>"brokerd"], force=true)
 catch e
     println(e)
     exit(1)

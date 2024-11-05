@@ -12,12 +12,12 @@ end
 
 function run(exposer_url)
     # main broker
-    caronte(
+    broker(
         wait=false, name="main_broker", reset=true
     )
     yield()
 
-    edge_broker = caronte(
+    edge_broker = broker(
         wait=false,
         name="edge_broker", ws=9000)
     yield()
@@ -35,7 +35,7 @@ function run(exposer_url)
     @test connector.status === Visor.failed
 
     # reconnect
-    caronte(
+    broker(
         wait=false,
         name="main_broker", reset=true
     )

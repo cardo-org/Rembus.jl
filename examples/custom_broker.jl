@@ -18,4 +18,4 @@ unsubscribe_handler(ctx, router, cmp, msg) = @info "[$cmp] unsubscribing $(msg.t
 
 end
 
-caronte(plugin=CarontePlugin)
+broker(plugin=CarontePlugin)

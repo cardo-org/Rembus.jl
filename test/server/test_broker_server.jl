@@ -31,7 +31,7 @@ function run()
     srv = server(ctx, mode="anonymous", ws=9000)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
-    caronte(wait=false, name=BROKER_NAME)
+    broker(wait=false, name=BROKER_NAME)
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
 

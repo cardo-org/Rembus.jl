@@ -11,7 +11,7 @@ To play with the examples gets the required dependencies:
 and then starts a broker application:
 
 ```shell
-> j -e 'using Rembus; caronte()' 
+> j -e 'using Rembus; broker()' 
 ```
 
 ## greeter.jl
@@ -78,10 +78,10 @@ In a distributed system governed by the Rembus middleware there are two types of
 The first step for a Component application is to bind to a Broker and declare its name:
 
 ```julia
-@component "ws://caronte.com:8000/organizer"
+@component "ws://broker.com:8000/organizer"
 ```
 
-The above declares a component `organizer` that will connect to the broker hosted at `caronte.com` with protocol `ws` served at port `8000`.
+The above declares a component `organizer` that will connect to the broker hosted at `broker.com` with protocol `ws` served at port `8000`.
 
 > There are some sensible defaults that may help to keep the code clean:
 > the url of the broker may be set with the environment variable REMBUS_BASE_URL:

@@ -34,11 +34,11 @@ the optional `name` argument:
 broker --name my_broker
 ```
 
-In the following it is assumed the default `caronte` name for the broker: in this
-case the directory `$REMBUS_DIR/caronte` contains the broker settings and secret materials.
+In the following it is assumed the default `broker` name for the broker: in this
+case the directory `$REMBUS_DIR/broker` contains the broker settings and secret materials.
 
 ```sh
-> cd ~/.config/rembus/caronte
+> cd ~/.config/rembus/broker
 > tree .
 
 .

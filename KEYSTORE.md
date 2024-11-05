@@ -20,5 +20,5 @@ myhost:Rembus.jl> bin/init_keystore [-n server_dns] [-i ip_address] [-k keystore
 ### options
 
 - `-i` register an ip address that may be used to connect securely.
-- `-n` DNS server name (default to `caronte`).
+- `-n` DNS server name (default to `broker`).
 - `-k` generated directory name containing the secret materials (default to `$HOME/.config/rembus/keystore`).

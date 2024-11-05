@@ -11,13 +11,13 @@ end
 
 function run(exposer_url, secure=false)
     # main broker
-    caronte(
+    broker(
         wait=false,
         name="main_broker", reset=true, secure=secure
     )
     yield()
 
-    edge_broker = caronte(
+    edge_broker = broker(
         wait=false,
         name="edge_broker", ws=9000, secure=secure)
     yield()

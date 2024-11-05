@@ -15,9 +15,9 @@ export fake_function
 end # module Broker
 
 function run()
-    caronte(wait=false, plugin=Broker, ws=9000)
+    broker(wait=false, plugin=Broker, ws=9000)
     Rembus.islistening(wait=2)
-    process = from("caronte")
+    process = from("broker")
     @test process.status === Visor.done
 end
 

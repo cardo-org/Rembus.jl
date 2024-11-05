@@ -29,9 +29,9 @@ function run()
     shutdown()
     sleep(2)
 
-    # restart caronte
+    # restart broker
     # trigger a resend_attestate()
-    Rembus.caronte(wait=false, name=BROKER_NAME, zmq=8002)
+    Rembus.broker(wait=false, name=BROKER_NAME, zmq=8002)
     sleep(2)
 end
 

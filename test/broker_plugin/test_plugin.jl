@@ -38,7 +38,7 @@ export myfunction
 
 function myfunction(ctx, twin, arg)
     @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
-    return "hello from caronte plugin"
+    return "hello from broker plugin"
 end
 
 function myfunction(ctx, twin, arg1, arg2)
@@ -112,7 +112,7 @@ function run(ok_cid, ko_cid)
 
     Rembus.setup(Rembus.CONFIG)
 
-    caronte(
+    broker(
         wait=false,
         plugin=CarontePlugin,
         context=ctx,
@@ -126,10 +126,10 @@ function run(ok_cid, ko_cid)
 
     # invoke myfunction defined by CarontePlugin module
     response = rpc(rb, "myfunction", "arg_1")
-    @test response == "hello from caronte plugin"
+    @test response == "hello from broker plugin"
 
     response = rpc(rb, "myfunction", ["arg_1"])
-    @test response == "hello from caronte plugin"
+    @test response == "hello from broker plugin"
 
     response = rpc(rb, "myfunction", nothing)
     @test response == "no args"

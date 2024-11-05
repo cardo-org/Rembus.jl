@@ -68,7 +68,7 @@ end
 function run()
     ctx = Ctx()
 
-    caronte(
+    broker(
         wait=false,
         plugin=CarontePlugin,
         context=PluginCtx(nothing),

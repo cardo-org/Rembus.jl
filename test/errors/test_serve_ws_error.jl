@@ -8,7 +8,7 @@ function run()
         @test_throws Rembus.CABundleNotFound Rembus.rembus_ca()
 
         # invalid ssl configuration prevent ws_serve process startup
-        caronte(wait=false, name=BROKER_NAME, secure=true)
+        broker(wait=false, name=BROKER_NAME, secure=true)
 
         p = from("$BROKER_NAME.serve_ws")
         while p !== nothing

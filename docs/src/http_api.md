@@ -6,7 +6,7 @@ broker administration commands.
 An HTTP endpoint must be explicity activated with the `http` options:
 
 ```shell
-bin/caronte --http port
+bin/broker --http port
 ```
 
 ## APIs list

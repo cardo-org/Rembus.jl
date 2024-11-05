@@ -7,10 +7,10 @@ const GROUP = get(ENV, "GROUP", "all")
 
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"
-        @time @safetestset "caronte" begin
+        @time @safetestset "broker" begin
             include("unit/test_caronte.jl")
         end
-        @time @safetestset "caronted" begin
+        @time @safetestset "brokerd" begin
             include("unit/test_caronted.jl")
         end
         @time @safetestset "server" begin

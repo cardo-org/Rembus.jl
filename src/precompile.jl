@@ -190,7 +190,7 @@ function broker_server()
     expose(srv, mymethod)
     subscribe(srv, mytopic)
 
-    p = from("caronte.broker")
+    p = from("broker.broker")
     router = p.args[1]
     server_url = "ws://:10000/s1"
     add_server(router, server_url)
@@ -226,7 +226,7 @@ broker_server()
 response = HTTP.get("http://localhost:9000/version", [])
 
 shutdown()
-caronte(wait=false, mode="anonymous", log="error")
+broker(wait=false, mode="anonymous", log="error")
 yield()
 Rembus.islistening(wait=20)
 read_messages()

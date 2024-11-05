@@ -34,7 +34,7 @@ the following steps.
     * Make a SHA256 digest of a string containing the challenge plus the name `foobar` and signs the digest with the private key.
     * Otherwise consider the file content as a shared secret and make a SHA256 digest of the string containing the challenge plus the shared secret.
 1. The component send the digest to the broker;
-1. The broker verifies the digest, if the the `$HOME/.config/caronte/keys/foobar` file is a RSA public key:
+1. The broker verifies the digest, if the the `$HOME/.config/broker/keys/foobar` file is a RSA public key:
     * Verify that the received digest of string containing the challenge plus the name `foobar` is signed by the corresponding private key;  
     * Otherwise verify that the received digest equals to the digest of the string containing the
     challenge plus the shared secret;
@@ -65,7 +65,7 @@ public_topic(rb, "my_topic")
 ```
 
 To execute such actions the `admin` role must be assigned to the component `superuser`:
-its name must be present in the file `$HOME/.config/caronte/admins.json`
+its name must be present in the file `$HOME/.config/broker/admins.json`
 
 More then one component may be assigned the `admin` role:
 

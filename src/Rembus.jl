@@ -76,7 +76,7 @@ export anonymous!, named!, authenticated!
 
 # broker api
 export add_server, remove_server
-export caronte, session, republish, msg_payload
+export broker, session, republish, msg_payload
 
 export RembusError
 export RembusTimeout
@@ -1296,11 +1296,14 @@ function pool_task(pd, rb::RBPool)
         if isshutdown(msg)
             return
         elseif isrequest(msg)
-            req = msg.request
-            result = rpc(
-                rb, req.topic, req.data, exceptionerror=false
-            )
-            reply(msg, result)
+            @async call_request(rb, msg)
+            #req = msg.request
+            #result = rpc(
+            #    rb, req.topic, req.data, exceptionerror=false
+            #)
+            #reply(msg, result)
+        else
+            publish(rb, msg.topic, msg.data, qos=msg.qos)
         end
     end
 end
@@ -2278,7 +2281,8 @@ function reactive(
                 MSG_FROM => to_microseconds(from))
         ),
         exceptionerror=exceptionerror,
-        timeout=timeout
+        timeout=timeout,
+        broadcast=true
     )
     rb.reactive = true
 
@@ -2331,7 +2335,8 @@ function subscribe(
             topic,
             Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.subinfo[topic])
         ),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        broadcast=true
     )
 end
 
@@ -2472,7 +2477,8 @@ function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     delete!(rb.subinfo, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNSUBSCRIBE_CMD)),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        broadcast=true
     )
 end
 
@@ -2495,7 +2501,8 @@ function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerro
     add_receiver(rb, topic, fn)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        broadcast=true
     )
 end
 
@@ -2563,7 +2570,8 @@ function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
     remove_receiver(rb, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNEXPOSE_CMD)),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        broadcast=true
     )
 end
 
@@ -2984,13 +2992,21 @@ function do_request(
 end
 
 # Send a RpcReqMsg message to rembus and return the response.
+# If broadcast is true send the request to all nodes of the pool.
 function rpcreq(
     handle::RBHandle, msg;
-    exceptionerror=true, timeout=request_timeout(), wait=true
+    exceptionerror=true,
+    timeout=request_timeout(),
+    wait=true,
+    broadcast=false
 )
     !isconnected(handle) && error("connection is down")
     if isa(handle, RBPool)
-        conn = pick_connections(handle::RBPool, msg)
+        if broadcast
+            conn = handle.connections
+        else
+            conn = pick_connections(handle::RBPool, msg)
+        end
     else
         conn = handle
     end
@@ -3081,7 +3097,7 @@ end
     ENV["REMBUS_TIMEOUT"] = "20"
     ENV["REMBUS_CONNECT_TIMEOUT"] = "20"
     @compile_workload begin
-        sv = Rembus.caronte(
+        sv = Rembus.broker(
             wait=false,
             mode="anonymous",
             log="error",

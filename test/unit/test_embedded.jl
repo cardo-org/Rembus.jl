@@ -7,4 +7,4 @@ server()
 shutdown()
 
 sleep(1)
-@test from("caronte") === nothing
+@test from("broker") === nothing
