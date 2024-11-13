@@ -26,7 +26,8 @@ function run()
     v = rpc(component1, "version")
     @test v == Rembus.VERSION
 
-    shutdown()
+    broker = from("$BROKER_NAME")
+    shutdown(broker)
     sleep(2)
 
     # restart broker
@@ -43,7 +44,7 @@ setup() = init(cid1)
 execute(run, "test_zmq::1", setup=setup)
 
 rembus_timeout = Rembus.request_timeout()
-ENV["REMBUS_TIMEOUT"] = 0.5
+ENV["REMBUS_TIMEOUT"] = 0.25
 execute(run, "test_zmq::2")
 ENV["REMBUS_TIMEOUT"] = rembus_timeout
 

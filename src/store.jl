@@ -367,7 +367,7 @@ function save_twins(router)
     twin_cfg = Dict{String,Dict{String,Float64}}()
     for (twin_id, twin) in router.id_twin
         if twin.hasname
-            twin_finalize(router.context, twin)
+            router.twin_finalize(router.shared, twin)
             # ??? delete!(router.id_twin, twin_id)
             twin_cfg[twin_id] = twin.msg_from
         end

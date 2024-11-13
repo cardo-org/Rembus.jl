@@ -100,7 +100,7 @@ mutable struct Router <: AbstractRouter
     twin_finalize::Function
     pub_handler::Union{Nothing,Function}
     plugin::Union{Nothing,Module}
-    context::Any
+    shared::Any
     process::Visor.Process
     server::Sockets.TCPServer
     http_server::HTTP.Server
@@ -325,12 +325,6 @@ macro rawlog(msg)
     end
 end
 
-## Twin related functions
-
-twin_initialize(ctx, twin) = (ctx, twin) -> ()
-
-twin_finalize(ctx, twin) = (ctx, twin) -> ()
-
 Base.isopen(c::Condition) = true
 
 offline(twin::Twin) = ((twin.socket === nothing) || !isopen(twin.socket))
@@ -370,7 +364,7 @@ function create_twin(id, router::AbstractRouter, type::NodeType)
         startup(Visor.from_supervisor(router_supervisor(router), "twins"), spec)
         yield()
         router.id_twin[id] = twin
-        #twin_initialize(router.context, twin)
+        router.twin_initialize(router.shared, twin)
         return twin
     end
 end
@@ -777,7 +771,7 @@ function pubsub_msg(router, twin, msg)
         pass = true
         if router.pub_handler !== nothing
             try
-                pass = router.pub_handler(router.context, twin, msg)
+                pass = router.pub_handler(router.shared, twin, msg)
             catch e
                 @error "publish_interceptor: $e"
             end
@@ -1237,7 +1231,7 @@ Invoke `callback` function if it is injected via the plugin module otherwise inv
 function callback_or(fn::Function, router::AbstractRouter, callback::Symbol)
     if router.plugin !== nothing && isdefined(router.plugin, callback)
         cb = getfield(router.plugin, callback)
-        cb(router.context, router)
+        cb(router.shared, router)
     else
         fn()
     end
@@ -1264,7 +1258,7 @@ function callback_and(
     try
         if router.plugin !== nothing && isdefined(router.plugin, cb)
             cb = getfield(router.plugin, cb)
-            cb(router.context, router, twin, msg)
+            cb(router.shared, router, twin, msg)
         end
         fn()
     catch e
@@ -2443,7 +2437,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             end
         end
         try
-            result = router.topic_function[msg.topic](router.context, twin, getargs(payload)...)
+            result = router.topic_function[msg.topic](router.shared, twin, getargs(payload)...)
             sts = STS_SUCCESS
         catch e
             ##    @debug "[$(msg.topic)] server error (method too young?): $e"
@@ -2454,7 +2448,7 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             ##        try
             ##            result = Base.invokelatest(
             ##                router.topic_function[msg.topic],
-            ##                router.context,
+            ##                router.shared,
             ##                twin,
             ##                getargs(payload)...
             ##            )

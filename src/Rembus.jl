@@ -255,6 +255,10 @@ function ingress_interceptor(rb::RBConnection, func)
     rb.ingress = func
 end
 
+twin_initialize(ctx, twin) = (ctx, twin) -> ()
+
+twin_finalize(ctx, twin) = (ctx, twin) -> ()
+
 abstract type AbstractRouter end
 
 mutable struct Server <: AbstractRouter
@@ -263,6 +267,8 @@ mutable struct Server <: AbstractRouter
     start_ts::Float64
     topic_function::Dict{String,Function}
     topic_auth::Dict{String,Dict{String,Bool}} # topic => {twin.id => true}
+    twin_initialize::Function
+    twin_finalize::Function
     subinfo::Dict{String,Float64}
     id_twin::Dict
     address2twin::Dict{Vector{UInt8},RBHandle} # zeromq address => twin
@@ -276,7 +282,17 @@ mutable struct Server <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Server(shared=missing) = new(
-        shared, anonymous, time(), Dict(), Dict(), Dict(), Dict(), Dict(), Dict()
+        shared,
+        anonymous,
+        time(),
+        Dict(),
+        Dict(),
+        twin_initialize,
+        twin_finalize,
+        Dict(),
+        Dict(),
+        Dict(),
+        Dict()
     )
 end
 
