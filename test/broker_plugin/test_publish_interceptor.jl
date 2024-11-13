@@ -56,12 +56,12 @@ mutable struct Ctx
     Ctx() = new(Dict())
 end
 
-function temperature(ctx, data)
+function temperature(ctx, rb, data)
     @info "[test_publish_interceptor] data:$data"
     ctx.received[data["location"]] = data["value"]
 end
 
-function direct_message(ctx, x)
+function direct_message(ctx, rb, x)
     ctx.received["direct"] = x
 end
 

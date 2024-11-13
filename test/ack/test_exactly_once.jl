@@ -15,7 +15,7 @@ function test_handler(rb, msg)
     return response
 end
 
-function msg_handler(ctx, counter)
+function msg_handler(ctx, rb, counter)
     if haskey(ctx.recv, counter)
         ctx.recv[counter] += 1
     else

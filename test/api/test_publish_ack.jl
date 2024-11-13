@@ -10,18 +10,18 @@ mutable struct TestBag
     msg_received::Int
 end
 
-function inspect(bag::TestBag)
+function inspect(bag::TestBag, rb)
     bag.noarg_message_received = true
 end
 
-function consume(bag::TestBag, data::Number)
+function consume(bag::TestBag, rb, data::Number)
     bag.msg_received += 1
 
     @debug "consume recv: $data" _group = :test
     @atest data == 2 "consume(data=$data): expected data == 2"
 end
 
-function consume(bag::TestBag, data)
+function consume(bag::TestBag, rb, data)
     bag.msg_received += 1
 
     @debug "df:\n$(view(data, 1:2, :))" _group = :test

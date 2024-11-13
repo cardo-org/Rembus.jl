@@ -7,12 +7,12 @@ mutable struct TestCtx
 end
 
 
-function admin_consume_all(ctx, topic, n, m=1)
+function admin_consume_all(ctx, rb, topic, n, m=1)
     @info "[admin_consume_all] topic:$topic, n=$n, m=$m"
     ctx.admin_count += 1
 end
 
-function consume_all(ctx, topic, n, m=1)
+function consume_all(ctx, rb, topic, n, m=1)
     @info "[consume_all] topic:$topic, n=$n, m=$m"
     ctx.user_count += 1
 end

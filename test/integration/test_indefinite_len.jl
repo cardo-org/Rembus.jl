@@ -6,14 +6,14 @@ function collector(ch)
     end
 end
 
-function consume(bag, msg...)
+function consume(bag, rb, msg...)
     @info "[consume] msg: $msg"
     for v in msg
         push!(bag.values, v)
     end
 end
 
-function consume_undef_length(bag, val...)
+function consume_undef_length(bag, rb, val...)
     @info "[consume_undef_length] val:$val"
 end
 

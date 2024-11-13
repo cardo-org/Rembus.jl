@@ -4,7 +4,7 @@ mutable struct Ctx
     data::Any
 end
 
-function atopic(ctx, x)
+function atopic(ctx, rb, x)
     @info "[test_component] atopic: $x"
     ctx.data = x
 end
@@ -34,7 +34,7 @@ function run()
 
     @unsubscribe atopic
 
-    @expose aservice(ctx, x, y) = x + y
+    @expose aservice(ctx, rb, x, y) = x + y
 
     res = rpc(rb, "aservice", [1, 2])
     @test res == 3

@@ -22,13 +22,13 @@ function set_subscribers()
 
 end
 
-function foo(ctx, x)
+function foo(ctx, rb, x)
     @info "[test_conditional_publish] foo=$x"
     ctx.service_data = x
     return "ok"
 end
 
-function foo_subscriber(ctx, val)
+function foo_subscriber(ctx, rb, val)
     @info "test_conditional_publish foo_subscriber:$val"
     ctx.subscriber_data = val
 end

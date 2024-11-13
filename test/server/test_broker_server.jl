@@ -1,10 +1,10 @@
 include("../utils.jl")
 
-function mymethod(ctx, n)
+function mymethod(ctx, rb, n)
     return n + 1
 end
 
-function mytopic(ctx, n)
+function mytopic(ctx, rb, n)
     ctx.n = n
 end
 
@@ -47,12 +47,16 @@ function run()
     sleep(1)
 
     close(cli)
-    shutdown()
-
     @test ctx.n == n
 end
 
 @info "[test_broker_server] start"
-init()
-run()
+try
+    init()
+    run()
+catch e
+    @error "unexepected error: $e"
+finally
+    shutdown()
+end
 @info "[test_broker_server] stop"

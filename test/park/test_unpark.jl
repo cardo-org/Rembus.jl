@@ -21,7 +21,7 @@ mutable struct TestContext
     TestContext() = new(0)
 end
 
-function consume(ctx, count)
+function consume(ctx, rb, count)
     ctx.count = ctx.count + 1
 end
 

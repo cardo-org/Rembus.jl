@@ -18,11 +18,11 @@ mutable struct TestBag
     msg_received::Int
 end
 
-function mytopic(bag::TestBag, data::Number)
+function mytopic(bag::TestBag, rb, data::Number)
     @debug "mytopic recv: $data"
 end
 
-function mytopic(bag::TestBag, data)
+function mytopic(bag::TestBag, rb, data)
     @debug "df:\n$(view(data, 1:2, :))"
 end
 
@@ -151,7 +151,7 @@ mutable struct Holder
         Undefined => Undefined()])
 end
 
-function type_consumer(bag, n)
+function type_consumer(bag, rb, n)
     @debug "[type_consumer]: recv $n ($(typeof(n)))"
 end
 
@@ -193,7 +193,7 @@ function broker_server()
     p = from("broker.broker")
     router = p.args[1]
     server_url = "ws://:10000/s1"
-    add_server(router, server_url)
+    add_node(router, server_url)
     sleep(2)
 
     cli = connect()
@@ -201,7 +201,7 @@ function broker_server()
     publish(cli, "mytopic", 1)
     sleep(1)
     close(cli)
-    remove_server(router, server_url)
+    remove_node(router, server_url)
 end
 
 @rpc version()

@@ -14,7 +14,7 @@ function mymethod(arg)
     df
 end
 
-function mymethod(bag, arg)
+function mymethod(bag, rb, arg)
     @debug "[subscriber]: received $arg" _group = :test
     bag.request_arg = arg
 end

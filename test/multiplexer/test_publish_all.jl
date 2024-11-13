@@ -1,7 +1,7 @@
 include("../utils.jl")
 
-s1_mytopic(ctx, data) = ctx["s1"] = data
-s2_mytopic(ctx, data) = ctx["s2"] = data
+s1_mytopic(ctx, rb, data) = ctx["s1"] = data
+s2_mytopic(ctx, rb, data) = ctx["s2"] = data
 
 ctx = Dict()
 
@@ -24,7 +24,7 @@ function policy_default()
 end
 
 function policy_all()
-    rb = connect(["ws://:7000", "ws://:7001"], :policy_all)
+    rb = connect(["ws://:7000", "ws://:7001"], :all)
     publish(rb, "mytopic", "hello")
     sleep(0.5)
     close(rb)
@@ -32,7 +32,7 @@ function policy_all()
 end
 
 function policy_round_robin()
-    rb = connect(["ws://:7000", "ws://:7001"], :policy_round_robin)
+    rb = connect(["ws://:7000", "ws://:7001"], :round_robin)
     publish(rb, "mytopic", "hello")
     sleep(0.5)
     @test length(ctx) == 1
@@ -46,7 +46,7 @@ function policy_round_robin()
 end
 
 function policy_first_up()
-    rb = connect(["ws://:7000", "ws://:7001"], :policy_first_up)
+    rb = connect(["ws://:7000", "ws://:7001"], :first_up)
     publish(rb, "mytopic", "hello")
     sleep(0.5)
     @test length(ctx) == 1

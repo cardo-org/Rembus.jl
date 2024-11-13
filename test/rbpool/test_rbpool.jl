@@ -19,7 +19,7 @@ function run()
 
     Visor.dump()
     cli = connect(
-        ["ws://localhost:9000/cmp1", "ws://localhost:9001/cmp2"], :policy_round_robin
+        ["ws://localhost:9000/cmp1", "ws://localhost:9001/cmp2"], :round_robin
     )
 
     res = rpc(cli, "myservice", 5)
@@ -30,7 +30,7 @@ function run()
     @info "result=$res"
     @test res == 25
 
-    cli.policy = :policy_first_up
+    cli.policy = :first_up
 
     res = rpc(cli, "myservice", 5)
     @info "result=$res"
@@ -47,7 +47,7 @@ function run()
     end
 
     yield()
-    cli.policy = :policy_less_busy
+    cli.policy = :less_busy
 
     res = rpc(cli, "myservice", 5)
     @info "[less_busy] result=$res"

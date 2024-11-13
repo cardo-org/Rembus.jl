@@ -9,7 +9,7 @@ mutable struct TestContext
     TestContext() = new(0, 0, 0)
 end
 
-function consume(ctx, count)
+function consume(ctx, rb, count)
     lock(lck) do
         if ctx.prev_count > count
             ctx.unordered = ctx.unordered + 1

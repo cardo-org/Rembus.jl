@@ -37,11 +37,11 @@ function foo(n)
     n + 1
 end
 
-function foo(bag, n)
+function foo(bag, rb, n)
     @debug "[foo]: recv $n" _group = :test
 end
 
-function bar(bag, n)
+function bar(bag, rb, n)
     @debug "[bar]: recv $n ($(typeof(n)))" _group = :test
     bag.handler_called += 1
     @atest isa(n, bag.valuemap[bag.handler_called].first) "$n isa $(bag.valuemap[bag.handler_called].first)"

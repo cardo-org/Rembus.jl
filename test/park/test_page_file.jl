@@ -6,7 +6,7 @@ end
 
 const MESSAGES = 100_000
 
-function mytopic(ctx)
+function mytopic(ctx, rb)
     ctx.count += 1
     if (ctx.count % 20000) == 0
         @info "received $(ctx.count) messages"

@@ -7,8 +7,8 @@ mutable struct Ctx
     topic_2::Int
 end
 
-topic_1(ctx) = ctx.topic_1 += 1
-topic_2(ctx) = ctx.topic_2 += 1
+topic_1(ctx, rb) = ctx.topic_1 += 1
+topic_2(ctx, rb) = ctx.topic_2 += 1
 
 function run()
     ctx = Ctx(0, 0)

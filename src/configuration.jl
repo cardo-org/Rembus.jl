@@ -39,7 +39,6 @@ end
 mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
-    balancer::String
     rembus_dir::String
     log_destination::String
     log_level::String
@@ -56,7 +55,6 @@ mutable struct Settings
     Settings() = begin
         zmq_ping_interval = 0
         ws_ping_interval = 0
-        balancer = "first_up"
         rdir = default_rembus_dir()
         log_destination = "stdout"
         log_level = TRACE_INFO
@@ -67,7 +65,7 @@ mutable struct Settings
         cid = Component()
         connection_retry_period = 2.0
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
-        new(zmq_ping_interval, ws_ping_interval, balancer, rdir, log_destination, log_level,
+        new(zmq_ping_interval, ws_ping_interval, rdir, log_destination, log_level,
             overwrite_connection, stacktrace, metering, rawdump, cid,
             connection_retry_period, nothing, true, db_max_messages, anonymous)
     end
@@ -81,16 +79,6 @@ function string_to_enum(connection_mode)
     else
         error("invalid connection_mode [$connection_mode]")
     end
-end
-
-set_balancer(policy::AbstractString) = set_balancer(CONFIG, policy)
-
-function set_balancer(setting, policy)
-    if !(policy in ["first_up", "less_busy", "round_robin", "all"])
-        error("wrong balancer, must be one of all, first_up, less_busy, round_robin")
-    end
-    setting.balancer = policy
-    return nothing
 end
 
 function setup(setting)
@@ -134,12 +122,7 @@ function setup(setting)
         setting.log_level = get(cfg, "log_level", TRACE_INFO)
     end
 
-    balancer = get(cfg, "balancer", get(ENV, "REMBUS_BALANCER", "first_up"))
-    set_balancer(setting, balancer)
-
     return nothing
 end
 
-#
-#const global CONFIG = Rembus.Settings()
 const CONFIG = Settings()

@@ -10,13 +10,14 @@ using Test
 Rembus.rembus_dir!("/tmp/rembus")
 
 const BROKER_NAME = "caronte_test"
+const SERVER_NAME = "server_test"
 
 # default ca certificate name
 const REMBUS_CA = "rembus-ca.crt"
 
 results = []
 
-macro start_caronte(init, secure, ws, tcp, zmq, http, name, reset, mode, log)
+macro start_caronte(init, secure, policy, ws, tcp, zmq, http, name, reset, mode, log)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"
         if !running
@@ -31,6 +32,7 @@ macro start_caronte(init, secure, ws, tcp, zmq, http, name, reset, mode, log)
             Rembus.broker(
                 wait=false,
                 secure=$(esc(secure)),
+                policy=$(esc(policy)),
                 ws=$(esc(ws)),
                 tcp=$(esc(tcp)),
                 zmq=$(esc(zmq)),
@@ -87,11 +89,12 @@ function execute(
     zmq=8002,
     http=nothing,
     secure=false,
+    policy=:first_up,
     log="info"
 )
     Rembus.setup(Rembus.CONFIG)
 
-    @start_caronte setup secure ws tcp zmq http BROKER_NAME reset mode log
+    @start_caronte setup secure policy ws tcp zmq http BROKER_NAME reset mode log
     sleep(0.5)
     procs = ["$BROKER_NAME.$proc" for proc in islistening]
     Rembus.islistening(
@@ -153,7 +156,11 @@ function set_admin(name)
 end
 
 function remove_keys(cid)
-    for fn in [Rembus.pkfile(cid), Rembus.key_file(BROKER_NAME, cid)]
+    for fn in [
+        Rembus.pkfile(cid),
+        Rembus.key_file(BROKER_NAME, cid),
+        Rembus.key_file(SERVER_NAME, cid)
+    ]
         if fn !== nothing
             @info "removing $fn"
             rm(fn, force=true)

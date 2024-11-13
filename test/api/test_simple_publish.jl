@@ -4,7 +4,7 @@ mutable struct Ctx
     data::Any
 end
 
-function foo(ctx, x)
+function foo(ctx, rb, x)
     @info "[test_simple_publish] foo=$x"
     ctx.data = x
 end

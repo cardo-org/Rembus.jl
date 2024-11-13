@@ -73,9 +73,10 @@ export egress_interceptor, ingress_interceptor
 export rbinfo
 export register, unregister
 export anonymous!, named!, authenticated!
+export firstup_policy, roundrobin_policy, lessbusy_policy, all_policy
 
 # broker api
-export add_server, remove_server
+export add_node, remove_node
 export broker, session, republish, msg_payload
 
 export RembusError
@@ -328,7 +329,7 @@ mutable struct RBPool <: RBHandle
     connections::Vector{RBConnection}
     process::Visor.Process
     RBPool(
-        policy=:policy_default,
+        policy=:default,
         conns::Vector{RBConnection}=[]) = new(Dict(), policy, missing, conns
     )
 end
@@ -339,6 +340,15 @@ function cid(rb::RBPool)
     cids = [cid(conn) for conn in rb.connections]
     return "pool:$(join(cids, ","))"
 end
+
+firstup_policy(rb::RBPool) = rb.policy = :first_up
+
+roundrobin_policy(rb::RBPool) = rb.policy = :round_robin
+
+lessbusy_policy(rb::RBPool) = rb.policy = :less_busy
+
+all_policy(rb::RBPool) = rb.policy = :all
+
 
 struct WsPing end
 
@@ -653,7 +663,7 @@ Using `@shared` to set a `container` object means that if some component
 `publish topic(arg1,arg2)` then the method `foo(container,arg2,arg2)` will be called.
 
 """
-macro shared(container)
+macro shared(container=nothing)
     ex = holder_expr(container)
     quote
         $(esc(ex))
@@ -1139,7 +1149,7 @@ exposed methods.
 
 See [`@shared`](@ref) for more details.
 """
-shared(rb, ctx) = rb.shared = ctx
+shared(rb, ctx=nothing) = rb.shared = ctx
 
 function rembus(cid=nothing)
     if cid === nothing
@@ -1351,13 +1361,13 @@ function invoke(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
         if rb.shared === missing
             return STS_SUCCESS, get_callback(rb, topic)(msg.data...)
         else
-            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, msg.data...)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, rb, msg.data...)
         end
     else
         if rb.shared === missing
             return STS_SUCCESS, get_callback(rb, topic)(msg.data)
         else
-            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, msg.data)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.shared, rb, msg.data)
         end
     end
 end
@@ -1367,13 +1377,13 @@ function invoke(rb::RBServerConnection, topic::AbstractString, msg::RembusMsg)
         if rb.router.shared === missing
             return STS_SUCCESS, get_callback(rb, topic)(msg.data...)
         else
-            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, msg.data...)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, rb, msg.data...)
         end
     else
         if rb.router.shared === missing
             return STS_SUCCESS, get_callback(rb, topic)(msg.data)
         else
-            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, msg.data)
+            return STS_SUCCESS, get_callback(rb, topic)(rb.router.shared, rb, msg.data)
         end
     end
 end
@@ -1390,7 +1400,7 @@ function invoke_latest(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
         else
             return (
                 STS_SUCCESS, Base.invokelatest(
-                    get_callback(rb, topic), rb.shared, msg.data...
+                    get_callback(rb, topic), rb.shared, rb, msg.data...
                 )
             )
         end
@@ -1399,7 +1409,7 @@ function invoke_latest(rb::RBHandle, topic::AbstractString, msg::RembusMsg)
             return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data)
         else
             return STS_SUCCESS, Base.invokelatest(
-                get_callback(rb, topic), rb.shared, msg.data
+                get_callback(rb, topic), rb.shared, rb, msg.data
             )
         end
     end
@@ -1412,7 +1422,7 @@ function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::Rembu
         else
             return (
                 STS_SUCCESS, Base.invokelatest(
-                    get_callback(rb, topic), rb.router.shared, msg.data...
+                    get_callback(rb, topic), rb.router.shared, rb, msg.data...
                 )
             )
         end
@@ -1421,7 +1431,7 @@ function invoke_latest(rb::RBServerConnection, topic::AbstractString, msg::Rembu
             return STS_SUCCESS, Base.invokelatest(get_callback(rb, topic), msg.data)
         else
             return STS_SUCCESS, Base.invokelatest(
-                get_callback(rb, topic), rb.router.shared, msg.data
+                get_callback(rb, topic), rb.router.shared, rb, msg.data
             )
         end
     end
@@ -1438,13 +1448,13 @@ function invoke_glob(rb::RBHandle, msg::RembusMsg)
         if rb.shared === missing
             return STS_SUCCESS, get_callback(rb, "*")(msg.topic, msg.data...)
         else
-            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, msg.topic, msg.data...)
+            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, rb, msg.topic, msg.data...)
         end
     else
         if rb.shared === missing
             return STS_SUCCESS, get_callback(rb, "*")(msg.topic, msg.data)
         else
-            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, msg.topic, msg.data)
+            return STS_SUCCESS, get_callback(rb, "*")(rb.shared, rb, msg.topic, msg.data)
         end
     end
 end
@@ -1587,7 +1597,7 @@ Handle a received message.
 function parse_msg(rb, response)
     try
         msg = from_cbor(response)
-        handle_input(rb, msg)
+        @async handle_input(rb, msg)
     catch e
         @error "message decoding: $e"
         @showerror e
@@ -1696,7 +1706,7 @@ function read_socket(socket, process, rb::RBServerConnection)
                 response = unregister(rb.router, rb, msg)
                 put!(rb.process.inbox, response)
             else
-                handle_input(rb, msg)
+                @async handle_input(rb, msg)
             end
         end
     catch e
@@ -1774,7 +1784,7 @@ function zmq_receive(rb)
     while true
         try
             msg = zmq_load(rb.socket)
-            handle_input(rb, msg)
+            @async handle_input(rb, msg)
         catch e
             if !isopen(rb.socket)
                 break
@@ -2148,7 +2158,7 @@ function connect(rb::RBPool)
     return rb
 end
 
-function connect(urls::Vector, policy=:policy_default)
+function connect(urls::Vector, policy=:default)
     pool = RBPool(policy, [RBConnection(url) for url in urls])
     return connect(pool)
 end
@@ -2412,7 +2422,7 @@ Connect component to remotes defined be `urls` array.
 
 The connection pool is supervised.
 """
-function component(urls::Vector, policy=:policy_default)
+function component(urls::Vector, policy=:default)
     pool = RBPool(policy, [RBConnection(url) for url in urls])
     return component(pool)
 end
@@ -2453,7 +2463,7 @@ function unreactive(proc::Visor.Process)
     return call(proc, Reactive(false, NaN), timeout=call_timeout())
 end
 
-function shared(proc::Visor.Process, ctx)
+function shared(proc::Visor.Process, ctx=nothing)
     return call(proc, SetHolder(ctx), timeout=call_timeout())
 end
 
@@ -2799,7 +2809,7 @@ function fetch_response(f::Distributed.Future)
 end
 
 function direct(
-    rb::RBHandle, target::AbstractString, topic::AbstractString, data=nothing;
+    rb, target::AbstractString, topic::AbstractString, data=nothing;
     exceptionerror=true
 )
     return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
@@ -2942,13 +2952,13 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
 end
 
 function pick_connections(handle::RBPool, msg)
-    if handle.policy === :policy_first_up
+    if handle.policy === :first_up
         return first_up(handle, msg.topic, handle.connections)
-    elseif handle.policy === :policy_round_robin
+    elseif handle.policy === :round_robin
         return round_robin(handle, msg.topic, handle.connections)
-    elseif handle.policy === :policy_less_busy
+    elseif handle.policy === :less_busy
         return less_busy(handle, msg.topic, handle.connections)
-    elseif handle.policy === :policy_all
+    elseif handle.policy === :all
         return handle.connections
     elseif isa(msg, PubSubMsg)
         # pick all if it is a publish message

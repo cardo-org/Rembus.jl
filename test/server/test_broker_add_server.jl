@@ -4,10 +4,10 @@ function run()
     url = "ws://:9000/s1"
     server(ws=9000)
     router = broker(wait=false, name=BROKER_NAME, reset=true)
-    add_server(router, url)
+    add_node(router, url)
     @test isa(from(url), Visor.Process)
     sleep(1)
-    remove_server(router, url)
+    remove_node(router, url)
 
     shutdown()
 end

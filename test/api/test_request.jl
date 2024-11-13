@@ -24,7 +24,7 @@ function do_args_error(data)
     end
 end
 
-function rpc_method(bag, rpc_method_arg)
+function rpc_method(bag, rb, rpc_method_arg)
     bag.rpc_method_invoked = true
 
     # expect rpc_method_arg equals to request arg

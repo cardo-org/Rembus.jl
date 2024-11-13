@@ -12,7 +12,7 @@ function start_servers()
 end
 
 function policy_all()
-    rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"], :policy_all)
+    rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"], :all)
     results = rpc(rb, "myservice", timeout=3, exceptionerror=false)
     @test isequal(results, ["yes", missing, "no"])
     close(rb)

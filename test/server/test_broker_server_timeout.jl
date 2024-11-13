@@ -7,7 +7,7 @@ Test a IdentityMsg response timeout
 function run()
     server(ws=9000)
     router = broker(wait=false, reset=true, name=BROKER_NAME)
-    add_server(router, "ws://:9000/s1")
+    add_node(router, "ws://:9000/s1")
 
     sleep(1)
     twin = from("$BROKER_NAME.twins.ws://:9000/s1").args[1]

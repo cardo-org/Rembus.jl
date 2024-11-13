@@ -20,15 +20,14 @@ function run()
     cid = "mycid"
     tenant = "TenantA"
     pin = "11223344"
-    server_name = "server_test"
 
-    init(server_name, tenant, pin)
+    init(SERVER_NAME, tenant, pin)
 
-    server(name=server_name)
+    server(name=SERVER_NAME)
 
     Rembus.register(cid, pin, tenant=tenant)
 
-    keyfn = joinpath(Rembus.keys_dir(server_name), cid)
+    keyfn = joinpath(Rembus.keys_dir(SERVER_NAME), cid)
     @test keyfn !== nothing
 
     rb = connect(cid)
@@ -48,15 +47,15 @@ end
 
 function login_failed()
     cid = "mycid"
-    server_name = "server_test"
-    kdir = Rembus.keys_dir(server_name)
+    SERVER_NAME = "server_test"
+    kdir = Rembus.keys_dir(SERVER_NAME)
     mkpath(kdir)
     server_side_secret = joinpath(kdir, "$cid.rsa.pem")
     try
         write(server_side_secret, "aaa")
         write(Rembus.pkfile(cid), "bbb")
 
-        server(name=server_name)
+        server(name=SERVER_NAME)
         @test_throws RembusError connect(cid)
     finally
         shutdown()

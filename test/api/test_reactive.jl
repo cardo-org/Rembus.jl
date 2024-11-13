@@ -6,7 +6,7 @@ mutable struct Ctx
     topic_1::Int
 end
 
-topic_1(ctx) = ctx.topic_1 += 1
+topic_1(ctx, rb) = ctx.topic_1 += 1
 
 function publish_msg()
     rb = connect()

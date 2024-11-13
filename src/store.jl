@@ -45,7 +45,7 @@ function load_servers(router)
         content = read(fn, String)
         components = JSON3.read(content, Set{String})
         for cmp in components
-            add_server(router, cmp)
+            add_node(router, cmp)
         end
     else
         router.servers = Set()

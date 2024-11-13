@@ -8,7 +8,7 @@ mutable struct TestContext
     TestContext() = new(true)
 end
 
-function consume(ctx, data)
+function consume(ctx, rb, data)
     global current
     global count
     global ts

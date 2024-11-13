@@ -17,6 +17,7 @@ function rpc_server3(rpc_method_arg)
 end
 
 function run(client_url, server1_url, server2_url, server3_url)
+
     client = connect(client_url)
 
     server1 = connect(server1_url)
@@ -76,12 +77,9 @@ function run(client_url, server1_url, server2_url, server3_url)
     end
 end
 
-ENV["REMBUS_BALANCER"] = "round_robin"
-
 function run()
     run("rr_client", "rr_server_1", "rr_server_2", "rr_server_3")
     testsummary()
 end
 
-execute(run, "test_round_robin")
-ENV["REMBUS_BALANCER"] = "first_up"
+execute(run, "test_round_robin", policy=:round_robin)

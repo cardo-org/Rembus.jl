@@ -4,7 +4,7 @@ mutable struct TestCtx
     count::UInt
 end
 
-function mytopic(ctx, n)
+function mytopic(ctx, rb, n)
     @info n
     ctx.count += 1
 end

@@ -51,6 +51,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "http" begin
             include("http/test_http.jl")
         end
+        @time @safetestset "http_server" begin
+            include("http/test_http_server.jl")
+        end
         @time @safetestset "https" begin
             include("http/test_https.jl")
         end
@@ -321,6 +324,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "broker_plugin"
+        @time @safetestset "policy" begin
+            include("broker_plugin/test_policy.jl")
+        end
         @time @safetestset "error_plugin" begin
             include("broker_plugin/test_error_plugin.jl")
         end

@@ -13,12 +13,12 @@ end
 myservice(x) = x + 1
 myservice(x, y) = x + y
 
-function myservice(ctx::TestCtx, x)
+function myservice(ctx::TestCtx, rb, x)
     ctx.count += 1
     return x + 2
 end
 
-function myservice(ctx::TestCtx, x, y)
+function myservice(ctx::TestCtx, rb, x, y)
     ctx.count += 1
     return x * y
 end

@@ -1,13 +1,13 @@
 include("../utils.jl")
 
-my_topic(ctx) = @info "my_topic called"
-my_service(ctx, x, y) = x + y
+my_topic(ctx, rb) = @info "my_topic called"
+my_service(ctx, rb, x, y) = x + y
 
 mutable struct Ctx
     called::Bool
 end
 
-from_supervised(ctx) = ctx.called = true
+from_supervised(ctx, rb) = ctx.called = true
 
 
 function run()

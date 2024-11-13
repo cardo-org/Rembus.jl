@@ -6,16 +6,16 @@ df = DataFrame(name=["trento", "belluno"], score=[10, 50])
 bdf = DataFrame(x=1:10)
 bdf.y = bdf.x .^ 2
 
-function noarg(ctx)
+function noarg(ctx, rb)
     ctx.noarg_message_received = true
 end
 
-function mytopic(ctx, data::Number)
+function mytopic(ctx, rb, data::Number)
     ctx.msg_received += 1
     @atest data == 2 "mytopic(data=$data): expected data == 2"
 end
 
-function mytopic(ctx, data)
+function mytopic(ctx, rb, data)
     ctx.msg_received += 1
     if names(data) == ["x", "y"]
         @atest size(data) == size(bdf) "data:$(size(data)) == bdf:$(size(bdf))"

@@ -4,7 +4,7 @@ mutable struct TestBag
     broadcast_received::Bool
 end
 
-function consume(bag, data)
+function consume(bag, rb, data)
     @debug "[test msg_from] received: $data" _group = :test
     bag.broadcast_received = true
 end

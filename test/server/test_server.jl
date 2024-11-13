@@ -26,13 +26,13 @@ end
 
 
 function start_server()
-    emb = server(ws=8000, tcp=8001, log="info")
-    expose(emb, df_service)
-    expose(emb, rpc_service)
-    expose(emb, rpc_fault)
-    expose(emb, signal)
-    @info "$emb setup completed"
-    forever(emb)
+    rb = server(ws=8000, tcp=8001, log="info")
+    expose(rb, df_service)
+    expose(rb, rpc_service)
+    expose(rb, rpc_fault)
+    expose(rb, signal)
+    @info "$rb setup completed"
+    forever(rb)
 end
 
 

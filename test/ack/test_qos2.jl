@@ -43,7 +43,7 @@ function pub_egress(rb, msg)
     return response
 end
 
-function msg_handler(ctx, counter)
+function msg_handler(ctx, rb, counter)
     @info "recv message: $counter"
 end
 

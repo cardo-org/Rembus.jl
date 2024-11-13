@@ -14,18 +14,18 @@ mutable struct TestBag
     TestBag() = new(false, 0, nothing, nothing)
 end
 
-function inspect(bag::TestBag)
+function inspect(bag::TestBag, rb)
     bag.noarg_message_received = true
 end
 
-function consume(bag::TestBag, data::Number)
+function consume(bag::TestBag, rb, data::Number)
     bag.msg_received += 1
 
     @debug "consume recv: $data" _group = :test
     bag.num = data
 end
 
-function consume(bag::TestBag, data)
+function consume(bag::TestBag, rb, data)
     bag.msg_received += 1
 
     if names(data) == ["x", "y"]
