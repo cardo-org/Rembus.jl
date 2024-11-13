@@ -337,21 +337,9 @@ named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothi
 
 router_supervisor(router::Router) = router.process.supervisor
 
-router_supervisor(router::Server) = router.process
-
 build_twin(router::Router, id, type) = Twin(router, id, type)
 
-function build_twin(router::Server, id, type)
-    rb = RBServerConnection(router, id, type)
-    if type === zrouter
-        rb.socket = router.zmqsocket
-    end
-    return rb
-end
-
 twin_task(::Twin) = twin_task
-
-twin_task(::RBServerConnection) = server_task
 
 function create_twin(id, router::AbstractRouter, type::NodeType)
     if haskey(router.id_twin, id)
@@ -745,7 +733,7 @@ end
 
 function publish(router::Router, topic, data)
     new_msg = PubSubMsg(topic, data)
-    put!(router.process.inbox, Msg(TYPE_PUB, new_msg, Twin(router, "tmp")))
+    put!(router.process.inbox, Msg(TYPE_PUB, new_msg, Twin(router, "tmp", loopback)))
 end
 
 #=
@@ -1323,11 +1311,18 @@ end
 """
     broker(;
         wait=true,
+        secure=nothing,
+        ws=nothing,
+        tcp=nothing,
+        zmq=nothing,
+        http=nothing,
+        name="broker",
+        policy=:first_up,
         mode=nothing,
+        reset=nothing,
         log="info",
         plugin=nothing,
-        context=nothing,
-        args=Dict()
+        context=nothing
     )
 
 Start the broker.
@@ -2700,7 +2695,6 @@ end
 
 brokerurl(rb::Twin) = brokerurl(Component(rb.id))
 
-setup_channel(::Twin) = nothing
 protocol(rb::Twin) = Component(rb.id).protocol
 
 function egress_task(proc, twin::Twin, remote::Component)

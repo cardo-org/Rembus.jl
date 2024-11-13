@@ -2838,7 +2838,10 @@ function response_timeout(rb, condition::Distributed.Future, msg::RembusMsg)
         descr = "[$msg]: request timeout"
     end
 
-    put!(condition, RembusTimeout(descr))
+    if !isready(condition)
+        put!(condition, RembusTimeout(descr))
+    end
+
     delete!(rb.out, msg.id)
 
     return nothing

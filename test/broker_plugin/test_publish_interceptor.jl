@@ -13,7 +13,6 @@ function subscribe_handler(ctx, broker, component, msg)
 end
 
 function publish_interceptor(ctx, component, msg)
-
     @info "[$component]: pub: $msg ($(msg.data))"
 
     subjects = split(msg.topic, "/")
@@ -45,7 +44,6 @@ function publish_interceptor(ctx, component, msg)
     catch e
         @info "expected error: $e"
     end
-
     return false
 end
 
