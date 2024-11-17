@@ -40,13 +40,13 @@ function run()
         rb = connect()
 
         @component "myserver"
-        @shared ctx
+        @inject ctx
         @reactive
         @expose foo
 
         sub = connect("mysub")
         subscribe(sub, "foo", foo_subscriber, from=LastReceived())
-        shared(sub, ctx)
+        inject(sub, ctx)
         reactive(sub)
 
         rpc(rb, "foo", value)

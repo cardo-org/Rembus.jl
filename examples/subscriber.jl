@@ -13,7 +13,7 @@ end
 const ANN_DB = Announcements()
 
 # This get called for each message received on topic "announcement"
-function announcement(ann_db, user, message)
+function announcement(ann_db, rb, user, message)
     @info "news from [$user]: $message"
     push!(ann_db.df, [user, message])
 end
@@ -37,7 +37,7 @@ all_announcements(ann_db) = return ann_db.df
 
 # Shared object between all subscribers and exposers methods.
 # When declared it get used as the first argument of the exposed/subscribed methods.
-@shared ANN_DB
+@inject ANN_DB
 
 # Expose the method that returns the announcements dataframe
 @expose all_announcements

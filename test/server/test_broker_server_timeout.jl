@@ -10,7 +10,8 @@ function run()
     add_node(router, "ws://:9000/s1")
 
     sleep(1)
-    twin = from("$BROKER_NAME.twins.ws://:9000/s1").args[1]
+    twins = from("$BROKER_NAME.twins")
+    twin = from_name(twins, "ws://127.0.0.1:9000/s1").args[1]
     msg = Rembus.IdentityMsg(twin.router.process.supervisor.id)
     try
         Rembus.wait_response(
@@ -30,6 +31,7 @@ try
 catch e
     @error "[test_broker_server_timeout]: unexpected: $e"
     showerror(stdout, e, catch_backtrace())
+    @test false
 finally
     shutdown()
 end

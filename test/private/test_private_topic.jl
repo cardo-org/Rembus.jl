@@ -67,7 +67,7 @@ function run(authorized_component)
     unauth_consumer = connect(myunauth)
     consumer = connect(myconsumer)
     for c in [unauth_consumer, consumer]
-        shared(c, bag)
+        inject(c, bag)
     end
 
     try

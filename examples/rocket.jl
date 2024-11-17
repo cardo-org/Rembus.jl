@@ -13,7 +13,7 @@ using Rembus
 
 =#
 
-function my_topic(actor, n)
+function my_topic(actor, rb, n)
     next!(actor, n)
 end
 
@@ -31,6 +31,6 @@ subscribe!(subject, keeper)
 subscribe!(subject, logger())
 
 @component "rocket"
-@shared subject
+@inject subject
 @subscribe my_topic before_now
 @forever

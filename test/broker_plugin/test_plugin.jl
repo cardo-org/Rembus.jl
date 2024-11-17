@@ -145,7 +145,7 @@ function run(ok_cid, ko_cid)
     twin = okcid.args[1]
     tim = Timer(0)
     msgid = 1
-    twin.acktimer[1] = tim
+    twin.acktimer[1] = Rembus.AckState(false, tim)
 
     # triggers CarontePlugin.park
     Rembus.handle_ack_timeout(tim, twin, "my_string", msgid)

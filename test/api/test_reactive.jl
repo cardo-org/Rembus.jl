@@ -19,7 +19,7 @@ function run()
     ctx = Ctx(0)
 
     myc = connect("myc")
-    shared(myc, ctx)
+    inject(myc, ctx)
     subscribe(myc, topic_1, from=Second(1))
     reactive(myc, from=Now())
     sleep(1)
@@ -27,7 +27,7 @@ function run()
 
     # Only named component may receive message from past ...
     @component "myc"
-    @shared ctx
+    @inject ctx
     @subscribe topic_1 from = Second(1)
 
     # 1 microsec just for cover the skip file check (Rembus.start_reactive)

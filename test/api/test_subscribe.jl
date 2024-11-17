@@ -24,7 +24,7 @@ function run()
 
     # Only named component may receive message from past ...
     @component "myc"
-    @shared ctx
+    @inject ctx
     @subscribe topic_1 from = Second(1)
     @subscribe topic_2 from = Second(2) + Microsecond(1)
     @reactive

@@ -35,7 +35,7 @@ function run()
     res = rpc(cli, "myservice", [1, 2])
     @test res == 3
 
-    shared(sub, ctx)
+    inject(sub, ctx)
     res = rpc(cli, "myservice", 1)
     @test res == 3
     @test ctx.count == 1

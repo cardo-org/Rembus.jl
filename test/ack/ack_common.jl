@@ -50,7 +50,7 @@ function run(publisher, consumer)
     #sleep(2)
     pub = connect(publisher)
     sub = connect(consumer)
-    shared(sub, ctx)
+    inject(sub, ctx)
 
     sleep(0.1)
 
@@ -68,7 +68,7 @@ function run(publisher, consumer)
     @debug "reopening $consumer" _group = :test
     sub = connect(consumer)
 
-    shared(sub, ctx)
+    inject(sub, ctx)
     subscribe(sub, test_topic, consume, from=LastReceived())
     reactive(sub)
 

@@ -30,7 +30,7 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
     @subscribe sub1 mytopic from = Now()
 
     if testholder !== missing
-        @shared sub1 testholder
+        @inject sub1 testholder
     end
 
     @reactive sub1
@@ -40,7 +40,7 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
 
     @subscribe sub2 mytopic from = Now()
     if testholder !== missing
-        @shared sub2 testholder
+        @inject sub2 testholder
     end
 
     @subscribe sub2 noarg from = Now()
@@ -50,7 +50,7 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
 
     @subscribe sub3 mytopic from = LastReceived()
     if testholder !== missing
-        @shared sub3 testholder
+        @inject sub3 testholder
     end
 
     sleep(waittime / 3)

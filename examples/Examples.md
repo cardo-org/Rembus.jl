@@ -186,7 +186,7 @@ publish(rb, "a/@v1/c", "NOT RECEIVED")
 This simple example show how to integrate Rembus with
 [Rocket](https://github.com/ReactiveBayes/Rocket.jl), a reactive extensions library for Julia.
 
-The integration is easily obtained using the `@shared` macro: the first argument of method to be
+The integration is easily obtained using the `@inject` macro: the first argument of method to be
 subscribed to `my_topic` is a `Subject` object.
 
 The method body simply consists in a `next!()` call: feeding the value received from the topic
@@ -196,7 +196,7 @@ For example a function actor may be used to publish a message to topic `alarm`
 if the value received from `my_topic` is greater then 100:
 
 ```julia
-function my_topic(actor, n)
+function my_topic(actor, rb, n)
     next!(actor, n)
 end
 
@@ -214,7 +214,7 @@ subscribe!(subject, keeper)
 subscribe!(subject, logger())
 
 @component "rocket"
-@shared subject
+@inject subject
 @subscribe my_topic before_now
 @forever
 ```

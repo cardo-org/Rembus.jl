@@ -45,7 +45,7 @@ end
 
 function pub(topic, ctx)
     pub = connect("pub")
-    shared(pub, ctx)
+    inject(pub, ctx)
     egress_interceptor(pub, pub_egress)
     ingress_interceptor(pub, pub_ingress)
     publish(pub, topic, 1, qos=QOS0)
@@ -59,7 +59,7 @@ end
 
 function sub(topic, ctx)
     sub = connect("sub")
-    shared(sub, ctx)
+    inject(sub, ctx)
     egress_interceptor(sub, sub_egress)
     ingress_interceptor(sub, sub_ingress)
     subscribe(sub, topic, msg_handler)

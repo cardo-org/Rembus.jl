@@ -49,7 +49,7 @@ function publish_macroapi(publisher, sub1; waittime=1)
     testbag = TestBag(false, 0)
 
     @component sub1
-    @shared sub1 testbag
+    @inject sub1 testbag
     @subscribe sub1 mytopic from = Now()
     @reactive sub1
 
@@ -77,7 +77,7 @@ function publish_api(pub, sub1; waittime=1)
     publisher = connect(pub)
 
     sub1 = connect(sub1)
-    shared(sub1, testbag)
+    inject(sub1, testbag)
 
     subscribe(sub1, mytopic_topic, mytopic)
     reactive(sub1)
@@ -166,7 +166,7 @@ function types()
     sleep(0.1)
 
     @subscribe TYPE_LISTENER type_consumer from = Now()
-    @shared TYPE_LISTENER bag
+    @inject TYPE_LISTENER bag
     @reactive TYPE_LISTENER
 
     sleep(0.1)
@@ -186,22 +186,30 @@ end
 mytopic(n) = nothing
 
 function broker_server()
-    srv = server(mode="anonymous", log="error", ws=10000)
-    expose(srv, mymethod)
-    subscribe(srv, mytopic)
-
+    server_url = "ws://:9005/s1"
     p = from("broker.broker")
     router = p.args[1]
-    server_url = "ws://:10000/s1"
-    add_node(router, server_url)
-    sleep(2)
 
-    cli = connect()
-    rpc(cli, "mymethod", 1)
-    publish(cli, "mytopic", 1)
-    sleep(1)
-    close(cli)
-    remove_node(router, server_url)
+    try
+        srv = server(mode="anonymous", log="error", ws=9005)
+        expose(srv, mymethod)
+        subscribe(srv, mytopic)
+
+        Rembus.islistening(wait=15, procs=["server.serve:9005"])
+
+        add_node(router, server_url)
+        sleep(2)
+
+        cli = connect()
+        rpc(cli, "mymethod", 1)
+        publish(cli, "mytopic", 1)
+        sleep(1)
+        close(cli)
+    catch e
+        @error "broker_server: $e"
+    finally
+        remove_node(router, server_url)
+    end
 end
 
 @rpc version()

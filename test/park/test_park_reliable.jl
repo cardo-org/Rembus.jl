@@ -30,7 +30,7 @@ end
 
 function set_subscriber(ctx)
     subscriber = connect("test_park_sub")
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     subscribe(subscriber, consume, from=LastReceived())
     return subscriber
 end
@@ -41,7 +41,7 @@ function run()
     subscriber = connect("zmq://:8002/test_park_sub")
 
     subscribe(subscriber, "consume", consume)
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     close(subscriber)
 
     send(publisher, 1, 10000)

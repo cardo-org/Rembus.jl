@@ -19,7 +19,7 @@ Rembus API functions:
 - [reactive](#reactive)
 - [unreactive](#unreactive)
 - [forever](#forever)
-- [shared](#shared)
+- [inject](#inject)
 - [close](#close)
 - [terminate](#terminate)
 
@@ -208,20 +208,23 @@ Needed for components that [expose](#expose) and/or [subscribe](#subscribe) meth
 
 By default `forever` enable component reactiveness, see [reactive](#reactive).
 
-## shared
+## inject
 
-`shared` is handy when a state must be shared between the subscribed methods, the exposed methods and the application.
+`inject` is handy when a state must be shared between the subscribed methods,
+the exposed methods and the application.
 
-Using a shared state implies that an additional argument is passed to the subscribed/exposed methods.
+When a state is injected two additional arguments are passed to the
+subscribed/exposed methods:
 
-For convention the first argument of a method that [subscribe](#subscribe) or
-[expose](#expose) is the state object. 
+- the first argument is the state value;
+- the second argument is the node handle;
 
 The following example shows how to use a shared state:
 
 - the struct `MyState` manages the state;
-- the `shared` method binds the state object to the component;
-- the subscribed and the exposed method must provide as first argument the state object;
+- the `inject` method binds the state object to the component;
+- the subscribed and the exposed method must declare as first argument the state
+  object and as second argument the node handle;
 
 ```julia
 mutable struct MyState
@@ -232,7 +235,7 @@ end
 
 mystate = MyState()
 
-function add_metric(mystate, measure)
+function add_metric(mystate::MyState, handle::RBHandle, measure)
     mystate.counter += 1 # count the received measures
 
     try
@@ -248,7 +251,7 @@ function fetch_metrics(mystate)
 end
 
 rb = connect("ingestor")
-shared(rb, mystate)
+inject(rb, mystate)
 
 # declare interest to messages produced with
 # publish(rb, "add_metric", Dict("name"=>"pressure", "value"=>1.5))
@@ -263,7 +266,7 @@ forever()
 
 ## close
 
-Close the network connection.   
+Close the network connection.
 
 ```julia
 close(rb)
@@ -271,11 +274,10 @@ close(rb)
 
 > NOTE: `close` applies to connections setup by [`connect`](#connect) api.
 
-
 ## terminate
 
 Close the network connection and shutdown the supervised process associated with the
-component.   
+component.
 
 ```julia
 terminate(rb)

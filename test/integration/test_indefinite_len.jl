@@ -32,7 +32,7 @@ function run()
     sub = connect()
     subscribe(sub, consume)
     subscribe(sub, consume_undef_length)
-    shared(sub, bag)
+    inject(sub, bag)
     reactive(sub)
 
     ##publish(pub, "consume", Rembus.UndefLength(iter))

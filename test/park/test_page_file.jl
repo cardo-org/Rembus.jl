@@ -35,7 +35,7 @@ end
 function second_run()
     ctx = Ctx(0)
     sub = connect("mysub")
-    shared(sub, ctx)
+    inject(sub, ctx)
     subscribe(sub, mytopic, from=LastReceived())
     @info "default timeout: $(Rembus.request_timeout())"
     reactive(sub, timeout=10)

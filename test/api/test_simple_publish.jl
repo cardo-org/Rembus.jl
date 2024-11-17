@@ -15,7 +15,7 @@ function run()
         value = "hello"
         sleep(2)
         rb = connect()
-        shared(rb, ctx)
+        inject(rb, ctx)
         subscribe(rb, foo)
         reactive(rb)
 

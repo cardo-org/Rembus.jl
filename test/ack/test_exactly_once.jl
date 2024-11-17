@@ -43,7 +43,7 @@ function sub(topic, ctx)
 
     sub = connect("sub")
 
-    shared(sub, ctx)
+    inject(sub, ctx)
     egress_interceptor(sub, test_handler)
     subscribe(sub, topic, msg_handler)
     reactive(sub)

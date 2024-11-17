@@ -42,7 +42,7 @@ export @subscribe, @unsubscribe
 export @rpc
 export @publish
 export @reactive, @unreactive
-export @shared
+export @inject
 export @rpc_timeout
 export @forever
 export @terminate
@@ -64,9 +64,9 @@ export authorize, unauthorize
 export private_topic, public_topic
 export provide
 export close
-export isconnected
+export isconnected, when_connected
 export rembus
-export shared
+export inject
 export forever
 export terminate
 export egress_interceptor, ingress_interceptor
@@ -335,7 +335,7 @@ end
 ucid(rb::RBServerConnection) = rb.client.id
 
 function Base.show(io::IO, rb::RBServerConnection)
-    return print(io, "srv component [$(cid(rb.client))], isconnected: $(isconnected(rb))")
+    return print(io, "srv component [$(ucid(rb))], isconnected: $(isconnected(rb))")
 end
 
 mutable struct RBPool <: RBHandle
@@ -359,12 +359,19 @@ end
 
 firstup_policy(rb::RBPool) = rb.policy = :first_up
 
+firstup_policy(p::Visor.Process) = firstup_policy(p.args[1])
+
 roundrobin_policy(rb::RBPool) = rb.policy = :round_robin
+
+roundrobin_policy(p::Visor.Process) = roundrobin_policy(p.args[1])
 
 lessbusy_policy(rb::RBPool) = rb.policy = :less_busy
 
+lessbusy_policy(p::Visor.Process) = lessbusy_policy(p.args[1])
+
 all_policy(rb::RBPool) = rb.policy = :all
 
+all_policy(p::Visor.Process) = all_policy(p.args[1])
 
 struct WsPing end
 
@@ -546,7 +553,8 @@ struct CastCall
     topic::String
     data::Any
     qos::UInt8
-    CastCall(topic, data, qos=QOS0) = new(topic, data, qos)
+    wait::Bool
+    CastCall(topic, data, qos=QOS0, wait=true) = new(topic, data, qos, wait)
 end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
@@ -650,7 +658,7 @@ function holder_expr(shared, cid=nothing)
 end
 
 """
-     @shared container
+     @inject container
 
 Bind a `container` object that is passed as the first argument of the subscribed
 component functions.
@@ -672,14 +680,14 @@ end
 
 ctx = Context(0)
 @subscribe topic
-@shared ctx
+@inject ctx
 ```
 
-Using `@shared` to set a `container` object means that if some component
+Using `@inject` to set a `container` object means that if some component
 `publish topic(arg1,arg2)` then the method `foo(container,arg2,arg2)` will be called.
 
 """
-macro shared(container=nothing)
+macro inject(container=nothing)
     ex = holder_expr(container)
     quote
         $(esc(ex))
@@ -687,7 +695,7 @@ macro shared(container=nothing)
     end
 end
 
-macro shared(cid, container)
+macro inject(cid, container)
     ex = holder_expr(container, cid)
     quote
         $(esc(ex))
@@ -1084,40 +1092,48 @@ end
 struct AddImpl
     topic::String
     fn::Function
-    AddImpl(fn::Function) = new(string(fn), fn)
-    AddImpl(topic::AbstractString, fn::Function) = new(topic, fn)
+    wait::Bool
+    AddImpl(fn::Function, wait=true) = new(string(fn), fn, wait)
+    AddImpl(topic::AbstractString, fn::Function, wait=true) = new(topic, fn, wait)
 end
 
 struct RemoveImpl
     fn::String
-    RemoveImpl(fn::AbstractString) = new(fn)
-    RemoveImpl(fn::Function) = new(string(fn))
+    wait::Bool
+    RemoveImpl(fn::AbstractString, wait=true) = new(fn, wait)
+    RemoveImpl(fn::Function, wait=true) = new(string(fn), wait)
 end
 
 struct AddInterest
     topic::String
     fn::Function
     msg_from::Union{Real,Period,Dates.CompoundPeriod}
+    wait::Bool
     AddInterest(
         topic::AbstractString,
         fn::Function,
-        msg_from
-    ) = new(topic, fn, msg_from)
+        msg_from,
+        wait=true
+    ) = new(topic, fn, msg_from, wait)
     AddInterest(
         fn::Function,
-        msg_from
-    ) = new(string(fn), fn, msg_from)
+        msg_from,
+        wait=true
+    ) = new(string(fn), fn, msg_from, wait)
 end
 
 struct RemoveInterest
     fn::String
-    RemoveInterest(fn::AbstractString) = new(fn)
-    RemoveInterest(fn::Function) = new(string(fn))
+    wait::Bool
+    RemoveInterest(fn::AbstractString, wait=true) = new(fn, wait)
+    RemoveInterest(fn::Function, wait=true) = new(string(fn), wait)
 end
 
 struct Reactive
     status::Bool
     msg_from::Union{Real,Period,Dates.CompoundPeriod}
+    wait::Bool
+    Reactive(status, msg_from, wait=true) = new(status, msg_from, wait)
 end
 
 struct EnableAck
@@ -1129,14 +1145,15 @@ Provide an exposed server method.
 =#
 function expose(
     server::Server, name::AbstractString, func::Function;
-    exceptionerror=true
+    exceptionerror=true, wait=true
 )
     server.topic_function[name] = func
     # inform all (already) connected nodes
     for (id, twin) in server.id_twin
         rpcreq(twin,
             AdminReqMsg(name, Dict(COMMAND => EXPOSE_CMD)),
-            exceptionerror=exceptionerror
+            exceptionerror=exceptionerror,
+            wait=wait
         )
     end
 end
@@ -1144,7 +1161,8 @@ end
 expose(
     server::Server,
     func::Function;
-    exceptionerror=true) = expose(server, string(func), func, exceptionerror=exceptionerror)
+    exceptionerror=true,
+    wait=true) = expose(server, string(func), func, exceptionerror=exceptionerror, wait=wait)
 
 function subscribe(
     server::Server, name::AbstractString, func::Function; from=Now()
@@ -1156,16 +1174,16 @@ end
 subscribe(server::Server, func::Function) = subscribe(server, string(func), func)
 
 """
-    shared(rb::RBHandle, ctx)
+    inject(rb::RBHandle, ctx)
 
 Bind a `ctx` context object to the `rb` component.
 
 When a `ctx` context object is bound then it will be the first argument of subscribed and
 exposed methods.
 
-See [`@shared`](@ref) for more details.
+See [`@inject`](@ref) for more details.
 """
-shared(rb, ctx=nothing) = rb.shared = ctx
+inject(rb, ctx=nothing) = rb.shared = ctx
 
 function rembus(cid=nothing)
     if cid === nothing
@@ -1193,37 +1211,47 @@ const last_error = LastErrorLog()
 function call_request(rb, msg)
     req = msg.request
     if isa(req, SetHolder)
-        result = shared(rb, msg.request.shared)
+        result = inject(rb, msg.request.shared)
     elseif isa(req, AddImpl)
         result = expose(
-            rb, msg.request.topic, msg.request.fn, exceptionerror=false
+            rb, msg.request.topic, msg.request.fn, exceptionerror=false, wait=msg.request.wait
         )
     elseif isa(req, RemoveImpl)
-        result = unexpose(rb, msg.request.fn, exceptionerror=false)
+        result = unexpose(rb, msg.request.fn, exceptionerror=false, wait=msg.request.wait)
     elseif isa(req, AddInterest)
         result = subscribe(
             rb,
             msg.request.topic,
             msg.request.fn,
             from=msg.request.msg_from,
-            exceptionerror=false
+            exceptionerror=false,
+            wait=msg.request.wait
         )
     elseif isa(req, RemoveInterest)
-        result = unsubscribe(rb, msg.request.fn, exceptionerror=false)
+        result = unsubscribe(rb, msg.request.fn, exceptionerror=false, wait=msg.request.wait)
     elseif isa(req, Reactive)
         if req.status
             result = reactive(
                 rb,
                 from=msg.request.msg_from,
-                exceptionerror=false
+                exceptionerror=false,
+                wait=msg.request.wait
             )
         else
-            result = unreactive(rb, exceptionerror=false)
+            result = unreactive(rb, exceptionerror=false, wait=msg.request.wait)
         end
     else
-        result = rpc(
-            rb, msg.request.topic, msg.request.data, exceptionerror=false
-        )
+        try
+            result = rpc(
+                rb,
+                msg.request.topic,
+                msg.request.data,
+                exceptionerror=false,
+                wait=msg.request.wait
+            )
+        catch e
+            @error "call_request: $e"
+        end
     end
     reply(msg, result)
 end
@@ -1309,55 +1337,66 @@ end
 Task process that manages a pool of connections.
 =#
 function pool_task(pd, rb::RBPool)
-
-    # start a process for each RBPool item
     processes = []
-    for c in rb.connections
-        push!(processes, component(c))
-    end
+    try
+        # start a process for each RBPool item
+        for c in rb.connections
+            push!(processes, component(c))
+        end
 
-    for msg in pd.inbox
-        @debug "pool_task [$pd] recv: $msg"
+        for msg in pd.inbox
+            @debug "pool_task [$pd] recv: $msg"
 
-        if isshutdown(msg)
-            return
-        elseif isrequest(msg)
-            @async call_request(rb, msg)
-            #req = msg.request
-            #result = rpc(
-            #    rb, req.topic, req.data, exceptionerror=false
-            #)
-            #reply(msg, result)
-        else
-            publish(rb, msg.topic, msg.data, qos=msg.qos)
+            if isshutdown(msg)
+                return
+            elseif isrequest(msg)
+                @async call_request(rb, msg)
+            else
+                publish(rb, msg.topic, msg.data, qos=msg.qos)
+            end
+        end
+    finally
+        for p in processes
+            terminate(p)
         end
     end
 end
 
-mutable struct NullProcess <: Visor.Supervised
-    id::String
-    inbox::Channel
-    NullProcess(id) = new(id, Channel(1))
+
+function add_receiver(rb::RBConnection, method_name, impl, from)
+    rb.receiver[method_name] = impl
+    rb.subinfo[method_name] = to_microseconds(from)
 end
 
-add_receiver(rb::RBConnection, method_name, impl) = rb.receiver[method_name] = impl
+function add_receiver(rb::RBPool, method_name, impl, from)
+    for c in rb.connections
+        add_receiver(c, method_name, impl, from)
+    end
+end
 
-add_receiver(
-    rb::RBServerConnection,
-    method_name,
-    impl
-) = rb.router.topic_function[method_name] = impl
+add_exposed(rb::RBConnection, method_name, impl) = rb.receiver[method_name] = impl
+
+function add_exposed(rb::RBPool, method_name, impl)
+    for c in rb.connections
+        add_exposed(c, method_name, impl)
+    end
+end
 
 remove_receiver(ctx, method_name) = delete!(ctx.receiver, method_name)
 
-#=
+function remove_receiver(rb::RBPool, method_name)
+    for c in rb.connections
+        remove_receiver(c, method_name)
+    end
+end
+
 function when_connected(fn, rb)
     while !isconnected(rb)
-        sleep(1)
+        sleep(0.1)
     end
     fn()
 end
-=#
+
 
 get_callback(rb::RBConnection, topic) = rb.receiver[topic]
 
@@ -1503,9 +1542,7 @@ function handle_input(rb, msg)
         msg = rb.ingress(rb, msg)
     end
 
-    if msg === nothing
-        return nothing
-    end
+    (msg === nothing) && return nothing
 
     # True for AckMsg and ResMsg
     if isresponse(msg)
@@ -1639,8 +1676,6 @@ function keep_alive(rb)
         end
     end
 end
-
-processput!(process::NullProcess, e) = nothing
 
 function processput!(process::Visor.Process, e)
     if getphase(process) === :up
@@ -1997,7 +2032,6 @@ function _connect(rb, prc)
         ))
     end
 
-    @async write_task(rb)
     return rb
 end
 
@@ -2009,12 +2043,7 @@ function _connect(rb)
 end
 
 function ws_ping(rb)
-    try
-        put!(rb.process.inbox, WsPing())
-    catch e
-        @info "socket ping: $e"
-    end
-
+    isopen(rb.process.inbox) && put!(rb.process.inbox, WsPing())
     return nothing
 end
 
@@ -2138,7 +2167,6 @@ function connect(process::Visor.Supervised, rb::RBHandle)
 end
 
 function bind(process::Visor.Supervised, rb::RBServerConnection)
-    #@async write_task(rb)
     server = rb.router
     callbacks(rb, server.topic_function, server.subinfo)
     return rb
@@ -2266,15 +2294,16 @@ function save_config(rb::RBHandle; exceptionerror=true)
 end
 
 """
-    unreactive(rb::RBHandle, timeout=5; exceptionerror=true)
+    unreactive(rb::RBHandle, timeout=5; exceptionerror=true, wait=true)
 
 Stop the delivery of published message.
 """
-function unreactive(rb::RBHandle; exceptionerror=true)
+function unreactive(rb::RBHandle; exceptionerror=true, wait=true)
     response = rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => false)),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        wait=wait
     )
     rb.reactive = false
 
@@ -2285,7 +2314,8 @@ end
     reactive(
         rb::RBHandle;
         from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
-        exceptionerror=true
+        exceptionerror=true,
+        wait=true
     )
 
 Start the delivery of published messages for which there was declared
@@ -2295,7 +2325,8 @@ function reactive(
     rb::RBHandle;
     from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
     timeout=request_timeout(),
-    exceptionerror=true
+    exceptionerror=true,
+    wait=true
 )
     response = rpcreq(
         rb,
@@ -2308,7 +2339,8 @@ function reactive(
         ),
         exceptionerror=exceptionerror,
         timeout=timeout,
-        broadcast=true
+        broadcast=true,
+        wait=wait
     )
     rb.reactive = true
 
@@ -2351,48 +2383,28 @@ If `from` is `LastReceived()` then `rb` component will receive messages publishe
 offline.
 """
 function subscribe(
-    rb::RBConnection, topic::AbstractString, fn::Function;
-    from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
+    rb::RBHandle, topic::AbstractString, fn::Function;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now(),
+    exceptionerror=true,
+    wait=true
 )
-    add_receiver(rb, topic, fn)
-    rb.subinfo[topic] = to_microseconds(from)
-    return rpcreq(rb,
-        AdminReqMsg(
-            topic,
-            Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => rb.subinfo[topic])
-        ),
-        exceptionerror=exceptionerror,
-        broadcast=true
-    )
-end
-
-#=
-Subscribe the topic to the remote node, tipically a broker.
-
-TODO improve docs and make tests
-
-The argument fn is not needed because a server component
-doesn't require
-
-=#
-function subscribe(
-    rb::RBServerConnection, topic::AbstractString, fn::Function;
-    from::Union{Real,Period,Dates.CompoundPeriod}=Now(), exceptionerror=true
-)
+    add_receiver(rb, topic, fn, from)
     return rpcreq(rb,
         AdminReqMsg(
             topic,
             Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => to_microseconds(from))
         ),
-        exceptionerror=exceptionerror
+        exceptionerror=exceptionerror,
+        broadcast=true,
+        wait=wait
     )
 end
 
 function subscribe(
-    rb::RBHandle, fn::Function; from=Now(), exceptionerror=true
+    rb::RBHandle, fn::Function; from=Now(), exceptionerror=true, wait=true
 )
     return subscribe(
-        rb, string(fn), fn; from=from, exceptionerror=exceptionerror
+        rb, string(fn), fn; from=from, exceptionerror=exceptionerror, wait=wait
     )
 end
 
@@ -2445,41 +2457,41 @@ end
 
 terminate(proc::Visor.Process) = shutdown(proc)
 
-function expose(proc::Visor.Process, fn::Function)
-    return call(proc, Rembus.AddImpl(fn), timeout=call_timeout())
+function expose(proc::Visor.Process, fn::Function, wait=true)
+    return call(proc, Rembus.AddImpl(fn, wait), timeout=call_timeout())
 end
 
-function expose(proc::Visor.Process, topic::AbstractString, fn::Function)
-    return call(proc, Rembus.AddImpl(topic, fn), timeout=call_timeout())
+function expose(proc::Visor.Process, topic::AbstractString, fn::Function, wait=true)
+    return call(proc, Rembus.AddImpl(topic, fn, wait), timeout=call_timeout())
 end
 
-function unexpose(proc::Visor.Process, fn)
-    return call(proc, Rembus.RemoveImpl(fn), timeout=call_timeout())
+function unexpose(proc::Visor.Process, fn, wait=true)
+    return call(proc, Rembus.RemoveImpl(fn, wait), timeout=call_timeout())
 end
 
-function subscribe(proc::Visor.Process, fn::Function; from=Now())
-    return call(proc, Rembus.AddInterest(fn, from), timeout=call_timeout())
+function subscribe(proc::Visor.Process, fn::Function, wait=true; from=Now())
+    return call(proc, Rembus.AddInterest(fn, from, wait), timeout=call_timeout())
 end
 
-function unsubscribe(proc::Visor.Process, fn)
-    return call(proc, Rembus.RemoveInterest(fn), timeout=call_timeout())
+function unsubscribe(proc::Visor.Process, fn, wait=true)
+    return call(proc, Rembus.RemoveInterest(fn, wait), timeout=call_timeout())
 end
 
 function subscribe(
-    proc::Visor.Process, topic::AbstractString, fn::Function; from=Now()
+    proc::Visor.Process, topic::AbstractString, fn::Function, wait=true; from=Now()
 )
-    return call(proc, Rembus.AddInterest(topic, fn, from), timeout=call_timeout())
+    return call(proc, Rembus.AddInterest(topic, fn, from, wait), timeout=call_timeout())
 end
 
-function reactive(proc::Visor.Process, from=LastReceived())
-    return call(proc, Reactive(true, from), timeout=call_timeout())
+function reactive(proc::Visor.Process, from=LastReceived(), wait=true)
+    return call(proc, Reactive(true, from, wait), timeout=call_timeout())
 end
 
-function unreactive(proc::Visor.Process)
-    return call(proc, Reactive(false, NaN), timeout=call_timeout())
+function unreactive(proc::Visor.Process, wait=true)
+    return call(proc, Reactive(false, NaN, wait), timeout=call_timeout())
 end
 
-function shared(proc::Visor.Process, ctx=nothing)
+function inject(proc::Visor.Process, ctx=nothing)
     return call(proc, SetHolder(ctx), timeout=call_timeout())
 end
 
@@ -2487,34 +2499,35 @@ function publish(proc::Visor.Process, topic::AbstractString, data=[]; qos=QOS0)
     cast(proc, CastCall(topic, data, qos))
 end
 
-function rpc(proc::Visor.Process, topic::AbstractString, data=[])
-    return call(proc, RpcReqMsg(topic, data), timeout=call_timeout())
+function rpc(proc::Visor.Process, topic::AbstractString, data=[]; wait=true)
+    return call(proc, CastCall(topic, data, QOS0, wait), timeout=call_timeout())
 end
 
 """
-    unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
-    unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true)
+    unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
+    unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
 
 No more messages published on a `topic` logical channel or a topic name equals to the name
 of the subscribed function will be delivered to `rb` component.
 """
-function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
     remove_receiver(rb, topic)
     delete!(rb.subinfo, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNSUBSCRIBE_CMD)),
         exceptionerror=exceptionerror,
-        broadcast=true
+        broadcast=true,
+        wait=wait
     )
 end
 
-function unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true)
-    return unsubscribe(rb, string(fn); exceptionerror=exceptionerror)
+function unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
+    return unsubscribe(rb, string(fn); exceptionerror=exceptionerror, wait=wait)
 end
 
 """
-    expose(rb::RBHandle, fn::Function; exceptionerror=true)
-    expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
+    expose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
+    expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true, wait=true)
 
 Expose the methods of function `fn` to be executed by rpc clients using `topic` as
 RPC method name.
@@ -2523,17 +2536,18 @@ If the `topic` argument is omitted the function name equals to the RPC method na
 
 `fn` returns the RPC response.
 """
-function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true)
-    add_receiver(rb, topic, fn)
+function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true, wait=true)
+    add_exposed(rb, topic, fn)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)),
         exceptionerror=exceptionerror,
-        broadcast=true
+        broadcast=true,
+        wait=wait
     )
 end
 
-function expose(rb::RBHandle, fn::Function; exceptionerror=true)
-    return expose(rb, string(fn), fn; exceptionerror=exceptionerror)
+function expose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
+    return expose(rb, string(fn), fn; exceptionerror=exceptionerror, wait=wait)
 end
 
 function expose_server(rb::RBHandle, topic::AbstractString)
@@ -2592,17 +2606,18 @@ end
 
 Stop servicing RPC requests targeting `topic` or `fn` methods.
 """
-function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
     remove_receiver(rb, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNEXPOSE_CMD)),
         exceptionerror=exceptionerror,
-        broadcast=true
+        broadcast=true,
+        wait=wait
     )
 end
 
-function unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
-    return unexpose(rb, string(fn), exceptionerror=exceptionerror)
+function unexpose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
+    return unexpose(rb, string(fn), exceptionerror=exceptionerror, wait=wait)
 end
 
 """
@@ -2750,11 +2765,22 @@ end
 function publish(rb::RBPool, topic::AbstractString, data=[]; qos=QOS0)
     msg = PubSubMsg(topic, data, qos)
     conn = pick_connections(rb, msg)
-    for c in conn
-        publish(c, topic, data, qos=qos)
-    end
-
+    do_publish(conn, topic, data, qos)
     return nothing
+end
+
+function do_publish(::Nothing, topic, data, qos)
+    @warn "no connections available: [$topic] message not delivered"
+end
+
+function do_publish(rb::RBConnection, topic, data, qos)
+    publish(rb, topic, data, qos=qos)
+end
+
+function do_publish(rbs::Vector{RBConnection}, topic, data, qos)
+    for rb in rbs
+        publish(rb, topic, data, qos=qos)
+    end
 end
 
 """
@@ -2800,18 +2826,9 @@ rpc(rb, "service_multiple_args", ["name", 1.0, ["red"=>1,"blue"=>2,"yellow"=>3]]
 ```
 """
 function rpc(rb::RBHandle, topic::AbstractString, data=[];
-    exceptionerror=true, timeout=request_timeout())
-    rpcreq(rb, RpcReqMsg(topic, data), exceptionerror=exceptionerror, timeout=timeout)
-end
-
-function rpc_future(rb::RBHandle, topic::AbstractString, data=[];
-    exceptionerror=true, timeout=request_timeout())
+    exceptionerror=true, timeout=request_timeout(), wait=true)
     rpcreq(
-        rb,
-        RpcReqMsg(topic, data),
-        exceptionerror=exceptionerror,
-        timeout=timeout,
-        wait=false
+        rb, RpcReqMsg(topic, data), exceptionerror=exceptionerror, timeout=timeout, wait=wait
     )
 end
 
@@ -3052,8 +3069,6 @@ function get_response(rb, msg, response; exceptionerror=true)
         end
     elseif response.status == STS_SUCCESS
         outcome = response.data
-    elseif response.status == STS_CHALLENGE
-        @async resend_attestate(rb, response)
     else
         topic = nothing
         if isa(msg, RembusTopicMsg)

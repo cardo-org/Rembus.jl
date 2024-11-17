@@ -11,7 +11,7 @@ function start_servers()
     expose(s2, "myservice", no)
 end
 
-function policy_all()
+function many_responses()
     rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"], :all)
     results = rpc(rb, "myservice", timeout=3, exceptionerror=false)
     @test isequal(results, ["yes", missing, "no"])
@@ -22,7 +22,7 @@ end
 @info "[test_rpc_all] start"
 try
     start_servers()
-    policy_all()
+    many_responses()
 catch e
     @error "[test_rpc_all] error: $e"
     @test false

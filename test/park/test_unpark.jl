@@ -47,7 +47,7 @@ function unpark(count)
     ctx = TestContext()
     subscriber = connect("test_unpark_sub")
     subscribe(subscriber, "consume", consume, from=LastReceived())
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     reactive(subscriber, timeout=10)
 
     sleep(4)
@@ -58,7 +58,7 @@ function unpark(count)
     # reopen subscriber, the error condition is not active
     subscriber = connect("test_unpark_sub")
     subscribe(subscriber, "consume", consume, from=LastReceived())
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     reactive(subscriber, timeout=60)
 
     sleep(15)

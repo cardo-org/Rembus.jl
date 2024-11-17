@@ -17,7 +17,7 @@ The following macros comprise the API and enable Julia to be supercharged with t
 - [@reactive](#reactive)
 - [@unreactive](#reactive)
 - [@forever](#forever)
-- [@shared](#shared)
+- [@inject](#inject)
 - [@rpc_timeout](#rpc_timeout)
 - [@terminate](#terminate)
 
@@ -186,20 +186,23 @@ Wait forever for rpc requests or pub/sub messages.
 
 By default `@forever` enable component reactiveness, see [@reactive](#reactive).
 
-## shared
+## inject
 
-`@shared` is handy when a state must be shared between the subscribed methods, the exposed methods and the application.
+`@inject` is handy when a state must be shared between the subscribed methods,
+the exposed methods and the application.
 
-Using a shared state implies that an additional argument must be passed to the methods.
+When a state is injected two additional arguments are passed to the
+subscribed/exposed methods:
 
-For convention the first argument of a method that [@subscribe](#subscribe) or
-[@expose](#expose) is the state object. 
+- the first argument is the state value;
+- the second argument is the node handle;
 
-The following example shows how to use a shared state:
+The following example shows how to use a inject state:
 
 - the struct `MyState` manages the state;
-- the `@shared` macro binds the state object to the component;
-- the subscribed and the exposed method must provide as first argument the state object;
+- the `@inject` macro binds the state object to the component;
+- the subscribed and the exposed method must declare as first argument the state
+  object and as second argument the node handle;
 
 ```julia
 mutable struct MyState
@@ -210,7 +213,7 @@ end
 
 mystate = MyState()
 
-function add_metric(mystate, measure)
+function add_metric(mystate::MyState, rb::RBHandle, measure)
     mystate.counter += 1 # count the received measures
 
     try
@@ -226,7 +229,7 @@ function fetch_metrics(mystate)
 end
 
 @component "ingestor"
-@shared mystate
+@inject mystate
 
 # declare interest to messages produced with
 # @publish add_metric(Dict("name"=>"pressure", "value"=>1.5))

@@ -34,7 +34,7 @@ function run(admin_component)
     my_private_topic = "my_private_topic"
 
     user_sub = connect(sub)
-    shared(user_sub, ctx)
+    inject(user_sub, ctx)
     subscribe(user_sub, "*", consume_all)
     reactive(user_sub)
 
@@ -43,7 +43,7 @@ function run(admin_component)
     reactive(another_sub)
 
     admin_sub = connect(admin_component)
-    shared(admin_sub, ctx)
+    inject(admin_sub, ctx)
     subscribe(admin_sub, "*", admin_consume_all)
     reactive(admin_sub)
 

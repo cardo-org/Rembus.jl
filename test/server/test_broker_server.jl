@@ -1,6 +1,8 @@
 include("../utils.jl")
 
 function mymethod(ctx, rb, n)
+    # covers Base.show(rb::RBServerConnection)
+    @info "[test_broker_server] rb=$rb"
     return n + 1
 end
 

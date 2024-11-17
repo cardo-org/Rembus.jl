@@ -7,10 +7,10 @@ ctx = Dict()
 
 function start_servers()
     s1 = server(ws=7000)
-    shared(s1, ctx)
+    inject(s1, ctx)
     subscribe(s1, "mytopic", s1_mytopic)
     s2 = server(ws=7001)
-    shared(s2, ctx)
+    inject(s2, ctx)
     subscribe(s2, "mytopic", s2_mytopic)
 end
 
@@ -49,6 +49,7 @@ function policy_first_up()
     rb = connect(["ws://:7000", "ws://:7001"], :first_up)
     publish(rb, "mytopic", "hello")
     sleep(0.5)
+    @info "pubsub policy_firstup:$ctx"
     @test length(ctx) == 1
     @test haskey(ctx, "s1")
 

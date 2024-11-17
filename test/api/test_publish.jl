@@ -49,20 +49,20 @@ function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
 
     sub1 = connect(sub1)
 
-    shared(sub1, testbag)
+    inject(sub1, testbag)
 
     subscribe(sub1, my_topic, consume)
     reactive(sub1)
 
     sub2 = connect(sub2)
-    shared(sub2, testbag)
+    inject(sub2, testbag)
 
     subscribe(sub2, my_topic, consume)
     subscribe(sub2, noarg_topic, inspect)
     reactive(sub2)
 
     sub3 = connect(sub3)
-    shared(sub3, testbag)
+    inject(sub3, testbag)
     subscribe(sub3, my_topic, consume, from=LastReceived())
     reactive(sub3)
 

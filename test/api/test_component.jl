@@ -16,7 +16,7 @@ function run()
     sleep(1)
 
     @subscribe atopic
-    @shared ctx
+    @inject ctx
     @reactive
 
     value = 1.0
@@ -45,7 +45,6 @@ function run()
     close(rb)
 
     # test unknown process
-    #@test_throws Visor.UnknownProcess @publish "fabulous" foo()
     try
         @publish "fabulous" foo()
     catch e

@@ -76,6 +76,15 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "server" begin
             include("server/test_server.jl")
         end
+        @time @safetestset "server_error" begin
+            include("server/test_server_error.jl")
+        end
+        @time @safetestset "server_inject" begin
+            include("server/test_server_inject.jl")
+        end
+        @time @safetestset "server_policy" begin
+            include("server/test_server_policy.jl")
+        end
         @time @safetestset "server_late_expose" begin
             include("server/test_server_late_expose.jl")
         end
@@ -116,6 +125,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "exactly_once" begin
             include("ack/test_exactly_once.jl")
+        end
+        @time @safetestset "single_ack" begin
+            include("ack/test_single_ack.jl")
         end
     end
     if GROUP == "all" || GROUP == "connect"
@@ -208,9 +220,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "unregister_authenticated" begin
             include("security/test_unregister_authenticated.jl")
         end
-        #        @time @safetestset "nocommands_authenticated" begin
-        #            include("security/test_nocommands_authenticated.jl")
-        #        end
+        @time @safetestset "nocommands_authenticated" begin
+            include("security/test_nocommands_authenticated.jl")
+        end
     end
     if GROUP == "all" || GROUP == "future"
         @time @safetestset "future" begin
@@ -321,6 +333,20 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "wrong_response" begin
             include("tcp/test_wrong_response.jl")
+        end
+    end
+    if GROUP == "all" || GROUP == "multiplexer"
+        @time @safetestset "connect_publish" begin
+            include("multiplexer/test_connect_publish.jl")
+        end
+        @time @safetestset "rpc_multiple_responses" begin
+            include("multiplexer/test_rpc_multiple_responses.jl")
+        end
+        @time @safetestset "component_publish" begin
+            include("multiplexer/test_component_publish.jl")
+        end
+        @time @safetestset "rpc_future" begin
+            include("multiplexer/test_rpc_future.jl")
         end
     end
     if GROUP == "all" || GROUP == "broker_plugin"

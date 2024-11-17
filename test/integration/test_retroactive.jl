@@ -15,7 +15,7 @@ function run()
 
     client = connect("test_retroactive_pub")
     subscriber = connect("test_retroactive_sub")
-    shared(subscriber, bag)
+    inject(subscriber, bag)
     reactive(subscriber)
     subscribe(subscriber, topic, consume, from=LastReceived())
 
@@ -24,7 +24,7 @@ function run()
     publish(client, topic, "lost in dev/null")
 
     subscriber = connect("test_retroactive_sub")
-    shared(subscriber, bag)
+    inject(subscriber, bag)
     subscribe(subscriber, topic, consume, from=Now())
     reactive(subscriber)
 
@@ -36,7 +36,7 @@ function run()
     sleep(1)
 
     subscriber = connect("test_retroactive_sub")
-    shared(subscriber, bag)
+    inject(subscriber, bag)
     subscribe(subscriber, topic, consume, from=LastReceived())
     reactive(subscriber)
 

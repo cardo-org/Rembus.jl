@@ -76,7 +76,7 @@ function run()
 
     pub = connect()
     sub = connect()
-    shared(sub, ctx)
+    inject(sub, ctx)
     subscribe(sub, temperature)
     subscribe(sub, direct_message)
 

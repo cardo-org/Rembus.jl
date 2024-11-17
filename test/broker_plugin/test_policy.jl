@@ -8,16 +8,11 @@ end
 
 service2() = 2
 
-function getrouter()
-    broker = from("$BROKER_NAME.broker")
-    return broker.args[1]
-end
-
 function run()
 
     Visor.dump()
 
-    router = getrouter()
+    router = Rembus.get_router(BROKER_NAME)
     @info "router:$router"
 
     s1 = connect("s1")

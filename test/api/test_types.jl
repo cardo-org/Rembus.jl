@@ -61,7 +61,7 @@ function run()
     sleep(0.1)
 
     @subscribe listener foo from = Now()
-    @shared listener bag
+    @inject listener bag
     @reactive listener
 
     @expose exposer foo
@@ -72,7 +72,7 @@ function run()
     @test result == 2
 
     @subscribe exposer bar from = Now()
-    @shared exposer bag
+    @inject exposer bag
     @reactive exposer
 
     sleep(0.1)

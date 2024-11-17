@@ -12,6 +12,11 @@ struct EnableReactiveMsg <: RembusMsg
     msg_from::Float64
 end
 
+struct AckState
+    ack2::Bool
+    timer::Timer
+end
+
 #=
 Twin is the broker-side image of a component.
 
@@ -31,7 +36,7 @@ mutable struct Twin
     ingress::Union{Nothing,Function}
     socket::Any
     out::Dict{UInt128,Distributed.Future}
-    acktimer::Dict{UInt128,Timer}
+    acktimer::Dict{UInt128,AckState}
     zaddress::Vector{UInt8}
     mark::UInt64
     msg_from::Dict{String,Float64}
@@ -59,6 +64,8 @@ mutable struct Twin
 end
 
 ucid(twin::Twin) = twin.id
+
+hasname(twin::Twin) = twin.hasname
 
 mutable struct Msg
     ptype::UInt8
@@ -775,16 +782,17 @@ end
 function ack_msg(twin, msg)
     msgid = msg.id
     if haskey(twin.acktimer, msgid)
-        close(twin.acktimer[msgid])
-        delete!(twin.acktimer, msgid)
+        close(twin.acktimer[msgid].timer)
 
-        # send the ACK2 message to the component
-        put!(
-            twin.process.inbox,
-            Msg(TYPE_ACK2, Ack2Msg(msgid), twin)
-        )
-
+        if twin.acktimer[msgid].ack2
+            # send the ACK2 message to the component
+            put!(
+                twin.process.inbox,
+                Msg(TYPE_ACK2, Ack2Msg(msgid), twin)
+            )
+        end
         put!(twin.out[msgid], true)
+        delete!(twin.acktimer, msgid)
     end
 
     return nothing
@@ -1443,6 +1451,9 @@ function brokerd()::Cint
     return 0
 end
 
+version(ctx, rb) = version()
+version() = VERSION
+
 """
     server(
         ctx=nothing;
@@ -1471,7 +1482,7 @@ function server(
 
     args = command_line(name)
 
-    expose(rb, "version", () -> VERSION)
+    expose(rb, "version", version)
 
     name = getparam(args, "name", name)
     ws_port = getparam(args, "ws", ws)
@@ -1490,6 +1501,7 @@ function server(
         push!(
             acceptors,
             process(
+                "serve_http:$http_port",
                 serve_http,
                 args=(rb, http_port, issecure),
                 restart=:transient
@@ -1502,6 +1514,7 @@ function server(
         push!(
             acceptors,
             process(
+                "serve_tcp:$tcp_port",
                 serve_tcp,
                 args=(rb, tcp_port, issecure),
                 restart=:transient
@@ -1514,6 +1527,7 @@ function server(
         push!(
             acceptors,
             process(
+                "serve_zmq:$zmq_port",
                 serve_zeromq,
                 args=(rb, zmq_port),
                 restart=:transient,
@@ -2668,23 +2682,28 @@ end
 
 Add a server.
 =#
-function add_node(router, url)
-    connect(router, url)
-    push!(router.servers, url)
+function add_node(router, component)
+    connect(router, component)
+    push!(router.servers, cid(component))
 end
+
+add_node(router, url::AbstractString) = add_node(router, Component(url))
 
 #=
     remove_node(components)
 
 Remove a server.
 =#
-function remove_node(router, url)
-    proc = from(url)
+function remove_node(router, component)
+    url = cid(component)
+    proc = from_name(url)
     if proc !== nothing
         shutdown(proc)
     end
     delete!(router.servers, url)
 end
+
+remove_node(router, url::AbstractString) = remove_node(router, Component(url))
 
 function setup_receiver(process, socket, twin::Twin, isconnected)
     twin.socket = socket
@@ -2699,13 +2718,13 @@ protocol(rb::Twin) = Component(rb.id).protocol
 
 function egress_task(proc, twin::Twin, remote::Component)
     _connect(twin, proc)
-
-    msg = IdentityMsg(Component(twin.id).id)
-    wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
+    if hasname(twin)
+        msg = IdentityMsg(Component(twin.id).id)
+        wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
+    end
 
     msg = take!(proc.inbox)
     if isshutdown(msg)
-        # close the connection
         close(twin.socket)
     else
         # the only message is an error condition
@@ -2722,11 +2741,16 @@ Loopback connection is not permitted.
 function connect(
     router::Router, remote_url::AbstractString
 )
+    return connect(router, Component(remote_url))
+end
+
+function connect(
+    router::Router, remote::Component
+)
     # setup the twin
-    remote = Component(remote_url)
+    remote_url = cid(remote)
 
     remote_ip = getaddrinfo(remote.host)
-
     server = Visor.from_path(router.process.supervisor, "serve_ws")
     for ip in [getipaddrs(); [ip"127.0.0.1"]]
         if ip == remote_ip && remote.port == server.args[2]
@@ -2736,7 +2760,7 @@ function connect(
 
     # TODO: test ZMQ and TCP connections
     twin = create_twin(remote_url, router, nodetype(remote))
-    twin.hasname = true
+    twin.hasname = hasname(remote)
 
     # start the process which setup the connection with remote acceptor.
     startup(

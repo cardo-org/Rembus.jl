@@ -30,7 +30,7 @@ function run()
     @expose "exposer" mymethod
 
     @subscribe "subscriber" mymethod from = Now()
-    @shared "subscriber" bag
+    @inject "subscriber" bag
     @reactive "subscriber"
 
     invalue = "pippo"

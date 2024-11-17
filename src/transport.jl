@@ -320,7 +320,7 @@ end
 #=
     broker_parse(pkt::ZMQPacket, isbroker=true)
 
-The Broker parser of ZeroMQ messages.
+The parser of ZeroMQ messages.
 
 `pkt` is the zeromq message decoded as `[identity, header, data]`.
 =#
@@ -378,6 +378,9 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
     elseif ptype == TYPE_ACK
         mid = bytes2id(pkt.header[2])
         return AckMsg(mid)
+    elseif ptype == TYPE_ACK2
+        mid = bytes2id(pkt.header[2])
+        return Ack2Msg(mid)
     elseif ptype == TYPE_REGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
@@ -500,9 +503,12 @@ function transport_send(
 
         ack_cond = Distributed.Future()
         twin.out[msgid] = ack_cond
-        twin.acktimer[msgid] = Timer((tim) -> handle_ack_timeout(
-                tim, twin, msg, msgid
-            ), ACK_WAIT_TIME)
+        twin.acktimer[msgid] = AckState(
+            msg.flags === QOS2,
+            Timer((tim) -> handle_ack_timeout(
+                    tim, twin, msg, msgid
+                ), ACK_WAIT_TIME)
+        )
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
         broker_transport_write(twin.socket, pkt)
         outcome = fetch(ack_cond)
@@ -594,9 +600,12 @@ function transport_send(::Val{zrouter}, twin, msg::PubSubMsg)
         ack_cond = Distributed.Future()
         twin.out[msg.id] = ack_cond
 
-        twin.acktimer[msg.id] = Timer((tim) -> handle_ack_timeout(
-                tim, twin, msg, msg.id
-            ), ACK_WAIT_TIME)
+        twin.acktimer[msg.id] = AckState(
+            msg.flags === QOS2,
+            Timer((tim) -> handle_ack_timeout(
+                    tim, twin, msg, msg.id
+                ), ACK_WAIT_TIME)
+        )
         header = encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic])
         lock(zmqsocketlock) do
             send(twin.socket, address, more=true)

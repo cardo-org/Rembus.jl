@@ -3,13 +3,13 @@ include("../utils.jl")
 function run()
     rb = connect()
 
-    future = rpc_future(rb, "version")
+    future = rpc(rb, "version", wait=false)
 
     response = fetch_response(future)
 
     @test response == Rembus.VERSION
 
-    future = rpc_future(rb, "unknow_service")
+    future = rpc(rb, "unknow_service", wait=false)
     @test_throws RembusError fetch_response(future)
 
     close(rb)

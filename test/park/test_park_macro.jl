@@ -25,7 +25,7 @@ end
 function subscribe(sub, ctx)
     @component sub
     @subscribe sub consume from = Now()
-    @shared sub ctx
+    @inject sub ctx
 end
 
 function run()

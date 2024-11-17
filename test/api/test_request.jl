@@ -57,7 +57,7 @@ function run(request_url, subscriber_url, exposer_url)
     implementor = tryconnect(exposer_url)
     expose(implementor, rpc_topic, add_one)
     subscriber = tryconnect(subscriber_url)
-    shared(subscriber, bag)
+    inject(subscriber, bag)
     reactive(subscriber)
     subscribe(subscriber, rpc_topic, rpc_method)
 

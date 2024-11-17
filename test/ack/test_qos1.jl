@@ -16,9 +16,8 @@ function sub_ingress(rb, msg)
     if isa(msg, Rembus.PubSubMsg)
         rb.shared.msgid["sub_pubsub"] = msg.id
     elseif isa(msg, Rembus.Ack2Msg)
+        # in case of a bug an ACK2 may be received
         rb.shared.msgid["sub_ack2"] = msg.id
-        # to simulate an ACK2 message lost
-        return nothing
     end
     return response
 end
@@ -49,7 +48,7 @@ end
 
 function pub(topic, ctx)
     pub = connect("pub")
-    shared(pub, ctx)
+    inject(pub, ctx)
     egress_interceptor(pub, pub_egress)
     ingress_interceptor(pub, pub_ingress)
     publish(pub, topic, 1, qos=QOS1)
@@ -63,7 +62,7 @@ end
 
 function sub(topic, ctx)
     sub = connect("sub")
-    shared(sub, ctx)
+    inject(sub, ctx)
     egress_interceptor(sub, sub_egress)
     ingress_interceptor(sub, sub_ingress)
     subscribe(sub, topic, msg_handler)
@@ -82,7 +81,7 @@ function run()
     @test ctx.msgid["pub_ack"] == ctx.msgid["pub_pubsub"]
     @test ctx.msgid["sub_pubsub"] == ctx.msgid["pub_pubsub"]
     @test ctx.msgid["sub_ack"] == ctx.msgid["pub_pubsub"]
-    @test ctx.msgid["sub_ack2"] == ctx.msgid["pub_pubsub"]
+    @test !haskey(ctx.msgid, "sub_ack2")
     @test_throws ErrorException Rembus.awaiting_ack2(rb)
 
     close(rb)

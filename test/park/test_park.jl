@@ -28,14 +28,14 @@ function run()
     subscriber = connect("test_park_sub")
 
     subscribe(subscriber, "consume", consume)
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     close(subscriber)
 
     send(publisher, 1, 10000)
 
     @info "reconnecting"
     subscriber = connect("test_park_sub")
-    shared(subscriber, ctx)
+    inject(subscriber, ctx)
     subscribe(subscriber, consume, from=LastReceived())
     reactive(subscriber)
 

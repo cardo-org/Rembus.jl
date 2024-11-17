@@ -15,7 +15,7 @@ function run()
     sub = connect("subscriber")
     pub = connect("publisher")
 
-    shared(sub, ctx)
+    inject(sub, ctx)
     subscribe(sub, mytopic, from=LastReceived())
     reactive(sub)
 

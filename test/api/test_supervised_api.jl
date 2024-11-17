@@ -16,7 +16,7 @@ function run()
     rb = component("abc")
     @info "component: $(rbinfo(rb))"
 
-    shared(rb, ctx)
+    inject(rb, ctx)
     subscribe(rb, my_topic, from=LastReceived())
     subscribe(rb, "topic", my_topic, from=LastReceived())
     expose(rb, "service", my_service)
@@ -39,7 +39,7 @@ function run()
 
     ctx = Ctx(false)
     sub = connect()
-    shared(sub, ctx)
+    inject(sub, ctx)
     subscribe(sub, from_supervised)
     reactive(sub)
 

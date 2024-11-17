@@ -46,7 +46,7 @@ function publish_workflow(pub, sub)
     sub = connect(sub)
     @info "connecting done"
 
-    shared(sub, testbag)
+    inject(sub, testbag)
 
     subscribe(sub, my_topic, consume)
     reactive(sub)
