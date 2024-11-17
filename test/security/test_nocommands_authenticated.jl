@@ -3,6 +3,11 @@ include("../utils.jl")
 using Sockets
 
 function run()
+    Rembus.islistening(
+        wait=10,
+        procs=["$(BROKER_NAME).serve_ws"]
+    )
+
     sock = Sockets.connect("localhost", 8001)
     close(sock)
 end
