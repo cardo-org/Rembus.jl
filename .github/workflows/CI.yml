@@ -71,7 +71,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@70b2cdc6480c1a8b86edf1777157f8f437de2166
+        uses: docker/metadata-action@44d81d6d2a5a935e1a481942268529623f1f5ccd
         with:
           images: rembus/broker
 
