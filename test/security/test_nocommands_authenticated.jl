@@ -8,7 +8,7 @@ function run()
         procs=["$(BROKER_NAME).serve_ws"]
     )
 
-    sock = Sockets.connect("localhost", 8001)
+    sock = Sockets.connect("127.0.0.1", 8001)
     close(sock)
 end
 
