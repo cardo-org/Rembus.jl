@@ -23,14 +23,14 @@ function run(url)
     try
         Rembus.register(url, pin, tenant=nouid)
     catch e
-        @info "[test_register_multiiple_users] expected error: $e"
+        @info "[test_register_multiple_users] expected error: $e"
         @test e.reason === "tenant [$nouid] not enabled"
     end
 
     try
         Rembus.register(url, pin, tenant=tenant)
     catch e
-        @info "[test_register_multiiple_users] expected error: $e"
+        @info "[test_register_multiple_users] expected error: $e"
         @test e.reason === "tenant [$tenant] not enabled"
     end
 end
@@ -41,9 +41,9 @@ pin = "11223344"
 
 setup() = multiple_users(tenant, pin)
 try
-    execute(() -> run(cid), "test_register_multiiple_users", setup=setup)
+    execute(() -> run(cid), "test_register_multiple_users", setup=setup)
 catch e
-    @error "[test_register_multiiple_users]: $e"
+    @error "[test_register_multiple_users]: $e"
     @test false
 finally
     remove_keys(cid)

@@ -1,0 +1,9 @@
+#!/bin/bash
+#=
+SDIR=$( dirname -- "${BASH_SOURCE[0]}" )
+BINDIR=$( cd -- $SDIR &> /dev/null && pwd )
+exec julia -t auto --color=no -e "include(popfirst!(ARGS))" \
+ --project=$BINDIR/.. --startup-file=no "${BASH_SOURCE[0]}" "$@"
+=#
+using Rembus
+Rembus.broker()

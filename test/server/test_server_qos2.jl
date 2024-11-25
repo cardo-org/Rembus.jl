@@ -44,7 +44,6 @@ function run()
     isconn = isconnected(rb)
     @info "isconnected: $isconn"
 
-    #sleep(1)
     publish(rb, "mytopic", qos=QOS2)
     sleep(1)
 
