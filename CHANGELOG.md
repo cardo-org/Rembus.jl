@@ -1,6 +1,12 @@
 # Change Log
 
-## 0.4.0
+## 0.5.0 (25 November, 2024)
+
+- Componenent multiplexing.
+
+- Internals refatoring and bug fixes.
+
+## 0.4.0 (17 October, 2024)
 
 - Improve server api.
 
@@ -8,7 +14,7 @@
 
 - Configurable authenticated and anonymous connection modes.
 
-- [#32](https://github.com/cardo-org/Rembus.jl/issues/32) Update for julia 1.11. 
+- [#32](https://github.com/cardo-org/Rembus.jl/issues/32) Update for julia 1.11.
 
 ## 0.3.0 (2 July, 2024)
 
