@@ -27,7 +27,7 @@ function run()
     write(sock, UInt8[1, 2, 3])
     sleep(1)
     # the wrong packet format close the connection
-    @test_throws ErrorException rpc(anonymous, "version")
+    @test_throws RembusError rpc(anonymous, "version")
 
     close(component1)
 end

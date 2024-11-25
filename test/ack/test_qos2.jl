@@ -18,7 +18,7 @@ function sub_ingress(rb, msg)
     elseif isa(msg, Rembus.Ack2Msg)
         rb.shared.msgid["sub_ack2"] = msg.id
         # to simulate an ACK2 message lost
-        #return nothing
+        return nothing
     end
     return response
 end
@@ -88,13 +88,16 @@ function run()
     @info "messages awaiting ack2:\n$df"
     close(rb)
     close(pub_rb)
-    @test nrow(df) == 0
+    @test nrow(df) == 1
 end
 
 # cleanup files
 rm(joinpath(Rembus.rembus_dir(), "sub.acks"), force=true)
 
 execute(run, "test_qos2")
+
+df = Rembus.load_pubsub_received(Rembus.RbURL("sub"))
+@test !isempty(df)
 
 if !Sys.iswindows()
     # expect one messages at rest

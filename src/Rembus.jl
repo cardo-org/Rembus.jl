@@ -1271,17 +1271,13 @@ function call_request(rb, msg)
             result = unreactive(rb, raise=false, wait=msg.request.wait)
         end
     else
-        try
-            result = rpc(
-                rb,
-                msg.request.topic,
-                msg.request.data,
-                raise=false,
-                wait=msg.request.wait
-            )
-        catch e
-            @error "call_request: $e"
-        end
+        result = rpc(
+            rb,
+            msg.request.topic,
+            msg.request.data,
+            raise=false,
+            wait=msg.request.wait
+        )
     end
     reply(msg, result)
 end
@@ -1656,7 +1652,7 @@ end
 acks_file(c::RbURL) = joinpath(rembus_dir(), "$(c.id).acks")
 
 #=
-    load_pubsub_received(rb::RBHandle)
+    load_pubsub_received(component::RbURL)
 
 Load from file the ids of received Pub/Sub messages
 awaiting Ack2 acknowledgements.
@@ -2240,21 +2236,17 @@ The `process` supervisor try to auto-reconnect if an exception occurs.
 function connect(process::Visor.Supervised, rb::RBHandle)
     _connect(rb, process)
     authenticate(rb)
-    callbacks(rb, rb.receiver, rb.subinfo)
+    callbacks(rb)
     return rb
 end
 
 function bind(process::Visor.Supervised, rb::RBServerConnection)
     server = rb.router
-    callbacks(rb, server.topic_function, server.subinfo)
+    callbacks(rb)
     return rb
 end
 
-#=
-Notify all subscribed and exposed method to the remote node.
-This happens just after a connection establishement.
-=#
-function callbacks(rb::RBHandle, fnmap, submap)
+function _callbacks(rb::RBHandle, fnmap, submap)
     for (name, fn) in fnmap
         if haskey(submap, name)
             subscribe_server(rb, name, from=submap[name])
@@ -2266,6 +2258,23 @@ function callbacks(rb::RBHandle, fnmap, submap)
     if rb.reactive
         reactive_server(rb)
     end
+end
+
+#=
+Notify all subscribed and exposed method to the remote node.
+This happens just after a connection establishement.
+=#
+function callbacks(rb::RBServerConnection)
+    _callbacks(rb, rb.router.topic_function, rb.router.subinfo)
+end
+
+function callbacks(rb::RBConnection)
+    _callbacks(rb, rb.receiver, rb.subinfo)
+end
+
+function callbacks(twin::Twin)
+    # Acctually the broker does not declares to connecting nodes
+    # the list of exposed and subscribed methods.
 end
 
 function connect(rb::RBPool)
@@ -2325,8 +2334,6 @@ function close_handle(rb)
 
     return nothing
 end
-
-Base.close(rb::RBHandle) = close_handle(rb)
 
 function Base.close(rb::RBServerConnection)
     close_handle(rb)
@@ -3164,7 +3171,10 @@ function rpcreq(
     wait=true,
     broadcast=false
 )
-    !isconnected(handle) && error("connection is down")
+    if !isconnected(handle)
+        do_request(nothing, msg, wait, timeout, raise)
+    end
+
     if isa(handle, RBPool)
         if broadcast
             conn = handle.connections

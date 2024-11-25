@@ -602,7 +602,7 @@ function transport_send(::Val{zdealer}, rb, msg::PubSubMsg)
 end
 
 function transport_send(::Val{zrouter}, twin, msg::PubSubMsg)
-    address = twin.router.twin2address[twin.id]
+    address = twin.zaddress
     data = data2message(msg.data)
     outcome = true
     if msg.flags > QOS0
@@ -676,7 +676,7 @@ function transport_send(::Val{socket}, rb::RBHandle, msg::RpcReqMsg)
 end
 
 function transport_send(::Val{zrouter}, rb, msg::RpcReqMsg)
-    address = rb.router.twin2address[rb.id]
+    address = rb.zaddress
     lock(zmqsocketlock) do
         send(rb.socket, address, more=true)
         send(rb.socket, Message(), more=true)

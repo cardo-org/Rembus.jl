@@ -29,6 +29,17 @@ function run()
 
     unexpose(rb, component_service)
     close(rb)
+
+    # no connections are available
+    rb = connect(["ws://:6000", "ws://:6001"])
+
+    @test_throws RembusError rpc(rb, "myservice")
+
+    response = rpc(rb, "myservice", raise=false)
+    @test isa(response, RembusError)
+
+    fut = rpc(rb, "myservice", wait=false)
+    @test_throws RembusError fetch_response(fut)
 end
 
 
