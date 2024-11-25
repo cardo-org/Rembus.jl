@@ -42,7 +42,7 @@ function run()
         @rpc_timeout 30
 
         @async start_server()
-        is_up = Rembus.islistening(procs=["server.serve_zeromq"])
+        is_up = Rembus.islistening(procs=["server.serve_zmq"])
 
         @component "zmq://:8002/rpc_client"
         result = @rpc rpc_service(1, 2)

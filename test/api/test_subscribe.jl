@@ -14,6 +14,7 @@ function run()
     ctx = Ctx(0, 0)
 
     rb = connect()
+    @test Rembus.hasname(rb) === false
     publish(rb, "topic_1")
     publish(rb, "topic_2")
     sleep(1)

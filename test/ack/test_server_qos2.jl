@@ -1,10 +1,12 @@
 include("../utils.jl")
 
+# The Server node is a subscriber
+
 function sub_egress(rb, msg)
     response = msg
     @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
-        rb.shared.msgid["sub_ack"] = msg.id
+        rb.router.shared.msgid["sub_ack"] = msg.id
     end
 
     return response
@@ -14,10 +16,9 @@ function sub_ingress(rb, msg)
     response = msg
     @info "[$rb] ingress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.PubSubMsg)
-        rb.shared.msgid["sub_pubsub"] = msg.id
+        rb.router.shared.msgid["sub_pubsub"] = msg.id
     elseif isa(msg, Rembus.Ack2Msg)
-        # in case of a bug an ACK2 may be received
-        rb.shared.msgid["sub_ack2"] = msg.id
+        rb.router.shared.msgid["sub_ack2"] = msg.id
     end
     return response
 end
@@ -51,7 +52,7 @@ function pub(topic, ctx)
     inject(pub, ctx)
     egress_interceptor(pub, pub_egress)
     ingress_interceptor(pub, pub_ingress)
-    publish(pub, topic, 1, qos=QOS1)
+    publish(pub, topic, 1, qos=QOS2)
     return pub
 end
 
@@ -61,33 +62,44 @@ mutable struct Ctx
 end
 
 function sub(topic, ctx)
-    sub = connect("sub")
-    inject(sub, ctx)
-    egress_interceptor(sub, sub_egress)
-    ingress_interceptor(sub, sub_ingress)
-    subscribe(sub, topic, msg_handler)
-    reactive(sub)
-    return sub
+    srv = server(ctx)
+    egress_interceptor(srv, sub_egress)
+    ingress_interceptor(srv, sub_ingress)
+    subscribe(srv, topic, msg_handler)
+    return srv
 end
 
 function run()
     ctx = Ctx()
-    topic = "qos1_topic"
+    topic = "qos2_topic"
     rb = sub(topic, ctx)
     pub_rb = pub(topic, ctx)
 
-    sleep(1)
+    sleep(2)
     @info "events: $ctx"
     @test ctx.msgid["pub_ack"] == ctx.msgid["pub_pubsub"]
     @test ctx.msgid["sub_pubsub"] == ctx.msgid["pub_pubsub"]
     @test ctx.msgid["sub_ack"] == ctx.msgid["pub_pubsub"]
-    @test !haskey(ctx.msgid, "sub_ack2")
+    @test ctx.msgid["sub_ack2"] == ctx.msgid["pub_pubsub"]
 
-    close(rb)
+    terminate(rb)
     close(pub_rb)
 end
 
-execute(run, "test_qos1")
+# cleanup files
+rm(joinpath(Rembus.rembus_dir(), "sub.db"), force=true)
+
+@info "[test_server_qos2] start"
+try
+    run()
+catch e
+    @error "[test_server_qos2] unexpected error: $e"
+    showerror(stdout, e, catch_backtrace())
+    @test false
+finally
+    shutdown()
+end
+@info "[test_server_qos2] stop"
 
 if !Sys.iswindows()
     # expect one messages at rest

@@ -8,10 +8,15 @@ function run()
     @test isa(from_name(url), Visor.Process)
     sleep(1)
     remove_node(router, url)
-
-    shutdown()
 end
 
 @info "[test_broker_add_server] start"
-run()
+try
+    run()
+catch e
+    @error "[test_broker_add_server] unexpected error: $e"
+    @test fail
+finally
+    shutdown()
+end
 @info "[test_broker_add_server] stop"

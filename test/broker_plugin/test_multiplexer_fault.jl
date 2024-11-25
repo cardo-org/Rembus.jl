@@ -27,7 +27,7 @@ function run(exposer_url)
     connect(edge_broker, broker_url)
     sleep(1)
 
-    connector = from_name(Rembus.cid(Rembus.Component(broker_url)))
+    connector = from_name(Rembus.cid(Rembus.RbURL(broker_url)))
 
     main_broker = from("main_broker")
     shutdown(main_broker)
@@ -40,7 +40,7 @@ function run(exposer_url)
         name="main_broker", reset=true
     )
     sleep(5)
-    p = from_name(Rembus.cid(Rembus.Component(broker_url)))
+    p = from_name(Rembus.cid(Rembus.RbURL(broker_url)))
     @test p.status === Visor.running
 end
 

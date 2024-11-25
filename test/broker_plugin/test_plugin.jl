@@ -103,6 +103,16 @@ end # module CarontePlugin
 function test_plugin_topic()
 end
 
+function start_broker(ctx)
+    rb = broker(
+        wait=false,
+        plugin=CarontePlugin,
+        context=ctx,
+        name=BROKER_NAME
+    )
+    forever(rb)
+end
+
 function run(ok_cid, ko_cid)
     # wait for secret files creation
     sleep(1)
@@ -112,12 +122,7 @@ function run(ok_cid, ko_cid)
 
     Rembus.setup(Rembus.CONFIG)
 
-    broker(
-        wait=false,
-        plugin=CarontePlugin,
-        context=ctx,
-        name=BROKER_NAME
-    )
+    @async start_broker(ctx)
     sleep(2)
 
     rb = tryconnect(ok_cid)

@@ -73,7 +73,7 @@ end
 
 function run()
     ctx = Ctx()
-    topic = "qos0_topic"
+    topic = "qos2_topic"
     rb = sub(topic, ctx)
     pub_rb = pub(topic, ctx)
 
@@ -86,10 +86,13 @@ function run()
 
     df = Rembus.awaiting_ack2(rb)
     @info "messages awaiting ack2:\n$df"
-    @test nrow(df) == 0
     close(rb)
     close(pub_rb)
+    @test nrow(df) == 0
 end
+
+# cleanup files
+rm(joinpath(Rembus.rembus_dir(), "sub.acks"), force=true)
 
 execute(run, "test_qos2")
 

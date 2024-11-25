@@ -45,7 +45,7 @@ function run()
 
     try
         @debug "sending a corrupted packet" _group = :test
-        Rembus.rpcreq(rb, InvalidMsg(), exceptionerror=true, timeout=2)
+        Rembus.rpcreq(rb, InvalidMsg(), raise=true, timeout=2)
         @test false
     catch e
         @debug "expected error: $(e.msg)" _group = :test

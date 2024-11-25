@@ -73,8 +73,14 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "broker_server" begin
             include("server/test_broker_server.jl")
         end
+        @time @safetestset "server_multiple_broker" begin
+            include("server/test_server_multiple_broker.jl")
+        end
         @time @safetestset "server" begin
             include("server/test_server.jl")
+        end
+        @time @safetestset "server_qos2" begin
+            include("server/test_server_qos2.jl")
         end
         @time @safetestset "server_error" begin
             include("server/test_server_error.jl")
@@ -107,6 +113,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "qos2" begin
             include("ack/test_qos2.jl")
+        end
+        @time @safetestset "server_qos2" begin
+            include("ack/test_server_qos2.jl")
         end
         @time @safetestset "simple_ack" begin
             include("ack/test_simple_ack.jl")
@@ -239,11 +248,17 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "component" begin
             include("api/test_component.jl")
         end
+        @time @safetestset "component_qos2" begin
+            include("api/test_component_qos2.jl")
+        end
         @time @safetestset "simple_publish" begin
             include("api/test_simple_publish.jl")
         end
         @time @safetestset "simple_rpc" begin
             include("api/test_simple_rpc.jl")
+        end
+        @time @safetestset "direct" begin
+            include("api/test_direct.jl")
         end
         @time @safetestset "conditional_publish" begin
             include("api/test_conditional_publish.jl")
@@ -336,6 +351,12 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "multiplexer"
+        @time @safetestset "publish_offline" begin
+            include("multiplexer/test_publish_offline.jl")
+        end
+        @time @safetestset "publish_qos2" begin
+            include("multiplexer/test_publish_qos2.jl")
+        end
         @time @safetestset "connect_publish" begin
             include("multiplexer/test_connect_publish.jl")
         end

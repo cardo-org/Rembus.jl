@@ -21,7 +21,7 @@ function init(cid)
 end
 
 function run(cid)
-    Rembus.islistening(wait=5, procs=["$BROKER_NAME.serve_zeromq"])
+    Rembus.islistening(wait=5, procs=["$BROKER_NAME.serve_zmq"])
     component1 = connect(cid)
     v = rpc(component1, "version")
     @test v == Rembus.VERSION
@@ -36,7 +36,7 @@ function run(cid)
     sleep(2)
 end
 
-ENV["REMBUS_BASE_URL"] = "zmq://localhost:8002"
+ENV["REMBUS_BASE_URL"] = "zmq://127.0.0.1:8002"
 ENV["REMBUS_ZMQ_PING_INTERVAL"] = 0.5
 
 authenticated_cid = "component1"

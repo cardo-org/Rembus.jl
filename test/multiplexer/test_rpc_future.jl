@@ -2,7 +2,12 @@ include("../utils.jl")
 
 myservice() = 1
 
-mytopic() = nothing
+component_topic() = nothing
+
+
+function component_service()
+    return 1
+end
 
 function start_servers()
     s1 = server(ws=7000)
@@ -15,13 +20,14 @@ end
 function run()
     rb = connect(["ws://:7000", "ws://:7001"])
 
-    subscribe(rb, mytopic, wait=false)
+    subscribe(rb, component_topic, wait=false)
+    expose(rb, component_service)
 
-    fut = rpc(rb, "myservice", timeout=3, exceptionerror=false, wait=false)
+    fut = rpc(rb, "myservice", timeout=3, raise=false, wait=false)
     response = fetch_response(fut)
-    @info fut
     @test response == 1
 
+    unexpose(rb, component_service)
     close(rb)
 end
 

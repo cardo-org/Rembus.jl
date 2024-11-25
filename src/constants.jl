@@ -1,10 +1,3 @@
-#=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
-
 const VERSION = "0.4.0"
 
 const DATAFRAME_TAG = 80
@@ -91,7 +84,7 @@ const TYPE_CLOSE::UInt8 = 15
 const REACTIVE_DISABLE::Bool = false
 const REACTIVE_ENABLE::Bool = true
 
-const ACK_WAIT_TIME = 1
+const ACK_WAIT_TIME = 2
 
 const STS_SUCCESS::UInt8 = 0
 const STS_GENERIC_ERROR::UInt8 = 10

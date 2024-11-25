@@ -16,4 +16,4 @@ function run()
     sleep(1)
 end
 
-execute(run, "test_zmq_nodealer", zmq=8002, islistening=["serve_zeromq"])
+execute(run, "test_zmq_nodealer", zmq=8002, islistening=["serve_zmq"])

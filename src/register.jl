@@ -1,11 +1,4 @@
 #=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
-
-#=
     rsa_private_key(cid::AbstractString)
 
 Create a private key for `cid` component and return its public key.
@@ -56,7 +49,7 @@ function register(
     tenant::Union{Nothing,AbstractString}=nothing,
     scheme::UInt8=SIG_RSA
 )
-    cmp = Component(cid)
+    cmp = RbURL(cid)
 
     kfile = pkfile(cmp.id)
 

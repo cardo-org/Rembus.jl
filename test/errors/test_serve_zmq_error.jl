@@ -15,10 +15,10 @@ function run()
     # invalid ssl configuration prevent ws_serve process startup
     broker(wait=false, zmq=8002)
     sleep(1)
-    zeromq_task = from("broker.serve_zeromq").task
+    zeromq_task = from("broker.serve_zmq").task
     close_zmq_router_socket()
     sleep(3)
-    @test from("broker.serve_zeromq").task !== zeromq_task
+    @test from("broker.serve_zmq").task !== zeromq_task
     shutdown()
 end
 

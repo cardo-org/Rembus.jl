@@ -1,20 +1,8 @@
-#=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
-
 @enum QoS fast with_ack
 
 struct EnableReactiveMsg <: RembusMsg
     id::UInt128
     msg_from::Float64
-end
-
-struct AckState
-    ack2::Bool
-    timer::Timer
 end
 
 #=
@@ -42,6 +30,7 @@ mutable struct Twin
     msg_from::Dict{String,Float64}
     sent::Dict{UInt128,Any} # msg.id => timestamp of sending
     process::Visor.Process
+    zmqcontext::ZMQ.Context # for a Twin that establishes the connection to a component
 
     Twin(router, id, type::NodeType) = new(
         type,
@@ -94,6 +83,7 @@ mutable struct Router <: AbstractRouter
     mcounter::UInt64
     start_ts::Float64
     servers::Set{String}
+    listeners::Dict{Symbol,Listener} # protocol => listener status
     address2twin::Dict{Vector{UInt8},Twin} # zeromq address => twin
     twin2address::Dict{String,Vector{UInt8}} # twin id => zeromq address
     topic_impls::Dict{String,OrderedSet{Twin}} # topic => twins implementor
@@ -123,6 +113,7 @@ mutable struct Router <: AbstractRouter
         0,
         NaN,
         Set(),
+        Dict(),
         Dict(),
         Dict(),
         Dict(),
@@ -344,9 +335,21 @@ named_twin(id, router) = haskey(router.id_twin, id) ? router.id_twin[id] : nothi
 
 router_supervisor(router::Router) = router.process.supervisor
 
+router_supervisor(router::Server) = router.process
+
 build_twin(router::Router, id, type) = Twin(router, id, type)
 
+function build_twin(router::Server, id, type)
+    rb = RBServerConnection(router, id, type)
+    if type === zrouter
+        rb.socket = router.zmqsocket
+    end
+    return rb
+end
+
 twin_task(::Twin) = twin_task
+
+twin_task(::RBServerConnection) = server_task
 
 function create_twin(id, router::AbstractRouter, type::NodeType)
     if haskey(router.id_twin, id)
@@ -605,9 +608,7 @@ function register(router, msg)
         reason = "name $(msg.cid) not available for registration"
     else
         kdir = keys_dir(router)
-        if !isdir(kdir)
-            mkdir(kdir)
-        end
+        mkpath(kdir)
 
         save_pubkey(router, msg.cid, msg.pubkey, msg.type)
         if !(msg.cid in router.component_owner.component)
@@ -664,7 +665,7 @@ end
 
 function admin_msg(router, twin, msg)
     admin_res = admin_command(router, twin, msg)
-    @debug "admin response: $admin_res"
+    @debug "sending admin response: $admin_res"
     if isa(admin_res, EnableReactiveMsg)
         put!(router.process.inbox, Msg(REACTIVE_MESSAGE, admin_res, twin))
     else
@@ -738,8 +739,8 @@ function republish(twin, topic, data)
     put!(twin.router.process.inbox, Msg(TYPE_PUB, new_msg, twin))
 end
 
-function publish(router::Router, topic, data)
-    new_msg = PubSubMsg(topic, data)
+function publish(router::Router, topic::AbstractString, data=[]; qos=QOS0)
+    new_msg = PubSubMsg(topic, data, qos)
     put!(router.process.inbox, Msg(TYPE_PUB, new_msg, Twin(router, "tmp", loopback)))
 end
 
@@ -749,8 +750,8 @@ after transforming them.
 
 The message is delivered by the twin.
 =#
-function publish(twin, topic, data)
-    new_msg = PubSubMsg(topic, data)
+function publish(twin::Twin, topic::AbstractString, data=[]; qos=QOS0)
+    new_msg = PubSubMsg(topic, data, qos)
     put!(twin.process.inbox, Msg(TYPE_PUB, new_msg, twin))
 end
 
@@ -830,6 +831,8 @@ function common_receiver(router, twin, msg)
         pubsub_msg(router, twin, msg)
     elseif isa(msg, AckMsg)
         ack_msg(twin, msg)
+    elseif isa(msg, Ack2Msg)
+        # the broker ignores Ack2
     else
         error("unexpected rembus message")
     end
@@ -838,7 +841,7 @@ end
 #=
     twin_receiver(router, twin)
 
-Receive messages from the client socket.
+Receive messages from the client socket (ws or tcp ).
 =#
 function twin_receiver(router, twin)
     @debug "client [$twin] is connected"
@@ -884,7 +887,7 @@ end
 #=
     anonymous_twin_receiver(router, twin)
 
-Receive messages from the client socket.
+Receive messages from the client socket (ws or tcp).
 =#
 function anonymous_twin_receiver(router, twin)
     @debug "anonymous client [$(twin.id)] is connected"
@@ -985,7 +988,178 @@ function commands_permitted(twin)
     return true
 end
 
-function zeromq_receiver(router)
+function zeromq_receiver(router::Server)
+    pkt = ZMQPacket()
+    while true
+        try
+            zmq_message(router, pkt)
+            id = pkt.identity
+            if haskey(router.address2twin, id)
+                twin = router.address2twin[id]
+            else
+                @debug "creating anonymous twin from identity $id ($(bytes2zid(id)))"
+                # create the twin
+                twin = create_twin(string(bytes2zid(id)), router, zrouter)
+                @debug "[anonymous] client bound to twin id [$twin]"
+                router.address2twin[id] = twin
+                router.twin2address[ucid(twin)] = id
+                twin.zaddress = id
+                twin.socket = router.zmqsocket
+            end
+
+            msg::RembusMsg = broker_parse(pkt, false)
+            #@mlog("[ZMQ][$twin] <- $(prettystr(msg))")
+
+            if isa(msg, IdentityMsg)
+                @debug "[$twin] auth identity: $(msg.cid)"
+                # check if cid is registered
+                if key_file(router, msg.cid) !== nothing
+                    # authentication mode, send the challenge
+                    response = challenge(router, twin, msg.id)
+                    #@mlog("[ZMQ][$twin] -> $response")
+                    transport_send(Val(twin.type), twin, response)
+                else
+                    identity_upgrade(router, twin, msg, id, authenticate=false)
+                end
+                server = twin.router
+                callbacks(twin, server.topic_function, server.subinfo)
+            elseif isa(msg, PingMsg)
+                if (twin.id != msg.cid)
+
+                    # broker restarted
+                    # start the authentication flow if cid is registered
+                    @debug "lost connection to broker: restarting $(msg.cid)"
+                    if key_file(router, msg.cid) !== nothing
+                        # check if challenge was already sent
+                        if !haskey(twin.session, "challenge")
+                            response = challenge(router, twin, msg.id)
+                            transport_send(Val(twin.type), twin, response)
+                        end
+                    else
+                        identity_upgrade(router, twin, msg, id, authenticate=false)
+                    end
+
+                else
+                    if twin.socket !== nothing
+                        pong(twin.socket, msg.id, id)
+                    end
+                end
+            elseif isa(msg, Attestation)
+                identity_upgrade(router, twin, msg, id, authenticate=true)
+            elseif isa(msg, Register)
+                response = register(router, msg)
+                put!(twin.process.inbox, response)
+            elseif isa(msg, Close)
+                offline!(twin)
+            elseif isa(msg, AdminReqMsg)
+                admin_msg(router, twin, msg)
+            else
+                @async handle_input(twin, msg)
+            end
+        catch e
+            if isa(e, Visor.ProcessInterrupt) || isa(e, ZMQ.StateError)
+                rethrow()
+            end
+            @warn "[ZMQ] recv error: $e"
+            @showerror e
+        end
+    end
+end
+
+#=
+Parse the message and invoke the actions related to the message type.
+=#
+function eval_message(twin::Twin, msg)
+    router = twin.router
+    if isa(msg, IdentityMsg)
+        @debug "[$twin] auth identity: $(msg.cid)"
+        # check if cid is registered
+        if key_file(router, msg.cid) !== nothing
+            # authentication mode, send the challenge
+            response = challenge(router, twin, msg.id)
+        else
+            return identity_upgrade(router, twin, msg, id, authenticate=false)
+        end
+        #@mlog("[ZMQ][$twin] -> $response")
+        transport_send(Val(twin.type), twin, response)
+    elseif isa(msg, PingMsg)
+        if (twin.id != msg.cid)
+
+            # broker restarted
+            # start the authentication flow if cid is registered
+            @debug "lost connection to broker: restarting $(msg.cid)"
+            if key_file(router, msg.cid) !== nothing
+                # check if challenge was already sent
+                if !haskey(twin.session, "challenge")
+                    response = challenge(router, twin, msg.id)
+                    transport_send(Val(twin.type), twin, response)
+                end
+            else
+                identity_upgrade(router, twin, msg, id, authenticate=false)
+            end
+
+        else
+            if twin.socket !== nothing
+                pong(twin.socket, msg.id, id)
+            end
+        end
+    elseif isa(msg, Attestation)
+        identity_upgrade(router, twin, msg, id, authenticate=true)
+    elseif isa(msg, Register)
+        response = register(router, msg)
+        put!(twin.process.inbox, response)
+    elseif isa(msg, Close)
+        offline!(twin)
+    elseif commands_permitted(twin)
+        if isa(msg, Unregister)
+            response = unregister(router, twin, msg)
+            put!(twin.process.inbox, response)
+        elseif isa(msg, ResMsg)
+            rpc_response(router, twin, msg)
+        elseif isa(msg, AdminReqMsg)
+            admin_msg(router, twin, msg)
+        elseif isa(msg, RpcReqMsg)
+            rpc_request(router, twin, msg)
+        elseif isa(msg, PubSubMsg)
+            pubsub_msg(router, twin, msg)
+        elseif isa(msg, AckMsg)
+            ack_msg(twin, msg)
+        end
+    else
+        @info "[$twin]: [$msg] not authorized"
+        offline!(twin)
+    end
+
+    return nothing
+end
+
+#=
+Twin receiver.
+
+Parse the message received from a dedicated DEALER socket and inject into
+the broker's router logic.
+=#
+function zmq_receive(rb::Twin)
+    while true
+        try
+            msg = zmq_load(rb.socket)
+            @async eval_message(rb, msg)
+        catch e
+            if !isopen(rb.socket)
+                break
+            else
+                @error "zmq message decoding: $e"
+                @showerror e
+            end
+        end
+    end
+    @debug "zmq socket closed"
+end
+
+#=
+Broker zmq receiver.
+=#
+function zeromq_receiver(router::Router)
     pkt = ZMQPacket()
     while true
         try
@@ -1007,7 +1181,6 @@ function zeromq_receiver(router)
 
             msg::RembusMsg = broker_parse(pkt)
             #@mlog("[ZMQ][$twin] <- $(prettystr(msg))")
-
             if isa(msg, IdentityMsg)
                 @debug "[$twin] auth identity: $(msg.cid)"
                 # check if cid is registered
@@ -1062,6 +1235,8 @@ function zeromq_receiver(router)
                     pubsub_msg(router, twin, msg)
                 elseif isa(msg, AckMsg)
                     ack_msg(twin, msg)
+                elseif isa(msg, Ack2Msg)
+                    # the broker ignores Ack2 message
                 end
             else
                 @info "[$twin]: [$msg] not authorized"
@@ -1388,6 +1563,7 @@ function broker(;
 
     http_port = getparam(args, "http", http)
     if http_port !== nothing
+        router.listeners[:http] = Listener(http_port)
         push!(
             tasks,
             process(
@@ -1400,6 +1576,7 @@ function broker(;
 
     tcp_port = getparam(args, "tcp", tcp)
     if tcp_port !== nothing
+        router.listeners[:tcp] = Listener(tcp_port)
         push!(
             tasks,
             process(
@@ -1412,10 +1589,11 @@ function broker(;
 
     zmq_port = getparam(args, "zmq", zmq)
     if zmq_port !== nothing
+        router.listeners[:zmq] = Listener(zmq_port)
         push!(
             tasks,
             process(
-                serve_zeromq,
+                serve_zmq,
                 args=(router, zmq_port),
                 restart=:transient,
                 debounce_time=2)
@@ -1427,6 +1605,8 @@ function broker(;
         if ws_port === nothing
             ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
         end
+
+        router.listeners[:ws] = Listener(ws_port)
         push!(
             tasks,
             process(
@@ -1460,6 +1640,8 @@ version() = VERSION
         secure=false,
         ws=nothing,
         tcp=nothing,
+        http=nothing,
+        zmq=nothing,
         name="server",
         mode=nothing,
         log=TRACE_INFO
@@ -1498,6 +1680,7 @@ function server(
 
     http_port = getparam(args, "http", http)
     if http_port !== nothing
+        rb.listeners[:http] = Listener(http_port)
         push!(
             acceptors,
             process(
@@ -1511,6 +1694,7 @@ function server(
 
     tcp_port = getparam(args, "tcp", tcp)
     if tcp_port !== nothing
+        rb.listeners[:tcp] = Listener(tcp_port)
         push!(
             acceptors,
             process(
@@ -1524,11 +1708,12 @@ function server(
 
     zmq_port = getparam(args, "zmq", zmq)
     if zmq_port !== nothing
+        rb.listeners[:zmq] = Listener(zmq_port)
         push!(
             acceptors,
             process(
                 "serve_zmq:$zmq_port",
-                serve_zeromq,
+                serve_zmq,
                 args=(rb, zmq_port),
                 restart=:transient,
                 debounce_time=2
@@ -1542,6 +1727,7 @@ function server(
             ws_port = parse(UInt16, get(ENV, "BROKER_WS_PORT", "8000"))
         end
 
+        rb.listeners[:ws] = Listener(ws_port)
         push!(
             acceptors,
             process(
@@ -1687,6 +1873,7 @@ function client_receiver(router::Server, ws)
     id = string(uuid4())
     rb = RBServerConnection(router, id, socket)
     rb.socket = ws
+    push!(router.connections, rb)
     spec = process(id, server_task, args=(rb,))
     sv = router.process
     p = startup(Visor.from_supervisor(sv, "twins"), spec)
@@ -1695,7 +1882,6 @@ function client_receiver(router::Server, ws)
     delete!(router.id_twin, id)
     return nothing
 end
-
 
 function secure_config(router)
     trust_store = keystore_dir(router)
@@ -2151,8 +2337,8 @@ function serve_ws(td, router, port, issecure=false)
     end
 end
 
-function serve_zeromq(pd, router, port)
-    @debug "[serve_zeromq] starting"
+function serve_zmq(pd, router, port)
+    @debug "[serve_zmq] starting"
     router_ready(router)
     router.zmqcontext = ZMQ.Context()
     router.zmqsocket = Socket(router.zmqcontext, ROUTER)
@@ -2166,15 +2352,14 @@ function serve_zeromq(pd, router, port)
         # consider ProcessInterrupt a normal termination because
         # zeromq_receiver is not polling for supervisor shutdown message
         if !isa(e, Visor.ProcessInterrupt)
-            @error "[serve_zeromq] error: $e"
+            @error "[serve_zmq] error: $e"
             rethrow()
         end
     finally
         setphase(pd, :terminate)
         ZMQ.close(router.zmqsocket)
         ZMQ.close(router.zmqcontext)
-        ZMQ.close(context)
-        @debug "[serve_zeromq] closed"
+        @debug "[serve_zmq] closed"
     end
 end
 
@@ -2213,7 +2398,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 end
 
 function islistening(
-    ; wait=5, procs=["broker.serve_ws", "broker.serve_tcp", "broker.serve_zeromq"]
+    ; wait=5, procs=["broker.serve_ws", "broker.serve_tcp", "broker.serve_zmq"]
 )
     tcount = 0
     while tcount < wait
@@ -2323,7 +2508,6 @@ function broadcast!(router, msg)
         # only for pubsub messages and not for rpc methods.
         topic = msg.content.topic
         bmsg = msg.content
-
         twins = get(router.topic_interests, "*", Set{Twin}())
         # broadcast to twins that are admins and to twins that are authorized to
         # subscribe to topic
@@ -2687,7 +2871,7 @@ function add_node(router, component)
     push!(router.servers, cid(component))
 end
 
-add_node(router, url::AbstractString) = add_node(router, Component(url))
+add_node(router, url::AbstractString) = add_node(router, RbURL(url))
 
 #=
     remove_node(components)
@@ -2703,7 +2887,7 @@ function remove_node(router, component)
     delete!(router.servers, url)
 end
 
-remove_node(router, url::AbstractString) = remove_node(router, Component(url))
+remove_node(router, url::AbstractString) = remove_node(router, RbURL(url))
 
 function setup_receiver(process, socket, twin::Twin, isconnected)
     twin.socket = socket
@@ -2712,14 +2896,17 @@ function setup_receiver(process, socket, twin::Twin, isconnected)
     put!(process.inbox, "connection closed")
 end
 
-brokerurl(rb::Twin) = brokerurl(Component(rb.id))
+brokerurl(rb::Twin) = brokerurl(RbURL(rb.id))
 
-protocol(rb::Twin) = Component(rb.id).protocol
+protocol(rb::Twin) = RbURL(rb.id).protocol
 
-function egress_task(proc, twin::Twin, remote::Component)
+#=
+Broker task that establishes the connection to servers and brokers.
+=#
+function egress_task(proc, twin::Twin, remote::RbURL)
     _connect(twin, proc)
     if hasname(twin)
-        msg = IdentityMsg(Component(twin.id).id)
+        msg = IdentityMsg(RbURL(twin.id).id)
         wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
     end
 
@@ -2741,19 +2928,19 @@ Loopback connection is not permitted.
 function connect(
     router::Router, remote_url::AbstractString
 )
-    return connect(router, Component(remote_url))
+    return connect(router, RbURL(remote_url))
 end
 
 function connect(
-    router::Router, remote::Component
+    router::Router, remote::RbURL
 )
     # setup the twin
     remote_url = cid(remote)
 
     remote_ip = getaddrinfo(remote.host)
-    server = Visor.from_path(router.process.supervisor, "serve_ws")
+    listener = get(router.listeners, remote.protocol, Listener(0))
     for ip in [getipaddrs(); [ip"127.0.0.1"]]
-        if ip == remote_ip && remote.port == server.args[2]
+        if ip == remote_ip && remote.port == listener.port
             error("remote component $(remote.id): loopback not permitted")
         end
     end

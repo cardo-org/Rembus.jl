@@ -16,9 +16,7 @@ function trace(supervisor, msg)
 end
 
 function run()
-    # Component Under Test
     cid = "test_process"
-
     Rembus.caronte_reset(BROKER_NAME)
     supervise([rembus(cid)], intensity=3, handler=trace)
 end

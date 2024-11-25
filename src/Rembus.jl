@@ -1,9 +1,3 @@
-#=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
 module Rembus
 
 import Distributed
@@ -98,7 +92,7 @@ struct IdentityReturn
     value::Any
 end
 
-mutable struct Component
+mutable struct RbURL
     id::String
     hasname::Bool
     protocol::Symbol
@@ -106,7 +100,7 @@ mutable struct Component
     port::UInt16
     props::Dict{String,String}
 
-    function Component(url::String)
+    function RbURL(url::String)
         baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
         baseuri = URI(baseurl)
         uri = URI(url)
@@ -144,15 +138,15 @@ mutable struct Component
     end
 end
 
-Component() = Component("")
+RbURL() = RbURL("")
 
-brokerurl(c::Component) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
+brokerurl(c::RbURL) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-cid(c::Component) = "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
+cid(c::RbURL) = "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
 
-hasname(c::Component) = c.hasname
+hasname(c::RbURL) = c.hasname
 
-function nodetype(c::Component)
+function nodetype(c::RbURL)
     if c.protocol === :ws || c.protocol === :wss ||
        c.protocol === :tcp || c.protocol === :tls
         return socket
@@ -168,43 +162,43 @@ mutable struct DBHandler
     msg_stmt::DuckDB.Stmt
 end
 
-function rembus_db(cid::AbstractString)
-    db = DuckDB.DB(joinpath(rembus_dir(), "$cid.db"))
-    stmts = [
-        "CREATE TABLE IF NOT EXISTS received (ts UBIGINT, uid UBIGINT)"
-    ]
-    for stmt in stmts
-        DBInterface.execute(db, stmt)
-    end
-    stmt = DBInterface.prepare(
-        db,
-        "INSERT INTO received (ts, uid) VALUES (?, ?)"
-    )
-    return DBHandler(db, stmt)
+struct AckState
+    ack2::Bool
+    timer::Timer
+end
+
+@enum ListenerStatus on off
+
+ack_dataframe() = DataFrame(ts=UInt64[], id=UInt128[])
+
+mutable struct Listener
+    status::ListenerStatus
+    port::UInt
+    Listener(port) = new(off, port)
 end
 
 abstract type RBHandle end
 
 mutable struct RBConnection <: RBHandle
     type::NodeType
-    duck::Union{Nothing,DBHandler}
+    ack_df::DataFrame
     shared::Any
     egress::Union{Nothing,Function}
     ingress::Union{Nothing,Function}
     socket::Any
     reactive::Bool
-    client::Component
+    client::RbURL
     receiver::Dict{String,Function}
     subinfo::Dict{String,Float64}
     out::Dict{UInt128,Distributed.Future}
-    acktimer::Dict{UInt128,Timer}
+    acktimer::Dict{UInt128,AckState}
     zmqcontext::Union{Nothing,ZMQ.Context}
     process::Visor.Process
     function RBConnection(name::String)
-        c = Component(name)
+        c = RbURL(name)
         new(
             nodetype(c),
-            nothing,
+            load_pubsub_received(c),
             missing,
             nothing,
             nothing,
@@ -220,7 +214,7 @@ mutable struct RBConnection <: RBHandle
     end
     RBConnection(client=getcomponent()) = new(
         nodetype(client),
-        nothing,
+        load_pubsub_received(client),
         missing,
         nothing,
         nothing,
@@ -245,7 +239,13 @@ function Base.show(io::IO, rb::RBConnection)
     return print(io, rbinfo(rb))
 end
 
-function egress_interceptor(rb, func)
+hasname(rb::RBHandle) = hasname(rb.client)
+
+get_ingress(rb::RBConnection) = rb.ingress
+
+get_egress(rb::RBConnection) = rb.egress
+
+function egress_interceptor(rb::RBConnection, func)
     @debug "[$rb] setting egress: $func"
     rb.egress = func
 end
@@ -265,14 +265,19 @@ mutable struct Server <: AbstractRouter
     shared::Any
     mode::ConnectionMode
     start_ts::Float64
+    egress::Union{Nothing,Function}
+    ingress::Union{Nothing,Function}
     topic_function::Dict{String,Function}
     topic_auth::Dict{String,Dict{String,Bool}} # topic => {twin.id => true}
     twin_initialize::Function
     twin_finalize::Function
     subinfo::Dict{String,Float64}
     id_twin::Dict
+    listeners::Dict{Symbol,Listener} # protocol => listener status
     address2twin::Dict{Vector{UInt8},RBHandle} # zeromq address => twin
     twin2address::Dict{String,Vector{UInt8}} # twin id => zeromq address
+    policy::Symbol
+    connections::Vector{RBHandle}
     process::Visor.Supervisor
     server::Sockets.TCPServer
     http_server::HTTP.Server
@@ -285,6 +290,8 @@ mutable struct Server <: AbstractRouter
         shared,
         anonymous,
         time(),
+        nothing,
+        nothing,
         Dict(),
         Dict(),
         twin_initialize,
@@ -292,9 +299,14 @@ mutable struct Server <: AbstractRouter
         Dict(),
         Dict(),
         Dict(),
-        Dict()
+        Dict(),
+        Dict(),
+        :first_up,
+        [],
     )
 end
+
+terminate(rb::Server) = shutdown(rb.process)
 
 function Base.show(io::IO, srv::Server)
     return print(io, "$(isdefined(srv, :process) ? srv.process.id : "server")")
@@ -303,39 +315,57 @@ end
 mutable struct RBServerConnection <: RBHandle
     type::NodeType
     router::Server
-    client::Component
+    client::RbURL
     isauth::Bool
     reactive::Bool
     session::Dict{String,Any}
-    egress::Union{Nothing,Function}
-    ingress::Union{Nothing,Function}
     socket::Any
     out::Dict{UInt128,Distributed.Future}
-    acktimer::Dict{UInt128,Timer}
+    acktimer::Dict{UInt128,AckState}
     zaddress::Vector{UInt8}
-    duck::Union{Nothing,DBHandler}
+    ack_df::DataFrame
     process::Visor.Process
-    RBServerConnection(server::Server, name::String, type::NodeType) = new(
-        type,
-        server,
-        Component(name),
-        false,
-        true, # reactive
-        Dict(),
-        nothing,
-        nothing,
-        nothing,
-        Dict(),
-        Dict(),
-        UInt8[0, 0, 0, 0],
-        nothing,
-    )
+    function RBServerConnection(server::Server, name::String, type::NodeType)
+        c = RbURL(name)
+        new(
+            type,
+            server,
+            RbURL(name),
+            false,
+            true, # reactive
+            Dict(),
+            nothing,
+            Dict(),
+            Dict(),
+            UInt8[0, 0, 0, 0],
+            load_pubsub_received(c),
+        )
+    end
 end
 
 ucid(rb::RBServerConnection) = rb.client.id
 
+Base.isless(
+    rb1::RBServerConnection,
+    rb2::RBServerConnection
+) = length(rb1.out) < length(rb2.out)
+
 function Base.show(io::IO, rb::RBServerConnection)
     return print(io, "srv component [$(ucid(rb))], isconnected: $(isconnected(rb))")
+end
+
+get_ingress(rb::RBServerConnection) = rb.router.ingress
+
+get_egress(rb::RBServerConnection) = rb.router.egress
+
+function egress_interceptor(server::Server, func)
+    @debug "[$server] setting egress: $func"
+    server.egress = func
+end
+
+function ingress_interceptor(server::Server, func)
+    @debug "[$server] setting ingress: $func"
+    server.ingress = func
 end
 
 mutable struct RBPool <: RBHandle
@@ -357,19 +387,19 @@ function cid(rb::RBPool)
     return "pool:$(join(cids, ","))"
 end
 
-firstup_policy(rb::RBPool) = rb.policy = :first_up
+firstup_policy(rb) = rb.policy = :first_up
 
 firstup_policy(p::Visor.Process) = firstup_policy(p.args[1])
 
-roundrobin_policy(rb::RBPool) = rb.policy = :round_robin
+roundrobin_policy(rb) = rb.policy = :round_robin
 
 roundrobin_policy(p::Visor.Process) = roundrobin_policy(p.args[1])
 
-lessbusy_policy(rb::RBPool) = rb.policy = :less_busy
+lessbusy_policy(rb) = rb.policy = :less_busy
 
 lessbusy_policy(p::Visor.Process) = lessbusy_policy(p.args[1])
 
-all_policy(rb::RBPool) = rb.policy = :all
+all_policy(rb) = rb.policy = :all
 
 all_policy(p::Visor.Process) = all_policy(p.args[1])
 
@@ -570,18 +600,18 @@ call_timeout() = request_timeout() + 0.5
 getcomponent() = Rembus.CONFIG.cid
 
 function name2proc(name::AbstractString, startproc=false, setanonymous=false)
-    cmp = Component(name)
+    cmp = RbURL(name)
     if from(cmp.id) === nothing
         throw(ErrorException("unknown process $(cmp.id)"))
     end
-    return name2proc(Component(name), startproc, setanonymous)
+    return name2proc(RbURL(name), startproc, setanonymous)
 end
 
 function name2proc(::Nothing, startproc=false, setanonymous=false)
     return name2proc(getcomponent(), startproc, setanonymous)
 end
 
-function name2proc(cmp::Component, startproc=false, setanonymous=false)
+function name2proc(cmp::RbURL, startproc=false, setanonymous=false)
     proc = from(cmp.id)
     if proc === nothing
         if setanonymous && !hasname(CONFIG.cid)
@@ -609,7 +639,7 @@ to the broker.
 """
 macro component(name)
     quote
-        Rembus.CONFIG.cid = Component($(esc(name)))
+        Rembus.CONFIG.cid = RbURL($(esc(name)))
         Visor.startup(rembus())
     end
 end
@@ -624,7 +654,7 @@ Close the connection and terminate the component.
 macro terminate(name=nothing)
     quote
         shutdown(name2proc($(esc(name))))
-        Rembus.CONFIG.cid = Component()
+        Rembus.CONFIG.cid = RbURL()
         nothing
     end
 end
@@ -1145,14 +1175,14 @@ Provide an exposed server method.
 =#
 function expose(
     server::Server, name::AbstractString, func::Function;
-    exceptionerror=true, wait=true
+    raise=true, wait=true
 )
     server.topic_function[name] = func
     # inform all (already) connected nodes
     for (id, twin) in server.id_twin
         rpcreq(twin,
             AdminReqMsg(name, Dict(COMMAND => EXPOSE_CMD)),
-            exceptionerror=exceptionerror,
+            raise=raise,
             wait=wait
         )
     end
@@ -1161,8 +1191,8 @@ end
 expose(
     server::Server,
     func::Function;
-    exceptionerror=true,
-    wait=true) = expose(server, string(func), func, exceptionerror=exceptionerror, wait=wait)
+    raise=true,
+    wait=true) = expose(server, string(func), func, raise=raise, wait=wait)
 
 function subscribe(
     server::Server, name::AbstractString, func::Function; from=Now()
@@ -1189,14 +1219,14 @@ function rembus(cid=nothing)
     if cid === nothing
         cmp = Rembus.CONFIG.cid
     else
-        cmp = Component(cid)
+        cmp = RbURL(cid)
     end
 
     rb = RBConnection(cmp)
     process(
         cmp.id,
         client_task,
-        args=(rb, cmp.protocol),
+        args=(rb,),
         debounce_time=CONFIG.connection_retry_period,
         force_interrupt_after=3.0)
 end
@@ -1214,31 +1244,31 @@ function call_request(rb, msg)
         result = inject(rb, msg.request.shared)
     elseif isa(req, AddImpl)
         result = expose(
-            rb, msg.request.topic, msg.request.fn, exceptionerror=false, wait=msg.request.wait
+            rb, msg.request.topic, msg.request.fn, raise=false, wait=msg.request.wait
         )
     elseif isa(req, RemoveImpl)
-        result = unexpose(rb, msg.request.fn, exceptionerror=false, wait=msg.request.wait)
+        result = unexpose(rb, msg.request.fn, raise=false, wait=msg.request.wait)
     elseif isa(req, AddInterest)
         result = subscribe(
             rb,
             msg.request.topic,
             msg.request.fn,
             from=msg.request.msg_from,
-            exceptionerror=false,
+            raise=false,
             wait=msg.request.wait
         )
     elseif isa(req, RemoveInterest)
-        result = unsubscribe(rb, msg.request.fn, exceptionerror=false, wait=msg.request.wait)
+        result = unsubscribe(rb, msg.request.fn, raise=false, wait=msg.request.wait)
     elseif isa(req, Reactive)
         if req.status
             result = reactive(
                 rb,
                 from=msg.request.msg_from,
-                exceptionerror=false,
+                raise=false,
                 wait=msg.request.wait
             )
         else
-            result = unreactive(rb, exceptionerror=false, wait=msg.request.wait)
+            result = unreactive(rb, raise=false, wait=msg.request.wait)
         end
     else
         try
@@ -1246,7 +1276,7 @@ function call_request(rb, msg)
                 rb,
                 msg.request.topic,
                 msg.request.data,
-                exceptionerror=false,
+                raise=false,
                 wait=msg.request.wait
             )
         catch e
@@ -1256,9 +1286,9 @@ function call_request(rb, msg)
     reply(msg, result)
 end
 
-function rembus_task(pd, rb, init_fn, protocol=:ws)
+function rembus_task(pd, rb, init_fn)
     try
-        @debug "starting rembus process: $pd, protocol:$protocol"
+        @debug "starting rembus process: $pd"
         setphase(pd, :init)
         rb.process = pd
         init_fn(pd, rb)
@@ -1284,7 +1314,7 @@ function rembus_task(pd, rb, init_fn, protocol=:ws)
     catch e
         if isa(e, AlreadyConnected)
             @error "[$(e.cid)] already connected"
-            Rembus.CONFIG.cid = Component("")
+            Rembus.CONFIG.cid = RbURL("")
             return
         end
 
@@ -1319,18 +1349,18 @@ end
 #=
 The rembus process task when the connection is initiated by this component.
 =#
-function client_task(pd, rb, protocol=:ws)
-    @debug "starting rembus process: $pd, protocol:$protocol"
-    rembus_task(pd, rb, connect, protocol)
+function client_task(pd, rb)
+    @debug "starting rembus process: $pd"
+    rembus_task(pd, rb, connect)
 end
 
 #=
 The rembus process task related to a connection initiated by the other side:
 a client or a broker.
 =#
-function server_task(pd, rb, protocol=:ws)
-    @debug "starting rembus process: $pd, protocol:$protocol"
-    rembus_task(pd, rb, bind, protocol)
+function server_task(pd, rb)
+    @debug "starting rembus process: $pd"
+    rembus_task(pd, rb, bind)
 end
 
 #=
@@ -1344,8 +1374,12 @@ function pool_task(pd, rb::RBPool)
             push!(processes, component(c))
         end
 
-        for msg in pd.inbox
-            @debug "pool_task [$pd] recv: $msg"
+        while true
+            msg = fetch(pd.inbox)
+            while !isconnected(rb)
+                sleep(0.1)
+            end
+            take!(pd.inbox)
 
             if isshutdown(msg)
                 return
@@ -1355,6 +1389,8 @@ function pool_task(pd, rb::RBPool)
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
         end
+    catch e
+        @error "pool_task error: $e"
     finally
         for p in processes
             terminate(p)
@@ -1538,8 +1574,9 @@ end
 
 function handle_input(rb, msg)
     #@debug "<< [$(cid(rb.client))] <- $msg"
-    if rb.ingress !== nothing
-        msg = rb.ingress(rb, msg)
+    ingress_fn = get_ingress(rb)
+    if ingress_fn !== nothing
+        msg = ingress_fn(rb, msg)
     end
 
     (msg === nothing) && return nothing
@@ -1551,7 +1588,18 @@ function handle_input(rb, msg)
             # notify() may be called before wait()
             yield()
             if isa(msg, AckMsg)
+                if haskey(rb.acktimer, msg.id)
+                    close(rb.acktimer[msg.id].timer)
+                    if rb.acktimer[msg.id].ack2
+                        # send the ACK2 message to the component
+                        put!(
+                            rb.process.inbox,
+                            Ack2Msg(msg.id)
+                        )
+                    end
+                end
                 put!(rb.out[msg.id], true)
+                delete!(rb.acktimer, msg.id)
             else
                 put!(rb.out[msg.id], msg)
             end
@@ -1560,7 +1608,7 @@ function handle_input(rb, msg)
             # it is a response without a waiting Condition
             if msg.id == CONNECTION_ID
                 @debug "unexpected unsolicited challenge"
-            elseif msg.status == STS_CHALLENGE
+            elseif isa(msg, ResMsg) && msg.status == STS_CHALLENGE
                 @async resend_attestate(rb, msg)
             else
                 @warn "ignoring response: $msg"
@@ -1596,50 +1644,80 @@ function handle_input(rb, msg)
             if msg.flags > QOS0
                 put!(rb.process.inbox, AckMsg(msg.id))
                 if msg.flags == QOS2
-                    save_message_mark(rb, msg)
+                    add_pubsub_id(rb, msg)
                 end
             end
         end
     end
-
     return nothing
 end
 
-function save_message_mark(rb, msg)
+
+acks_file(c::RbURL) = joinpath(rembus_dir(), "$(c.id).acks")
+
+#=
+    load_pubsub_received(rb::RBHandle)
+
+Load from file the ids of received Pub/Sub messages
+awaiting Ack2 acknowledgements.
+=#
+function load_pubsub_received(component::RbURL)
+    if hasname(component)
+        path = acks_file(component)
+        if isfile(path)
+            @debug "[$rb] loading $path"
+            df = DataFrame(read_parquet(path))
+            return DataFrame(
+                ts=df.ts,
+                id=UInt128.(df.ts) .<< 64 .| unsigned.(df.id)
+            )
+        end
+    end
+    return ack_dataframe()
+end
+
+#=
+    save_pubsub_received(rb::RBHandle)
+
+Save to file the ids of received Pub/Sub messages
+waitings Ack2 acknowledgements.
+=#
+function save_pubsub_received(rb::RBHandle)
+    path = acks_file(rb.client)
+    db = DuckDB.DB()
+    @debug "[$rb] saving $path"
+    df = DataFrame(ts=rb.ack_df.ts, id=UInt64.(rb.ack_df.id .& 0xffffffffffffffff))
+    DuckDB.register_data_frame(db, df, "df")
     DBInterface.execute(
-        rb.duck.msg_stmt,
-        (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
+        db,
+        "COPY df to '$path' (FORMAT 'parquet')"
     )
+    close(db)
+end
+
+#=
+    add_pubsub_id(rb, msg)
+
+Add the message id for PubSub messages with QOS2 quality level to the set of
+set of already received messages.
+=#
+function add_pubsub_id(rb, msg)
+    push!(rb.ack_df, (UInt64(msg.id >> 64), msg.id))
 end
 
 function already_received(rb, msg)
-    if rb.duck === nothing
-        rb.duck = rembus_db(rb.client.id)
-    end
-
-    result = DBInterface.execute(
-        rb.duck.db,
-        "SELECT uid FROM received WHERE ts=? AND uid=?",
-        (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
-    )
-    return !isempty(result)
+    findfirst(==(msg.id), rb.ack_df.id) !== nothing
 end
 
 function remove_message(rb, msg)
-    if rb.duck !== nothing
-        DBInterface.execute(
-            rb.duck.db,
-            "DELETE FROM received WHERE ts=? AND uid=?",
-            (UInt64(msg.id >> 64), UInt64(msg.id & 0xffffffffffffffff))
-        )
+    idx = findfirst(==(msg.id), rb.ack_df.id)
+    if idx !== nothing
+        deleteat!(rb.ack_df, idx)
     end
 end
 
 function awaiting_ack2(rb)
-    if rb.duck === nothing
-        error("ack database unavailable")
-    end
-    DataFrame(DBInterface.execute(rb.duck.db, "SELECT * from received"))
+    return rb.ack_df
 end
 
 #=
@@ -1659,9 +1737,6 @@ function parse_msg(rb, response)
     return nothing
 end
 
-#keep_alive(rb, socket::TCPSocket) = nothing
-
-#function keep_alive(socket::WebSockets.WebSocket)
 function keep_alive(rb)
     CONFIG.ws_ping_interval == 0 && return
     while true
@@ -1714,11 +1789,10 @@ end
 function update_cid(rb::RBServerConnection, process, id)
     setname(process, id)
     # Search for a component with the same name
-    #for (kid, cmp) in rb.router.id_twin
     filter!(rb.router.id_twin) do (kid, cmp)
         if cmp.client.id == id
             @debug "rbserver updating [$kid] -> [$id]"
-            rb.client = Component(id)
+            rb.client = RbURL(id)
             return false
         end
 
@@ -1784,16 +1858,16 @@ function main_task(pd, rb::RBHandle)
         for msg in pd.inbox
             if isshutdown(msg)
                 break
-            elseif !send_message(rb, msg)
-                break
             end
+
+            send_message(rb, msg)
         end
     catch e
-        @error "[$rb] write_task: $e"
+        @error "[$rb] send failed: $e"
     finally
         close(rb.socket)
     end
-    @debug "[$(cid(rb.client))] write_task done"
+    @debug "[$(cid(rb.client))] main_task done"
 end
 
 function setup_receiver(process, socket, rb::RBConnection, isconnected)
@@ -1831,7 +1905,8 @@ function ws_connect(rb, process, isconnected::Condition)
     end
 end
 
-function zmq_receive(rb)
+
+function zmq_receive(rb::RBHandle)
     while true
         try
             msg = zmq_load(rb.socket)
@@ -1848,6 +1923,9 @@ function zmq_receive(rb)
     @debug "zmq socket closed"
 end
 
+#=
+Establish the connection from a component or from a broker twin..
+=#
 function zmq_connect(rb)
     rb.zmqcontext = ZMQ.Context()
     rb.socket = ZMQ.Socket(rb.zmqcontext, DEALER)
@@ -2228,12 +2306,10 @@ function Base.close(rb::RBPool)
     end
 end
 
-function Base.close(rb::RBHandle)
-    if rb.socket !== nothing
-        # TODO: check if race conditions may arise
-        #put!(rb.process.inbox, CloseConnection())
 
-        if isa(rb.socket, ZMQ.Socket)
+function close_handle(rb)
+    if rb.socket !== nothing
+        if isa(rb.socket, ZMQ.Socket) && isopen(rb.socket)
             transport_send(Val(rb.type), rb, Close())
             close(rb.socket)
             close(rb.zmqcontext)
@@ -2242,67 +2318,85 @@ function Base.close(rb::RBHandle)
         end
         rb.socket = nothing
     end
+
+    if !isempty(rb.ack_df)
+        save_pubsub_received(rb)
+    end
+
     return nothing
 end
 
-function enable_debug(rb::RBHandle; exceptionerror=true)
+Base.close(rb::RBHandle) = close_handle(rb)
+
+function Base.close(rb::RBServerConnection)
+    close_handle(rb)
+    filter!(rb.router.connections) do conn
+        conn.client.id !== rb.client.id
+    end
+end
+
+function Base.close(rb::RBConnection)
+    close_handle(rb)
+end
+
+function enable_debug(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => ENABLE_DEBUG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
-function disable_debug(rb::RBHandle; exceptionerror=true)
+function disable_debug(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => DISABLE_DEBUG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
-function broker_config(rb::RBHandle; exceptionerror=true)
+function broker_config(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => BROKER_CONFIG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
-function private_topics_config(rb::RBHandle; exceptionerror=true)
+function private_topics_config(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => PRIVATE_TOPICS_CONFIG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
-function load_config(rb::RBHandle; exceptionerror=true)
+function load_config(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => LOAD_CONFIG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
-function save_config(rb::RBHandle; exceptionerror=true)
+function save_config(rb::RBHandle; raise=true)
     return rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => SAVE_CONFIG_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
 """
-    unreactive(rb::RBHandle, timeout=5; exceptionerror=true, wait=true)
+    unreactive(rb::RBHandle, timeout=5; raise=true, wait=true)
 
 Stop the delivery of published message.
 """
-function unreactive(rb::RBHandle; exceptionerror=true, wait=true)
+function unreactive(rb::RBHandle; raise=true, wait=true)
     response = rpcreq(
         rb,
         AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => false)),
-        exceptionerror=exceptionerror,
+        raise=raise,
         wait=wait
     )
     rb.reactive = false
@@ -2314,7 +2408,7 @@ end
     reactive(
         rb::RBHandle;
         from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
-        exceptionerror=true,
+        raise=true,
         wait=true
     )
 
@@ -2325,7 +2419,7 @@ function reactive(
     rb::RBHandle;
     from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
     timeout=request_timeout(),
-    exceptionerror=true,
+    raise=true,
     wait=true
 )
     response = rpcreq(
@@ -2337,7 +2431,7 @@ function reactive(
                 STATUS => true,
                 MSG_FROM => to_microseconds(from))
         ),
-        exceptionerror=exceptionerror,
+        raise=raise,
         timeout=timeout,
         broadcast=true,
         wait=wait
@@ -2366,10 +2460,10 @@ function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})
 end
 
 """
-    subscribe(rb::RBHandle, fn::Function; from=Now(), exceptionerror=true)
+    subscribe(rb::RBHandle, fn::Function; from=Now(), raise=true)
     subscribe(
         rb::RBHandle, topic::AbstractString, fn::Function; from=Now(),
-        exceptionerror=true
+        raise=true
     )
 
 Declare interest for messages published on `topic` logical channel.
@@ -2385,7 +2479,7 @@ offline.
 function subscribe(
     rb::RBHandle, topic::AbstractString, fn::Function;
     from::Union{Real,Period,Dates.CompoundPeriod}=Now(),
-    exceptionerror=true,
+    raise=true,
     wait=true
 )
     add_receiver(rb, topic, fn, from)
@@ -2394,17 +2488,17 @@ function subscribe(
             topic,
             Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => to_microseconds(from))
         ),
-        exceptionerror=exceptionerror,
+        raise=raise,
         broadcast=true,
         wait=wait
     )
 end
 
 function subscribe(
-    rb::RBHandle, fn::Function; from=Now(), exceptionerror=true, wait=true
+    rb::RBHandle, fn::Function; from=Now(), raise=true, wait=true
 )
     return subscribe(
-        rb, string(fn), fn; from=from, exceptionerror=exceptionerror, wait=wait
+        rb, string(fn), fn; from=from, raise=raise, wait=wait
     )
 end
 
@@ -2504,30 +2598,30 @@ function rpc(proc::Visor.Process, topic::AbstractString, data=[]; wait=true)
 end
 
 """
-    unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
-    unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
+    unsubscribe(rb::RBHandle, topic::AbstractString; raise=true, wait=true)
+    unsubscribe(rb::RBHandle, fn::Function; raise=true, wait=true)
 
 No more messages published on a `topic` logical channel or a topic name equals to the name
 of the subscribed function will be delivered to `rb` component.
 """
-function unsubscribe(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
+function unsubscribe(rb::RBHandle, topic::AbstractString; raise=true, wait=true)
     remove_receiver(rb, topic)
     delete!(rb.subinfo, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNSUBSCRIBE_CMD)),
-        exceptionerror=exceptionerror,
+        raise=raise,
         broadcast=true,
         wait=wait
     )
 end
 
-function unsubscribe(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
-    return unsubscribe(rb, string(fn); exceptionerror=exceptionerror, wait=wait)
+function unsubscribe(rb::RBHandle, fn::Function; raise=true, wait=true)
+    return unsubscribe(rb, string(fn); raise=raise, wait=wait)
 end
 
 """
-    expose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
-    expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true, wait=true)
+    expose(rb::RBHandle, fn::Function; raise=true, wait=true)
+    expose(rb::RBHandle, topic::AbstractString, fn::Function; raise=true, wait=true)
 
 Expose the methods of function `fn` to be executed by rpc clients using `topic` as
 RPC method name.
@@ -2536,18 +2630,18 @@ If the `topic` argument is omitted the function name equals to the RPC method na
 
 `fn` returns the RPC response.
 """
-function expose(rb::RBHandle, topic::AbstractString, fn::Function; exceptionerror=true, wait=true)
+function expose(rb::RBHandle, topic::AbstractString, fn::Function; raise=true, wait=true)
     add_exposed(rb, topic, fn)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)),
-        exceptionerror=exceptionerror,
+        raise=raise,
         broadcast=true,
         wait=wait
     )
 end
 
-function expose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
-    return expose(rb, string(fn), fn; exceptionerror=exceptionerror, wait=wait)
+function expose(rb::RBHandle, fn::Function; raise=true, wait=true)
+    return expose(rb, string(fn), fn; raise=raise, wait=wait)
 end
 
 function expose_server(rb::RBHandle, topic::AbstractString)
@@ -2601,57 +2695,57 @@ end
 
 
 """
-    unexpose(rb::RBHandle, fn::Function; exceptionerror=true)
-    unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+    unexpose(rb::RBHandle, fn::Function; raise=true)
+    unexpose(rb::RBHandle, topic::AbstractString; raise=true)
 
 Stop servicing RPC requests targeting `topic` or `fn` methods.
 """
-function unexpose(rb::RBHandle, topic::AbstractString; exceptionerror=true, wait=true)
+function unexpose(rb::RBHandle, topic::AbstractString; raise=true, wait=true)
     remove_receiver(rb, topic)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNEXPOSE_CMD)),
-        exceptionerror=exceptionerror,
+        raise=raise,
         broadcast=true,
         wait=wait
     )
 end
 
-function unexpose(rb::RBHandle, fn::Function; exceptionerror=true, wait=true)
-    return unexpose(rb, string(fn), exceptionerror=exceptionerror, wait=wait)
+function unexpose(rb::RBHandle, fn::Function; raise=true, wait=true)
+    return unexpose(rb, string(fn), raise=raise, wait=wait)
 end
 
 """
-    private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+    private_topic(rb::RBHandle, topic::AbstractString; raise=true)
 
 Set the `topic` to private.
 
 The component must have the admin role for changing the privateness level.
 """
-function private_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+function private_topic(rb::RBHandle, topic::AbstractString; raise=true)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => PRIVATE_TOPIC_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
 """
-    public_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+    public_topic(rb::RBHandle, topic::AbstractString; raise=true)
 
 Set the `topic` to public.
 
 The component must have the admin role for changing the privateness level.
 """
-function public_topic(rb::RBHandle, topic::AbstractString; exceptionerror=true)
+function public_topic(rb::RBHandle, topic::AbstractString; raise=true)
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => PUBLIC_TOPIC_CMD)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
 """
     function authorize(
         rb::RBHandle, client::AbstractString, topic::AbstractString;
-        exceptionerror=true
+        raise=true
     )
 
 Authorize the `client` component to use the private `topic`.
@@ -2660,18 +2754,18 @@ The component must have the admin role for granting topic accessibility.
 """
 function authorize(
     rb::RBHandle, client::AbstractString, topic::AbstractString;
-    exceptionerror=true
+    raise=true
 )
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => AUTHORIZE_CMD, CID => client)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
 """
     function unauthorize(
         rb::RBHandle, client::AbstractString, topic::AbstractString;
-        exceptionerror=true
+        raise=true
     )
 
 Revoke authorization to the `client` component for use of the private `topic`.
@@ -2680,11 +2774,11 @@ The component must have the admin role for revoking topic accessibility.
 """
 function unauthorize(
     rb::RBHandle, client::AbstractString, topic::AbstractString;
-    exceptionerror=true
+    raise=true
 )
     return rpcreq(rb,
         AdminReqMsg(topic, Dict(COMMAND => UNAUTHORIZE_CMD, CID => client)),
-        exceptionerror=exceptionerror
+        raise=raise
     )
 end
 
@@ -2757,23 +2851,32 @@ function publish(rb::RBConnection, topic::AbstractString, data=[]; qos=QOS0)
     return nothing
 end
 
+function publish(rb::RBServerConnection, topic::AbstractString, data=[]; qos=QOS0)
+    publish(rb, PubSubMsg(topic, data, qos))
+    return nothing
+end
+
 function publish(rb::RBConnection, msg::PubSubMsg)
     put!(rb.process.inbox, msg)
     return nothing
 end
 
-function publish(rb::RBPool, topic::AbstractString, data=[]; qos=QOS0)
+function publish(rb::RBServerConnection, msg::PubSubMsg)
+    put!(rb.process.inbox, msg)
+    return nothing
+end
+
+#=
+    Publish a message when rb is a RBPool or a Server
+=#
+function publish(rb, topic::AbstractString, data=[]; qos=QOS0)
     msg = PubSubMsg(topic, data, qos)
     conn = pick_connections(rb, msg)
     do_publish(conn, topic, data, qos)
     return nothing
 end
 
-function do_publish(::Nothing, topic, data, qos)
-    @warn "no connections available: [$topic] message not delivered"
-end
-
-function do_publish(rb::RBConnection, topic, data, qos)
+function do_publish(rb::RBHandle, topic, data, qos)
     publish(rb, topic, data, qos=qos)
 end
 
@@ -2784,13 +2887,15 @@ function do_publish(rbs::Vector{RBConnection}, topic, data, qos)
 end
 
 """
-    rpc(rb::RBHandle,
+    rpc(rb,
         topic::AbstractString,
         data=nothing;
-        exceptionerror=true,
+        raise=true,
         timeout=request_timeout())
 
 Call the remote `topic` method with arguments extracted from `data`.
+
+The `rb` handle may be a `RBHandle` or a `Server` value.
 
 ## Exposer
 
@@ -2825,16 +2930,18 @@ rpc(rb, "service_dictionary", Dict("r1"=>13.3, "r2"=>3.0))
 rpc(rb, "service_multiple_args", ["name", 1.0, ["red"=>1,"blue"=>2,"yellow"=>3]])
 ```
 """
-function rpc(rb::RBHandle, topic::AbstractString, data=[];
-    exceptionerror=true, timeout=request_timeout(), wait=true)
+function rpc(rb, topic::AbstractString, data=[];
+    raise=true, timeout=request_timeout(), wait=true)
     rpcreq(
-        rb, RpcReqMsg(topic, data), exceptionerror=exceptionerror, timeout=timeout, wait=wait
+        rb, RpcReqMsg(topic, data), raise=raise, timeout=timeout, wait=wait
     )
 end
 
 function fetch_response(f::Distributed.Future)
     response = fetch(f)
-    if response.status == STS_SUCCESS
+    if isa(response, Exception)
+        throw(response)
+    elseif response.status == STS_SUCCESS
         return response.data
     else
         throw(RembusError(code=response.status, reason=response.data))
@@ -2843,9 +2950,9 @@ end
 
 function direct(
     rb, target::AbstractString, topic::AbstractString, data=nothing;
-    exceptionerror=true
+    raise=true
 )
-    return rpcreq(rb, RpcReqMsg(topic, data, target), exceptionerror=exceptionerror)
+    return rpcreq(rb, RpcReqMsg(topic, data, target), raise=raise)
 end
 
 function response_timeout(rb, condition::Distributed.Future, msg::RembusMsg)
@@ -2918,23 +3025,12 @@ function to_socket(rb::RBHandle, msg::RembusMsg)
 end
 
 function send_message(rb::RBHandle, msg)
-    #    if isa(msg, CloseConnection)
-    #        if rb.socket !== nothing
-    #            if isa(rb.socket, ZMQ.Socket)
-    #                transport_send(Val(rb.type), rb, Close())
-    #                close(rb.zmqcontext)
-    #            else
-    #                close(rb.socket)
-    #            end
-    #        end
-    #
-    #        return false
-    #    elseif isa(msg, WsPing)
     if isa(msg, WsPing)
         WebSockets.ping(rb.socket)
     else
-        if rb.egress !== nothing
-            msg = rb.egress(rb, msg)
+        egress_fn = get_egress(rb)
+        if egress_fn !== nothing
+            msg = egress_fn(rb, msg)
         end
         if msg !== nothing
             outcome = false
@@ -2946,7 +3042,7 @@ function send_message(rb::RBHandle, msg)
         end
     end
 
-    return true
+    return nothing
 end
 
 #=
@@ -2987,7 +3083,7 @@ function wait_response(rb::RBHandle, msg::RembusMsg, timeout)
     return res
 end
 
-function pick_connections(handle::RBPool, msg)
+function pick_connections(handle, msg)
     if handle.policy === :first_up
         return first_up(handle, msg.topic, handle.connections)
     elseif handle.policy === :round_robin
@@ -3005,18 +3101,40 @@ function pick_connections(handle::RBPool, msg)
 end
 
 function do_request(
-    rb::RBHandle, msg::RembusMsg, wait::Bool, timeout, exceptionerror
+    ::Nothing, msg::RembusMsg, wait::Bool, timeout, raise
+)
+    err = rembuserror(
+        false, code=STS_GENERIC_ERROR, reason="no connections available"
+    )
+    if wait
+        if raise
+            throw(err)
+        else
+            return err
+        end
+    else
+        resp_cond = Distributed.Future()
+        put!(
+            resp_cond,
+            err
+        )
+        return resp_cond
+    end
+end
+
+function do_request(
+    rb::RBHandle, msg::RembusMsg, wait::Bool, timeout, raise
 )
     if wait
         response = wait_response(rb, msg, timeout)
-        return get_response(rb, msg, response, exceptionerror=exceptionerror)
+        return get_response(rb, msg, response, raise=raise)
     else
         return send_request(rb, msg)
     end
 end
 
 function do_request(
-    rbs::Vector{RBConnection}, msg::RembusMsg, wait::Bool, timeout, exceptionerror
+    rbs::Vector{RBConnection}, msg::RembusMsg, wait::Bool, timeout, raise
 )
     responses = []
     for rb in rbs
@@ -3024,7 +3142,7 @@ function do_request(
             push!(responses, missing)
         elseif wait
             response = wait_response(rb, msg, timeout)
-            result = get_response(rb, msg, response, exceptionerror=exceptionerror)
+            result = get_response(rb, msg, response, raise=raise)
             value = isa(result, RembusTimeout) ? missing : result
             push!(
                 responses,
@@ -3041,7 +3159,7 @@ end
 # If broadcast is true send the request to all nodes of the pool.
 function rpcreq(
     handle::RBHandle, msg;
-    exceptionerror=true,
+    raise=true,
     timeout=request_timeout(),
     wait=true,
     broadcast=false
@@ -3051,20 +3169,36 @@ function rpcreq(
         if broadcast
             conn = handle.connections
         else
-            conn = pick_connections(handle::RBPool, msg)
+            conn = pick_connections(handle, msg)
         end
     else
         conn = handle
     end
 
-    return do_request(conn, msg, wait, timeout, exceptionerror)
+    return do_request(conn, msg, wait, timeout, raise)
 end
 
-function get_response(rb, msg, response; exceptionerror=true)
+function rpcreq(
+    handle::Server, msg;
+    raise=true,
+    timeout=request_timeout(),
+    wait=true,
+    broadcast=false
+)
+    if broadcast
+        conn = handle.connections
+    else
+        conn = pick_connections(handle, msg)
+    end
+
+    return do_request(conn, msg, wait, timeout, raise)
+end
+
+function get_response(rb, msg, response; raise=true)
     outcome = nothing
     if isa(response, RembusTimeout)
         outcome = response
-        if exceptionerror
+        if raise
             throw(outcome)
         end
     elseif response.status == STS_SUCCESS
@@ -3075,7 +3209,7 @@ function get_response(rb, msg, response; exceptionerror=true)
             topic = msg.topic
         end
         outcome = rembuserror(
-            exceptionerror,
+            raise,
             code=response.status,
             cid=rb.client.id,
             topic=topic,

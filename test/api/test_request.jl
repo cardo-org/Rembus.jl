@@ -46,7 +46,7 @@ function run(request_url, subscriber_url, exposer_url)
     client = connect(request_url)
 
     try
-        rpc(client, rpc_topic, exceptionerror=true)
+        rpc(client, rpc_topic, raise=true)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodNotFound)
@@ -85,7 +85,7 @@ function run(request_url, subscriber_url, exposer_url)
     end
 
     try
-        res = rpc(implementor, rpc_topic, exceptionerror=true)
+        res = rpc(implementor, rpc_topic, raise=true)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodLoopback)
@@ -114,6 +114,7 @@ function run(request_url, subscriber_url, exposer_url)
     end
 
     close(implementor)
+    sleep(0.1)
 
     try
         res = direct(client, "test_request_impl", rpc_topic, request_arg)
@@ -147,10 +148,10 @@ function run(request_url, subscriber_url, exposer_url)
     end
 end
 
-Rembus.CONFIG.zmq_ping_interval = 0
-Rembus.CONFIG.ws_ping_interval = 0
 
 function run()
+    Rembus.CONFIG.ws_ping_interval = 0
+    Rembus.CONFIG.zmq_ping_interval = 0
     #run("zmq://:8002/test_request", "zmq://:8002/test_request_sub", "zmq://:8002/test_request_impl")
     for exposer_url in ["zmq://:8002/test_request_impl", "test_request_impl"]
         for subscriber_url in ["zmq://:8002/test_request_sub", "test_request_sub"]

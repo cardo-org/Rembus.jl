@@ -14,7 +14,7 @@ function init(pin)
 end
 
 function run(url)
-    cmp = Rembus.Component(url)
+    cmp = Rembus.RbURL(url)
 
     # trigger a request timeout
     ENV["REMBUS_TIMEOUT"] = 0.0

@@ -1,10 +1,3 @@
-#=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
-
 # When compiling responses are delayed a litte bit
 ENV["REMBUS_TIMEOUT"] = "60"
 
@@ -109,7 +102,7 @@ function request_api(request_url, exposer_url)
     client = connect(request_url)
 
     try
-        rpc(client, rpc_topic, exceptionerror=true)
+        rpc(client, rpc_topic, raise=true)
     catch e
     end
 

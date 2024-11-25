@@ -1,11 +1,4 @@
 #=
-SPDX-License-Identifier: AGPL-3.0-only
-
-Copyright (C) 2024  Attilio Donà attilio.dona@gmail.com
-Copyright (C) 2024  Claudio Carraro carraro.claudio@gmail.com
-=#
-
-#=
     load_tenants()
 
 Return the owners dataframe

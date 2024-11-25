@@ -37,7 +37,7 @@ function run()
 
     Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
 
-    # it seems that coverage require some sleep time
+    # it seems that coverage requires some sleep time
     sleep(1)
 
     cli = connect()

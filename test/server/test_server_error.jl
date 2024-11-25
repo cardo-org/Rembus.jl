@@ -42,7 +42,7 @@ end
 try
     run()
 catch e
-    @error "unexepected error: $e"
+    @error "unexpected error: $e"
     showerror(stdout, e, catch_backtrace())
     @test false
 finally

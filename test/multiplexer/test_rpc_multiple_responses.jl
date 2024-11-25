@@ -13,7 +13,7 @@ end
 
 function many_responses()
     rb = connect(["ws://:7000", "ws://:6001", "ws://:7001"], :all)
-    results = rpc(rb, "myservice", timeout=3, exceptionerror=false)
+    results = rpc(rb, "myservice", timeout=3, raise=false)
     @test isequal(results, ["yes", missing, "no"])
     close(rb)
 end
