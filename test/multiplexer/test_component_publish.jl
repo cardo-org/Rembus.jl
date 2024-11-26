@@ -17,7 +17,7 @@ end
 function policy_default()
     rb = component(["ws://:7000", "ws://:7001"])
 
-    Rembus.when_connected(rb) do
+    Rembus.when_connected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
         terminate(rb)
@@ -29,7 +29,7 @@ end
 function policy_all()
     rb = component(["ws://:7000", "ws://:7001"], :all)
 
-    Rembus.when_connected(rb) do
+    Rembus.when_connected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
         terminate(rb)
@@ -41,7 +41,7 @@ end
 function policy_round_robin()
     rb = component(["ws://:7000", "ws://:7001"], :round_robin)
 
-    Rembus.when_connected(rb) do
+    Rembus.when_connected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
         @test length(ctx) == 1
@@ -58,7 +58,7 @@ end
 function policy_first_up()
     rb = component(["ws://:7000", "ws://:7001"], :first_up)
 
-    Rembus.when_connected(rb) do
+    Rembus.when_connected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
         @info "pubsub policy_firstup:$ctx"

@@ -77,6 +77,7 @@ msg_dataframe() = DataFrame(
 )
 
 mutable struct Router <: AbstractRouter
+    id::String
     mode::ConnectionMode
     policy::Symbol
     msg_df::DataFrame
@@ -106,7 +107,8 @@ mutable struct Router <: AbstractRouter
     zmqcontext::ZMQ.Context
     owners::DataFrame
     component_owner::DataFrame
-    Router(plugin=nothing, context=nothing) = new(
+    Router(name::AbstractString, plugin=nothing, context=nothing) = new(
+        name,
         anonymous,
         :first_up,
         msg_dataframe(),
@@ -130,6 +132,8 @@ mutable struct Router <: AbstractRouter
         context  # context
     )
 end
+
+Base.show(io::IO, r::Router) = print(io, r.id)
 
 Base.hash(t::Twin, h::UInt) = hash(t.id, hash(:Twin, h))
 Base.:(==)(a::Twin, b::Twin) = isequal(a.id, b.id)
@@ -1424,7 +1428,7 @@ function broker(;
     end
 
     issecure = getparam(args, "secure", secure)
-    router = Router(plugin, context)
+    router = Router(sv_name, plugin, context)
 
     policy = Symbol(getparam(args, "policy", policy))
     if !(policy in [:first_up, :less_busy, :round_robin])
@@ -2083,6 +2087,7 @@ end
 
 function _serve_http(td, router::AbstractRouter, http_router, port, issecure)
     try
+        router.listeners[:http].status = on
         sslconfig = nothing
         if issecure
             sslconfig = secure_config(router)
@@ -2100,6 +2105,7 @@ function _serve_http(td, router::AbstractRouter, http_router, port, issecure)
         @error "[serve_http] error: $e"
     finally
         @info "[serve_http] closed"
+        router.listeners[:http].status = off
         setphase(td, :terminate)
         isdefined(router, :http_server) && close(router.http_server)
     end
@@ -2191,6 +2197,7 @@ end
 function serve_ws(td, router, port, issecure=false)
     @debug "[serve_ws] starting"
     router_ready(router)
+    router.listeners[:ws].status = on
 
     sslconfig = nothing
     try
@@ -2212,6 +2219,7 @@ function serve_ws(td, router, port, issecure=false)
         rethrow()
     finally
         @debug "[serve_ws] closed"
+        router.listeners[:ws].status = off
         setphase(td, :terminate)
         isdefined(router, :ws_server) && close(router.ws_server)
     end
@@ -2223,7 +2231,7 @@ function serve_zmq(pd, router, port)
     router.zmqcontext = ZMQ.Context()
     router.zmqsocket = Socket(router.zmqcontext, ROUTER)
     ZMQ.bind(router.zmqsocket, "tcp://*:$port")
-
+    router.listeners[:zmq].status = on
     try
         @info "$(pd.supervisor) listening at port zmq:$port"
         setphase(pd, :listen)
@@ -2236,6 +2244,7 @@ function serve_zmq(pd, router, port)
             rethrow()
         end
     finally
+        router.listeners[:zmq].status = off
         setphase(pd, :terminate)
         ZMQ.close(router.zmqsocket)
         ZMQ.close(router.zmqcontext)
@@ -2256,6 +2265,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), caronte_port))
         router.server = server
+        router.listeners[:tcp].status = on
 
         @info "$(pd.supervisor) listening at port $proto:$caronte_port"
         setphase(pd, :listen)
@@ -2272,6 +2282,7 @@ function serve_tcp(pd, router, caronte_port, issecure=false)
             end
         end
     finally
+        router.listeners[:tcp].status = off
         setphase(pd, :terminate)
         server !== nothing && close(server)
     end
@@ -2290,6 +2301,19 @@ function islistening(
     end
 
     return false
+end
+
+function islistening(router::Router; protocol::Vector{Symbol}=[:ws])
+    listeners = []
+    for p in protocol
+        if haskey(router.listeners, p)
+            push!(listeners, router.listeners[p].status === on)
+        else
+            push!(listeners, false)
+        end
+    end
+
+    return all(listeners)
 end
 
 isconnected(twin) = twin.socket !== nothing && isopen(twin.socket)

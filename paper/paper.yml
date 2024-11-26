@@ -1,0 +1,17 @@
+title: "Rembus: A Messaging System in Julia"
+keywords:
+  - Julia
+  - CBOR
+  - RPC
+  - Publish/Subscribe
+  - Microservices architecture
+  - Edge Computing
+  - IoT
+authors:
+  - name: Attilio Donà
+    affiliation: 1
+affiliations:
+  - name: "IT Architect, Fibercop, Trento, Italy"
+    index: 1
+date: 24 November 2024
+bibliography: ref.bib

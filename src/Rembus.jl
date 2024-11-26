@@ -1422,13 +1422,20 @@ function remove_receiver(rb::RBPool, method_name)
     end
 end
 
-function when_connected(fn, rb)
+function _when_connected(fn, rb)
     while !isconnected(rb)
         sleep(0.1)
     end
-    fn()
+    fn(rb)
+
+    return rb
 end
 
+when_connected(fn, url::AbstractString) = _when_connected(fn, component(url))
+
+when_connected(fn, rb::Visor.Process) = _when_connected(fn, rb)
+
+when_connected(fn, rb::Server) = _when_connected(fn, rb)
 
 get_callback(rb::RBConnection, topic) = rb.receiver[topic]
 
@@ -2147,6 +2154,8 @@ function isconnected(rb::RBConnection)
         end
     end
 end
+
+isconnected(rb::Server) = any(c -> isconnected(c), rb.connections)
 
 isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 

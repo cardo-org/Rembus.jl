@@ -248,6 +248,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "component" begin
             include("api/test_component.jl")
         end
+        @time @safetestset "when_connected" begin
+            include("api/test_when_connected.jl")
+        end
         @time @safetestset "component_qos2" begin
             include("api/test_component_qos2.jl")
         end
