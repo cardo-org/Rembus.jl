@@ -15,7 +15,7 @@ sentdata(t) = Rembus.SentData(
 
 Base.isopen(socket::FakeSocket) = socket.connected
 
-router = Rembus.Router()
+router = Rembus.Router("broker")
 
 twin1 = Rembus.Twin(router, "twin1", Rembus.loopback)
 twin2 = Rembus.Twin(router, "twin2", Rembus.loopback)

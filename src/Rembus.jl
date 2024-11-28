@@ -58,7 +58,7 @@ export authorize, unauthorize
 export private_topic, public_topic
 export provide
 export close
-export isconnected, when_connected
+export isconnected, islistening, whenconnected
 export rembus
 export inject
 export forever
@@ -262,6 +262,7 @@ twin_finalize(ctx, twin) = (ctx, twin) -> ()
 abstract type AbstractRouter end
 
 mutable struct Server <: AbstractRouter
+    id::String
     shared::Any
     mode::ConnectionMode
     start_ts::Float64
@@ -286,7 +287,8 @@ mutable struct Server <: AbstractRouter
     zmqcontext::ZMQ.Context
     owners::DataFrame
     component_owner::DataFrame
-    Server(shared=missing) = new(
+    Server(name::AbstractString, shared=missing) = new(
+        name,
         shared,
         anonymous,
         time(),
@@ -309,7 +311,7 @@ end
 terminate(rb::Server) = shutdown(rb.process)
 
 function Base.show(io::IO, srv::Server)
-    return print(io, "$(isdefined(srv, :process) ? srv.process.id : "server")")
+    return print(io, srv.id)
 end
 
 mutable struct RBServerConnection <: RBHandle
@@ -1422,13 +1424,20 @@ function remove_receiver(rb::RBPool, method_name)
     end
 end
 
-function when_connected(fn, rb)
+function _when_connected(fn, rb)
     while !isconnected(rb)
         sleep(0.1)
     end
-    fn()
+    fn(rb)
+
+    return rb
 end
 
+whenconnected(fn, url::AbstractString) = _when_connected(fn, component(url))
+
+whenconnected(fn, rb::Visor.Process) = _when_connected(fn, rb)
+
+whenconnected(fn, rb::Server) = _when_connected(fn, rb)
 
 get_callback(rb::RBConnection, topic) = rb.receiver[topic]
 
@@ -2147,6 +2156,8 @@ function isconnected(rb::RBConnection)
         end
     end
 end
+
+isconnected(rb::Server) = any(c -> isconnected(c), rb.connections)
 
 isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 

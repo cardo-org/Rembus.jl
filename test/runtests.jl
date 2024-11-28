@@ -31,11 +31,11 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "signature" begin
             include("unit/test_signature.jl")
         end
-        @time @safetestset "balancer_round_robin" begin
-            include("unit/test_round_robin.jl")
+        @time @safetestset "broker_round_robin" begin
+            include("unit/test_broker_round_robin.jl")
         end
-        @time @safetestset "balancer_less_busy" begin
-            include("unit/test_less_busy.jl")
+        @time @safetestset "broker_less_busy" begin
+            include("unit/test_broker_less_busy.jl")
         end
         @time @safetestset "logfile" begin
             include("unit/test_logfile.jl")
@@ -247,6 +247,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "component" begin
             include("api/test_component.jl")
+        end
+        @time @safetestset "whenconnected" begin
+            include("api/test_when_connected.jl")
         end
         @time @safetestset "component_qos2" begin
             include("api/test_component_qos2.jl")

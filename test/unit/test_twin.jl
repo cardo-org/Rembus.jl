@@ -9,7 +9,7 @@ function task(pd, router)
 end
 
 identity = UInt8[0, 1, 2, 3, 4]
-router = Rembus.Router()
+router = Rembus.Router("broker")
 proc = process("router", task, args=(router,))
 
 twin = Rembus.Twin(router, "twin", Rembus.loopback)

@@ -3,9 +3,15 @@
 lcov.info
 *.jl.mem
 *.sav
+*.fdb_latexmk
+*.gz
 /docs/Manifest.toml
 Manifest.toml
 /docs/build/
 /build
 /keystore
 LocalPreferences.toml
+paper.pdf
+paper.aux
+paper.bbl
+paper.blg
