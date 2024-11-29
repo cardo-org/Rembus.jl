@@ -20,7 +20,7 @@ function policy_default()
     Rembus.whenconnected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
-        terminate(rb)
+        shutdown(rb)
         @info "pubsub policy_default:$ctx"
     end
     @test length(ctx) == 2
@@ -32,7 +32,7 @@ function policy_all()
     Rembus.whenconnected(rb) do rb
         publish(rb, "mytopic", "hello")
         sleep(0.5)
-        terminate(rb)
+        shutdown(rb)
         @info "pubsub policy_all:$ctx"
     end
     @test length(ctx) == 2
@@ -49,7 +49,7 @@ function policy_round_robin()
 
         publish(rb, "mytopic", "hello")
         sleep(0.5)
-        terminate(rb)
+        shutdown(rb)
     end
     @test length(ctx) == 2
     @test haskey(ctx, "s2")
@@ -67,7 +67,7 @@ function policy_first_up()
 
         publish(rb, "mytopic", "hello")
         sleep(0.5)
-        terminate(rb)
+        shutdown(rb)
     end
     @test length(ctx) == 1
     @test haskey(ctx, "s1")
@@ -75,7 +75,7 @@ end
 
 function test_terminate()
     rb = component(["ws://:7000", "ws://:7001"], :first_up)
-    terminate(rb)
+    shutdown(rb)
 end
 
 

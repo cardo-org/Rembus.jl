@@ -26,13 +26,14 @@ end
 
 
 function start_server()
-    emb = server(zmq=8002, log="debug")
+    emb = server(zmq=8002, log="info")
     expose(emb, df_service)
     expose(emb, rpc_service)
     expose(emb, rpc_fault)
     expose(emb, signal)
     @info "$emb setup completed"
-    #forever(emb)
+
+    return emb
 end
 
 
@@ -47,58 +48,59 @@ function run()
         @component "zmq://:8002/rpc_client"
         result = @rpc rpc_service(1, 2)
         @test result == 3
-        #        df = @rpc df_service()
-        #        @test isa(df, DataFrame)
-        #
-        #        try
-        #            @rpc rpc_service(1)
-        #            @test false
-        #        catch e
-        #            @info "[test_server_zmq] expected rpc_service error: $e"
-        #            @test isa(e, Rembus.RpcMethodException)
-        #        end
-        #
-        #        try
-        #            result = @rpc rpc_fault(0, 0)
-        #            @test false
-        #        catch e
-        #            @info "[test_server_zmq] expected rpc_fault error: $e"
-        #            @test isa(e, Rembus.RpcMethodException)
-        #        end
-        #
-        #        try
-        #            result = @rpc rpc_unknow()
-        #        catch e
-        #            @info "[test_server_zmq] expected rpc_unknow error: $e"
-        #            @test isa(e, Rembus.RpcMethodNotFound)
-        #        end
-        #
-        #        @publish signal(smoke_message)
-        #        @terminate
-        #
-        #        rb = connect("zmq://:8002/mycomponent")
-        #
-        #        publish(rb, "signal", smoke_message)
-        #
-        #        # if an error on the server side occurred the connection is closed
-        #        @test isconnected(rb)
-        #
-        #        close(rb)
-        #        @info "second round"
-        #        sleep(3)
-        #        # reconnect
-        #        rb = connect("zmq://:8002/mycomponent")
-        #        @test isconnected(rb)
-        #        close(rb)
-        #
-        #        rb = connect("zmq://:8002")
-        #        publish(rb, "df_service")
-        #        sleep(0.5)
-        #
-        #        # an invalid packet triggers a read_socket error on server
-        #        HTTP.WebSockets.send(rb.socket, [0x01])
-        #        sleep(0.5)
-        #        @test !isopen(rb.socket)
+        df = @rpc df_service()
+        @test isa(df, DataFrame)
+
+        try
+            @rpc rpc_service(1)
+            @test false
+        catch e
+            @info "[test_server_zmq] expected rpc_service error: $e"
+            @test isa(e, Rembus.RpcMethodException)
+        end
+
+        try
+            result = @rpc rpc_fault(0, 0)
+            @test false
+        catch e
+            @info "[test_server_zmq] expected rpc_fault error: $e"
+            @test isa(e, Rembus.RpcMethodException)
+        end
+
+        try
+            result = @rpc rpc_unknow()
+        catch e
+            @info "[test_server_zmq] expected rpc_unknow error: $e"
+            @test isa(e, Rembus.RpcMethodNotFound)
+        end
+
+        @publish signal(smoke_message)
+        sleep(0.1)
+        @shutdown
+
+        rb = connect("zmq://:8002/mycomponent")
+
+        publish(rb, "signal", smoke_message)
+
+        # if an error on the server side occurred the connection is closed
+        @test isconnected(rb)
+
+        close(rb)
+        @info "second round"
+        sleep(3)
+        # reconnect
+        rb = connect("zmq://:8002/mycomponent")
+        @test isconnected(rb)
+        close(rb)
+
+        rb = connect("zmq://:8002")
+        publish(rb, "df_service")
+        sleep(0.5)
+
+        # an invalid packet logs an error on server
+        HTTP.WebSockets.send(rb.socket, [0x01])
+        sleep(0.1)
+        @test isopen(rb.socket)
     catch e
         @error "[test_server_zmq] error: $e"
         @test false
@@ -109,8 +111,8 @@ function run()
 
 end
 
-#@info "[test_server_zmq] start"
-#run()
-#@test received
-#testsummary()
-#@info "[test_server_zmq] stop"
+@info "[test_server_zmq] start"
+run()
+@test received
+testsummary()
+@info "[test_server_zmq] stop"

@@ -57,7 +57,7 @@ function publish_macroapi(publisher, sub1; waittime=1)
     sleep(waittime / 2)
 
     for cli in [publisher, sub1]
-        @terminate cli
+        @shutdown cli
     end
 end
 
@@ -168,8 +168,8 @@ function types()
         @publish REQUESTOR type_consumer(msg)
     end
     sleep(2)
-    @terminate REQUESTOR
-    @terminate TYPE_LISTENER
+    @shutdown REQUESTOR
+    @shutdown TYPE_LISTENER
 end
 
 function mymethod(n)
@@ -207,7 +207,7 @@ end
 
 @rpc version()
 @rpc uptime()
-@terminate
+@shutdown
 
 types()
 

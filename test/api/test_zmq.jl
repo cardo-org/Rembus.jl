@@ -30,9 +30,9 @@ function run()
     @publish "client" consume("hello")
     @publish "client" consume(df)
 
-    @terminate "client"
-    @terminate "subscriber"
-    @terminate "exposer"
+    @shutdown"client"
+    @shutdown "subscriber"
+    @shutdown "exposer"
 end
 
 execute(run, "test_zmq")

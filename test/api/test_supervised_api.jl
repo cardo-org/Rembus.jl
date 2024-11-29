@@ -49,7 +49,7 @@ function run()
 
     close(client)
     close(sub)
-    terminate(rb)
+    shutdown(rb)
     @test ctx.called === true
 end
 

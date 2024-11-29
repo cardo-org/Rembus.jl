@@ -8,10 +8,10 @@ Connect to the broker with identity `myname`:
 @component "myname"
 ```
 
-Close the connection and terminate the component:
+Close the connection and shutdown the component:
 
 ```julia
-@terminate
+@shutdown
 ```
 
 Loop unless `Ctrl-C` or `shutdown()`:

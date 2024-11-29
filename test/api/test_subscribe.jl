@@ -30,7 +30,7 @@ function run()
     @subscribe topic_2 from = Second(2) + Microsecond(1)
     @reactive
     sleep(1)
-    @terminate
+    @shutdown
 
     @test ctx.topic_1 == 1
     @test ctx.topic_2 == 2

@@ -51,7 +51,7 @@ function run()
         @test isa(e, ErrorException)
         @test e.msg == "unknown process fabulous"
     finally
-        @terminate
+        @shutdown
     end
 end
 

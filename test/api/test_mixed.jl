@@ -41,9 +41,9 @@ function run()
 
     @unexpose "exposer" mymethod
 
-    @terminate "client"
-    @terminate "subscriber"
-    @terminate "exposer"
+    @shutdown "client"
+    @shutdown "subscriber"
+    @shutdown "exposer"
 
 end
 

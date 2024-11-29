@@ -63,7 +63,7 @@ function run()
         ["Authorization" => auth]
     )
 
-    @terminate
+    @shutdown
 end
 
 # for coverage runs

@@ -54,7 +54,7 @@ function run()
         sleep(5)
         @test ctx.service_data == value
         @test ctx.subscriber_data == value
-        @terminate
+        @shutdown
         close(rb)
         close(sub)
     catch e

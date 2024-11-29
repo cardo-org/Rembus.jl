@@ -8,7 +8,7 @@ function connection_failed()
         @info "[test_simple_rpc] expected error: $e"
         @test isa(e, ErrorException)
     finally
-        @terminate
+        @shutdown
     end
 end
 
@@ -20,7 +20,7 @@ function run()
     catch e
         @test false
     finally
-        @terminate
+        @shutdown
     end
 end
 

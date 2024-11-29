@@ -19,7 +19,7 @@ The following macros comprise the API and enable Julia to be supercharged with t
 - [@forever](#forever)
 - [@inject](#inject)
 - [@rpc_timeout](#rpc_timeout)
-- [@terminate](#terminate)
+- [@shutdown](#shutdown)
 
 ## component
 
@@ -253,11 +253,11 @@ Set the maximum wait time for [@rpc](#rpc) requests.
 By default the timeout is set to 5 seconds and may be changed using `REMBUS_TIMEOUT` 
 environment variable.
 
-## terminate
+## shutdown
 
 Close the network connection and shutdown the supervised process associated with the
 component.   
 
 ```julia
-@terminate
+@shutdown
 ```

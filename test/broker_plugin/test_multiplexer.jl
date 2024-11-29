@@ -46,7 +46,7 @@ function run(exposer_url, secure=false)
 
     publish(cli, "subscriber", 2.0)
 
-    @terminate
+    @shutdown
     close(cli)
 end
 

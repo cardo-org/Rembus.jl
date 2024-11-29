@@ -27,7 +27,7 @@ function run()
 
     sleep(2)
 
-    terminate(rb)
+    shutdown(rb)
     @test ctx.count == 1
 end
 

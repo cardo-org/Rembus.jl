@@ -33,7 +33,7 @@ function run()
     # 1 microsec just for cover the skip file check (Rembus.start_reactive)
     @reactive from = Microsecond(1)
     sleep(1)
-    @terminate
+    @shutdown
 
     @test ctx.topic_1 == 0
 end

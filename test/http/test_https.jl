@@ -110,7 +110,7 @@ function run()
         "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
     )
 
-    @terminate
+    @shutdown
     remove_keys(authenticated_component)
 end
 

@@ -80,7 +80,7 @@ function run()
     @info "[test_server_policy] myservice()=$response"
     @test response == [1, 2]
 
-    terminate(client)
+    shutdown(client)
 end
 
 @info "[test_server_policy] start"

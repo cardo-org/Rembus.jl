@@ -85,7 +85,7 @@ function publish_workflow(publisher, sub1, sub2, sub3; waittime=1, testholder=mi
     @unreactive sub3
 
     for cli in [publisher, sub1, sub2, sub3]
-        @terminate cli
+        @shutdown cli
     end
 end
 

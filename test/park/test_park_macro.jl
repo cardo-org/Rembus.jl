@@ -37,7 +37,7 @@ function run()
 
     # just for communicating to the  broker the interest for consume topic
     subscribe(sub, ctx)
-    @terminate sub
+    @shutdown sub
 
     # the subscriber was terminated, messages will be cached by the broker
     send(pub, 1, 10000)
@@ -50,8 +50,8 @@ function run()
     @reactive sub
 
     sleep(6)
-    @terminate pub
-    @terminate sub
+    @shutdown pub
+    @shutdown sub
 
     @info "test results: count=$(ctx.count), out of orders=$(ctx.unordered)"
     @test ctx.unordered == 0

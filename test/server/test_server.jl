@@ -72,7 +72,7 @@ function run()
         end
 
         @publish signal(smoke_message)
-        @terminate
+        @shutdown
 
         rb = connect("mycomponent")
 

@@ -8,7 +8,7 @@ function run()
 
     sleep(1)
     close(rb)
-    @terminate
+    @shutdown
 end
 
 execute(run, "test_already_authenticated")

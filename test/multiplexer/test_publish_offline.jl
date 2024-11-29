@@ -11,7 +11,7 @@ function run()
 
     publish(rb, "mytopic")
 
-    terminate(rb)
+    shutdown(rb)
 end
 
 @info "[test_publish_online] start"

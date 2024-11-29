@@ -24,7 +24,7 @@ function run()
 
         sleep(8)
         @test ctx.data == value
-        @terminate
+        @shutdown
     catch e
         @error "[test_simple_publish] error: $e"
         @test false

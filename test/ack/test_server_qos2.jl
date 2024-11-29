@@ -82,7 +82,7 @@ function run()
     @test ctx.msgid["sub_ack"] == ctx.msgid["pub_pubsub"]
     @test ctx.msgid["sub_ack2"] == ctx.msgid["pub_pubsub"]
 
-    terminate(rb)
+    shutdown(rb)
     close(pub_rb)
 end
 

@@ -21,7 +21,7 @@ Rembus API functions:
 - [forever](#forever)
 - [inject](#inject)
 - [close](#close)
-- [terminate](#terminate)
+- [shutdown](#shutdown)
 
 ## component
 
@@ -274,13 +274,13 @@ close(rb)
 
 > NOTE: `close` applies to connections setup by [`connect`](#connect) api.
 
-## terminate
+## shutdown
 
 Close the network connection and shutdown the supervised process associated with the
 component.
 
 ```julia
-terminate(rb)
+shutdown(rb)
 ```
 
-> NOTE: `terminate` applies to connections setup by [`component`](#component) api.
+> NOTE: `shutdown` applies to connections setup by [`component`](#component) api.

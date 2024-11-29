@@ -4,7 +4,6 @@ using JSON3
 using HTTP
 using Logging
 using Rembus
-using Visor
 using Test
 
 Rembus.rembus_dir!("/tmp/rembus")

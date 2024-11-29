@@ -21,7 +21,7 @@ function verify(cid, wrong_challenge=nothing)
         server_challenge = wrong_challenge
     end
 
-    router = Rembus.Router()
+    router = Rembus.Router("broker")
     proc = process("router", task, args=(router,))
 
     twin = Rembus.Twin(router, "twin", Rembus.loopback)

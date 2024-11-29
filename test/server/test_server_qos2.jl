@@ -47,8 +47,8 @@ function run()
     publish(rb, "mytopic", qos=QOS2)
     sleep(1)
 
-    terminate(rb)
-    terminate(srv)
+    shutdown(rb)
+    shutdown(srv)
     sleep(1)
     @test ctx.count == 1
 end

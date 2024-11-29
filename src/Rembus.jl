@@ -39,7 +39,7 @@ export @reactive, @unreactive
 export @inject
 export @rpc_timeout
 export @forever
-export @terminate
+export @shutdown
 
 # rembus client api
 export component
@@ -62,7 +62,6 @@ export isconnected, islistening, whenconnected
 export rembus
 export inject
 export forever
-export terminate
 export egress_interceptor, ingress_interceptor
 export rbinfo
 export register, unregister
@@ -308,7 +307,7 @@ mutable struct Server <: AbstractRouter
     )
 end
 
-terminate(rb::Server) = shutdown(rb.process)
+Visor.shutdown(rb::Server) = shutdown(rb.process)
 
 function Base.show(io::IO, srv::Server)
     return print(io, srv.id)
@@ -649,11 +648,11 @@ end
 Visor.shutdown(nothing) = nothing
 
 """
-    @terminate
+    @shutdown
 
-Close the connection and terminate the component.
+Close the connection and shutdown the component.
 """
-macro terminate(name=nothing)
+macro shutdown(name=nothing)
     quote
         shutdown(name2proc($(esc(name))))
         Rembus.CONFIG.cid = RbURL()
@@ -1374,14 +1373,15 @@ function pool_task(pd, rb::RBPool)
 
         while true
             msg = fetch(pd.inbox)
+            if isshutdown(msg)
+                return
+            end
             while !isconnected(rb)
                 sleep(0.1)
             end
             take!(pd.inbox)
 
-            if isshutdown(msg)
-                return
-            elseif isrequest(msg)
+            if isrequest(msg)
                 @async call_request(rb, msg)
             else
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
@@ -1391,7 +1391,7 @@ function pool_task(pd, rb::RBPool)
         @error "pool_task error: $e"
     finally
         for p in processes
-            terminate(p)
+            shutdown(p)
         end
     end
 end
@@ -2567,7 +2567,7 @@ function component(urls::Vector, policy=:default)
     return component(pool)
 end
 
-terminate(proc::Visor.Process) = shutdown(proc)
+Visor.shutdown(proc::Visor.Supervised) = Visor.shutdown(proc)
 
 function expose(proc::Visor.Process, fn::Function, wait=true)
     return call(proc, Rembus.AddImpl(fn, wait), timeout=call_timeout())

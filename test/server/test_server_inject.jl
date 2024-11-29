@@ -35,7 +35,7 @@ function run()
     @info "[test_server_inject] latest_service()=$response"
     @test response == 2
 
-    terminate(client)
+    shutdown(client)
 end
 
 @info "[test_server_inject] start"
