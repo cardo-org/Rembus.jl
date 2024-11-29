@@ -33,9 +33,10 @@ function run()
     srv = server(ctx, mode="anonymous", ws=9000)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
-    broker(wait=false, name=BROKER_NAME)
+    bro = broker(wait=false, name=BROKER_NAME)
 
-    Rembus.islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
+    #islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
+    islistening(bro, wait=20)
 
     # it seems that coverage requires some sleep time
     sleep(1)
@@ -47,6 +48,11 @@ function run()
 
     publish(cli, "mytopic", n)
     sleep(1)
+
+    # the server send a QOS2 message to a broker
+    # this tests that Ack2 messages are delivered (and currently ignored)
+    # to the broker
+    publish(srv, "hello", qos=QOS2)
 
     close(cli)
     @test ctx.n == n

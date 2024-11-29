@@ -84,7 +84,7 @@ function unauthorize(router, twin, msg)
     return sts
 end
 
-function shutdown_caronte(router)
+function shutdown_broker(router)
     @debug "shutting down broker ..."
     try
         Visor.shutdown(router.process.supervisor)
@@ -241,7 +241,7 @@ function admin_command(router, twin, msg::AdminReqMsg)
         end
     elseif cmd == SHUTDOWN_CMD
         if isadmin(router, twin, cmd)
-            @async shutdown_caronte(router)
+            @async shutdown_broker(router)
         else
             sts = STS_GENERIC_ERROR
         end

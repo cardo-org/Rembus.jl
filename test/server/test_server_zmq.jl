@@ -101,6 +101,15 @@ function run()
         HTTP.WebSockets.send(rb.socket, [0x01])
         sleep(0.1)
         @test isopen(rb.socket)
+
+        # send an Admin command to the server
+        Rembus.rpcreq(
+            rb,
+            Rembus.AdminReqMsg(
+                Rembus.BROKER_CONFIG, Dict(Rembus.COMMAND => Rembus.SHUTDOWN_CMD)
+            )
+        )
+        sleep(1)
     catch e
         @error "[test_server_zmq] error: $e"
         @test false

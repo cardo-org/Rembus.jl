@@ -1131,6 +1131,7 @@ function zeromq_receiver(router)
                 rethrow()
             end
             @warn "[ZMQ] recv error: $e"
+            showerror(stdout, e, catch_backtrace())
             @showerror e
         end
     end
@@ -2300,17 +2301,22 @@ function islistening(
     return false
 end
 
-function islistening(router::AbstractRouter; protocol::Vector{Symbol}=[:ws])
-    listeners = []
-    for p in protocol
-        if haskey(router.listeners, p)
-            push!(listeners, router.listeners[p].status === on)
-        else
-            push!(listeners, false)
+function islistening(router::AbstractRouter; protocol::Vector{Symbol}=[:ws], wait=0)
+    while wait >= 0
+        all_listening = true
+        for p in protocol
+            if !haskey(router.listeners, p)
+                return false
+            elseif router.listeners[p].status === off
+                all_listening = false
+            end
         end
+        all_listening && break
+        wait -= 0.2
+        sleep(0.2)
     end
 
-    return all(listeners)
+    return (wait >= 0)
 end
 
 isconnected(twin) = twin.socket !== nothing && isopen(twin.socket)
