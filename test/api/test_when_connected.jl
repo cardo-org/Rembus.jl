@@ -11,15 +11,20 @@ end
 function server_test()
     srv = server(ws=3000)
     bro = broker(wait=false)
-    add_node(bro, "ws://127.0.0.1:3000/myserver")
+    try
+        add_node(bro, "ws://127.0.0.1:3000/myserver")
 
-    whenconnected(srv) do rb
-        ver = rpc(rb, "version")
-        @info "[server_test] version: $ver"
-        @test ver == Rembus.VERSION
+        whenconnected(srv) do rb
+            ver = rpc(rb, "version")
+            @info "[server_test] version: $ver"
+            @test ver == Rembus.VERSION
+        end
+    catch e
+        @error "[test_when_connected] server_test error: $e"
+        @test false
+    finally
+        remove_node(bro, "ws://127.0.0.1:3000/myserver")
     end
-
-    remove_node(bro, "ws://127.0.0.1:3000/myserver")
 end
 
 try

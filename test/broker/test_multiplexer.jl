@@ -33,7 +33,7 @@ function run(exposer_url, secure=false)
 
     # to be invoked in the edge_broker application
     # it connect from edge_broker to main_broker.
-    connect(edge_broker, broker_url)
+    add_node(edge_broker, broker_url)
 
     @component exposer_url
     @expose foo
@@ -45,6 +45,8 @@ function run(exposer_url, secure=false)
     @test res == 2
 
     publish(cli, "subscriber", 2.0)
+
+    remove_node(edge_broker, broker_url)
 
     @shutdown
     close(cli)

@@ -2,7 +2,7 @@ include("../utils.jl")
 
 function mymethod(ctx, rb, n)
     # covers Base.show(rb::RBServerConnection)
-    @info "[test_broker_server] rb=$rb"
+    @info "[test_broker_server_zmq] rb=$rb"
     return n + 1
 end
 
@@ -18,24 +18,19 @@ end
 function init()
     d = Rembus.broker_dir(BROKER_NAME)
     if !isdir(d)
-        @info "[test_broker_server]: making dir $d"
+        @info "[test_broker_server_zmq]: making dir $d"
         mkdir(d)
     end
 
     fn = joinpath(d, "servers.json")
     open(fn, "w") do io
-        write(io, JSON3.write(["ws://:9000/s1"]))
+        write(io, JSON3.write(["zmq://:9002/s1"]))
     end
-end
-
-function teardown()
-    dir = Rembus.broker_dir(BROKER_NAME)
-    rm(joinpath(dir, "servers.json"), force=true)
 end
 
 function run()
     ctx = TestBag()
-    srv = server(ctx, mode="anonymous", ws=9000)
+    srv = server(ctx, mode="anonymous", zmq=9002)
     expose(srv, mymethod)
     subscribe(srv, mytopic)
     bro = broker(wait=false, name=BROKER_NAME)
@@ -52,25 +47,26 @@ function run()
     @test response == n + 1
 
     publish(cli, "mytopic", n)
-    sleep(0.1)
+    sleep(1)
 
     # the server send a QOS2 message to a broker
     # this tests that Ack2 messages are delivered (and currently ignored)
     # to the broker
     publish(srv, "hello", qos=QOS2)
-
+    sleep(1)
     close(cli)
     @test ctx.n == n
 end
 
-@info "[test_broker_server] start"
+@info "[test_broker_server_zmq] start"
 try
     init()
     run()
 catch e
-    @error "unexepected error: $e"
+    @test false
+    @error "unexpected error: $e"
+    showerror(stdout, e, catch_backtrace())
 finally
     shutdown()
-    teardown()
 end
-@info "[test_broker_server] stop"
+@info "[test_broker_server_zmq] stop"

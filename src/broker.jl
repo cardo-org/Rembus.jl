@@ -56,6 +56,19 @@ ucid(twin::Twin) = twin.id
 
 hasname(twin::Twin) = twin.hasname
 
+iszmq(twin::Twin) = (twin.type === zdealer) || (twin.type === zrouter)
+
+function Base.close(twin::Twin)
+    if twin.type === zdealer
+        close(twin.socket)
+        close(twin.zmqcontext)
+    elseif twin.type === socket
+        if twin.socket !== nothing
+            close(twin.socket)
+        end
+    end
+end
+
 mutable struct Msg
     ptype::UInt8
     content::RembusMsg
@@ -359,7 +372,9 @@ twin_task(::RBServerConnection) = server_task
 function create_twin(id, router::AbstractRouter, type::NodeType)
     if haskey(router.id_twin, id)
         tw = router.id_twin[id]
-        tw.type = type
+        if type !== loopback
+            tw.type = type
+        end
         return tw
     else
         twin = build_twin(router, id, type)
@@ -479,7 +494,7 @@ function setidentity(router, twin, msg; isauth=false, paging=true)
 end
 
 function setidentity(::Server, rb::RBServerConnection, msg; isauth=false, paging=true)
-    rb.client.id = msg.cid
+    rb.id = msg.cid
     rb.isauth = isauth
     return rb
 end
@@ -1061,6 +1076,7 @@ function zmq_receive(rb::Twin)
             else
                 @error "zmq message decoding: $e"
                 @showerror e
+                close(rb)
             end
         end
     end
@@ -2814,18 +2830,25 @@ protocol(rb::Twin) = RbURL(rb.id).protocol
 Broker task that establishes the connection to servers and brokers.
 =#
 function egress_task(proc, twin::Twin, remote::RbURL)
-    _connect(twin, proc)
-    if hasname(twin)
-        msg = IdentityMsg(RbURL(twin.id).id)
-        wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
-    end
+    try
+        _connect(twin, proc)
+        if hasname(twin)
+            msg = IdentityMsg(RbURL(twin.id).id)
+            wait_response(twin, Msg(TYPE_IDENTITY, msg, twin), request_timeout())
+        end
 
-    msg = take!(proc.inbox)
-    if isshutdown(msg)
-        close(twin.socket)
-    else
-        # the only message is an error condition
-        error(msg)
+        msg = take!(proc.inbox)
+        if isshutdown(msg)
+            close(twin.socket)
+        else
+            # the only message is an error condition
+            error(msg)
+        end
+    catch e
+        @error "[$twin] egress_task: $e"
+        rethrow(e)
+    finally
+        close(twin)
     end
     @debug "[$proc] connect to broker done"
 end

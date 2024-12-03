@@ -230,6 +230,10 @@ end
 
 Base.isless(rb1::RBConnection, rb2::RBConnection) = length(rb1.out) < length(rb2.out)
 
+ucid(rb::RBConnection) = rb.client.id
+
+iszmq(rb::RBConnection) = rb.client.protocol === :zmq
+
 opstatus(rb::RBHandle) = isconnected(rb) ? '👍' : '👎'
 rbinfo(rb::RBHandle) = "$(cid(rb.client))$(opstatus(rb))"
 rbinfo(rb::Visor.Process) = "$rb$(opstatus(rb.args[1]))"
@@ -238,7 +242,7 @@ function Base.show(io::IO, rb::RBConnection)
     return print(io, rbinfo(rb))
 end
 
-hasname(rb::RBHandle) = hasname(rb.client)
+hasname(rb::RBConnection) = hasname(rb.client)
 
 get_ingress(rb::RBConnection) = rb.ingress
 
@@ -316,7 +320,7 @@ end
 mutable struct RBServerConnection <: RBHandle
     type::NodeType
     router::Server
-    client::RbURL
+    id::String
     isauth::Bool
     reactive::Bool
     session::Dict{String,Any}
@@ -331,7 +335,7 @@ mutable struct RBServerConnection <: RBHandle
         new(
             type,
             server,
-            RbURL(name),
+            name,
             false,
             true, # reactive
             Dict(),
@@ -344,7 +348,7 @@ mutable struct RBServerConnection <: RBHandle
     end
 end
 
-ucid(rb::RBServerConnection) = rb.client.id
+ucid(rb::RBServerConnection) = rb.id
 
 Base.isless(
     rb1::RBServerConnection,
@@ -381,7 +385,9 @@ mutable struct RBPool <: RBHandle
     )
 end
 
-cid(rb::RBHandle) = cid(rb.client)
+cid(rb::RBConnection) = cid(rb.client)
+
+cid(rb::RBServerConnection) = rb.id
 
 function cid(rb::RBPool)
     cids = [cid(conn) for conn in rb.connections]
@@ -1658,7 +1664,7 @@ function handle_input(rb, msg)
 end
 
 
-acks_file(c::RbURL) = joinpath(rembus_dir(), "$(c.id).acks")
+acks_file(id::AbstractString) = joinpath(rembus_dir(), "$id.acks")
 
 #=
     load_pubsub_received(component::RbURL)
@@ -1668,7 +1674,7 @@ awaiting Ack2 acknowledgements.
 =#
 function load_pubsub_received(component::RbURL)
     if hasname(component)
-        path = acks_file(component)
+        path = acks_file(component.id)
         if isfile(path)
             @debug "[$rb] loading $path"
             df = DataFrame(read_parquet(path))
@@ -1688,7 +1694,7 @@ Save to file the ids of received Pub/Sub messages
 waitings Ack2 acknowledgements.
 =#
 function save_pubsub_received(rb::RBHandle)
-    path = acks_file(rb.client)
+    path = acks_file(ucid(rb))
     db = DuckDB.DB()
     @debug "[$rb] saving $path"
     df = DataFrame(ts=rb.ack_df.ts, id=UInt64.(rb.ack_df.id .& 0xffffffffffffffff))
@@ -1776,12 +1782,12 @@ function read_socket(socket, process, rb, isconnected::Condition)
             if !isempty(response)
                 parse_msg(rb, response)
             else
-                @debug "[$(cid(rb.client))] connection closed"
+                @debug "[$(cid(rb))] connection closed"
                 close(socket)
             end
         end
     catch e
-        @debug "[$(cid(rb.client))] connection closed: $e"
+        @debug "[$(cid(rb))] connection closed: $e"
         if !isa(e, HTTP.WebSockets.WebSocketError) ||
            !isa(e.message, HTTP.WebSockets.CloseFrameBody) ||
            e.message.status != 1000
@@ -1795,9 +1801,9 @@ function update_cid(rb::RBServerConnection, process, id)
     setname(process, id)
     # Search for a component with the same name
     filter!(rb.router.id_twin) do (kid, cmp)
-        if cmp.client.id == id
+        if cmp.id == id
             @debug "rbserver updating [$kid] -> [$id]"
-            rb.client = RbURL(id)
+            rb.id = id
             return false
         end
 
@@ -1840,7 +1846,7 @@ function read_socket(socket, process, rb::RBServerConnection)
             end
         end
     catch e
-        @debug "[$(cid(rb.client))] connection closed: $e"
+        @debug "[$(cid(rb))] connection closed: $e"
         if isa(e, EOFError) ||
            (
             isa(e, HTTP.WebSockets.WebSocketError) &&
@@ -1872,7 +1878,7 @@ function main_task(pd, rb::RBHandle)
     finally
         close(rb.socket)
     end
-    @debug "[$(cid(rb.client))] main_task done"
+    @debug "[$(cid(rb))] main_task done"
 end
 
 function setup_receiver(process, socket, rb::RBConnection, isconnected)
@@ -1920,7 +1926,7 @@ function zmq_receive(rb::RBHandle)
             if !isopen(rb.socket)
                 break
             else
-                @error "zmq message decoding: $e"
+                @error "[$rb] zmq message decoding: $e"
                 @showerror e
             end
         end
@@ -1929,7 +1935,7 @@ function zmq_receive(rb::RBHandle)
 end
 
 #=
-Establish the connection from a component or from a broker twin..
+Establish the connection from a component or from a broker's twin..
 =#
 function zmq_connect(rb)
     rb.zmqcontext = ZMQ.Context()
@@ -1994,7 +2000,7 @@ function pkfile(name)
     return joinpath(cfgdir, name)
 end
 
-function resend_attestate(rb, response)
+function resend_attestate(rb::RBConnection, response)
     try
         msg = attestate(rb, response)
         put!(rb.process.inbox, msg)
@@ -2017,40 +2023,40 @@ function sign(ctx::MbedTLS.PKContext, hash_alg::MbedTLS.MDKind, hash, rng)
 end
 
 function attestate(rb, response)
-    file = pkfile(rb.client.id)
+    file = pkfile(ucid(rb))
     if !isfile(file)
-        error("missing/invalid $(rb.client.id) secret")
+        error("missing/invalid $(ucid(rb)) secret")
     end
 
     try
         ctx = MbedTLS.parse_keyfile(file)
-        plain = encode([Vector{UInt8}(response.data), rb.client.id])
+        plain = encode([Vector{UInt8}(response.data), ucid(rb)])
         hash = MbedTLS.digest(MD_SHA256, plain)
         signature = sign(ctx, MD_SHA256, hash, MersenneTwister(0))
-        return Attestation(rb.client.id, signature)
+        return Attestation(ucid(rb), signature)
     catch e
         if isa(e, MbedTLS.MbedException)
             # try with a plain secret
             secret = readline(file)
             plain = encode([Vector{UInt8}(response.data), secret])
             hash = MbedTLS.digest(MD_SHA256, plain)
-            @debug "[$(rb.client.id)] digest: $hash"
-            return Attestation(rb.client.id, hash)
+            @debug "[$(ucid(rb))] digest: $hash"
+            return Attestation(ucid(rb), hash)
         end
     end
 end
 
 function authenticate(rb)
-    if !hasname(rb.client)
+    if !hasname(rb)
         return nothing
     end
 
     reason = nothing
-    msg = IdentityMsg(rb.client.id)
+    msg = IdentityMsg(ucid(rb))
     response = setup_request(rb, msg, request_timeout())
     if (response.status == STS_GENERIC_ERROR)
         close(rb.socket)
-        throw(AlreadyConnected(rb.client.id))
+        throw(AlreadyConnected(ucid(rb)))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(rb, response)
         response = setup_request(rb, msg, request_timeout())
@@ -2060,7 +2066,7 @@ function authenticate(rb)
         close(rb.socket)
         rembuserror(code=response.status, reason=reason)
     else
-        if rb.client.protocol == :zmq
+        if iszmq(rb)
             CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     end
@@ -2119,7 +2125,7 @@ function _connect(rb, prc)
 end
 
 function _connect(rb)
-    prc = process(cid(rb.client), main_task, args=(rb,))
+    prc = process(cid(rb), main_task, args=(rb,))
     supervise([prc], wait=false)
     yield()
     return _connect(rb, prc)
@@ -2131,7 +2137,7 @@ function ws_ping(rb)
 end
 
 function rembus_write(rb::RBHandle, msg)
-    @debug ">> [$(cid(rb.client))] $(isdefined(msg, :id) ? msg.id : "") -> $msg"
+    @debug ">> [$(cid(rb))] $(isdefined(msg, :id) ? msg.id : "") -> $msg"
     return transport_send(Val(rb.type), rb, msg)
 end
 
@@ -2165,8 +2171,8 @@ isconnected(p::Visor.Process) = isconnected(p.args[1])
 
 function connect(rb::RBConnection)
     if !isconnected(rb)
-        if rb.client.protocol !== :zmq && CONFIG.connection_mode === authenticated
-            if !hasname(rb.client)
+        if !iszmq(rb) && CONFIG.connection_mode === authenticated
+            if !hasname(rb)
                 close(rb)
                 error("anonymous components not allowed")
             end
@@ -2293,7 +2299,7 @@ function connect(rb::RBPool)
         try
             connect(c)
         catch e
-            @warn "[$(c.client.id)] error: $e"
+            @warn "[$(ucid(c))] error: $e"
         end
     end
 
@@ -2349,7 +2355,7 @@ end
 function Base.close(rb::RBServerConnection)
     close_handle(rb)
     filter!(rb.router.connections) do conn
-        conn.client.id !== rb.client.id
+        conn.id !== rb.id
     end
 end
 
@@ -2809,14 +2815,14 @@ end
 # """
 function zmq_ping(rb::RBConnection)
     try
-        if rb.client.protocol == :zmq
+        if iszmq(rb)
             if isconnected(rb)
-                rpcreq(rb, PingMsg(rb.client.id))
+                rpcreq(rb, PingMsg(ucid(rb)))
             end
             CONFIG.zmq_ping_interval > 0 && Timer(tmr -> zmq_ping(rb), CONFIG.zmq_ping_interval)
         end
     catch e
-        @debug "[$(cid(rb.client))]: pong not received"
+        @debug "[$(cid(rb))]: pong not received"
         @showerror e
     end
 
@@ -3232,7 +3238,7 @@ function get_response(rb, msg, response; raise=true)
         outcome = rembuserror(
             raise,
             code=response.status,
-            cid=rb.client.id,
+            cid=ucid(rb),
             topic=topic,
             reason=response.data)
     end

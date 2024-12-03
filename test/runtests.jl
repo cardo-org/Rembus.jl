@@ -67,45 +67,48 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "server"
-        #        @time @safetestset "broker_add_server" begin
-        #            include("server/test_broker_add_server.jl")
-        #        end
-        #        @time @safetestset "broker_server" begin
-        #            include("server/test_broker_server.jl")
-        #        end
+        @time @safetestset "broker_add_server" begin
+            include("server/test_broker_add_server.jl")
+        end
+        @time @safetestset "broker_server" begin
+            include("server/test_broker_server.jl")
+        end
+        @time @safetestset "broker_connect" begin
+            include("server/test_broker_connect.jl")
+        end
         @time @safetestset "broker_server_zmq" begin
             include("server/test_broker_server_zmq.jl")
         end
-        #        @time @safetestset "server_multiple_broker" begin
-        #            include("server/test_server_multiple_broker.jl")
-        #        end
-        #        @time @safetestset "server" begin
-        #            include("server/test_server.jl")
-        #        end
-        #        @time @safetestset "server_qos2" begin
-        #            include("server/test_server_qos2.jl")
-        #        end
-        #        @time @safetestset "server_error" begin
-        #            include("server/test_server_error.jl")
-        #        end
-        #        @time @safetestset "server_inject" begin
-        #            include("server/test_server_inject.jl")
-        #        end
-        #        @time @safetestset "server_policy" begin
-        #            include("server/test_server_policy.jl")
-        #        end
-        #        @time @safetestset "server_late_expose" begin
-        #            include("server/test_server_late_expose.jl")
-        #        end
-        #        @time @safetestset "broker_server_timeout" begin
-        #            include("server/test_broker_server_timeout.jl")
-        #        end
-        #        @time @safetestset "loopback" begin
-        #            include("server/test_loopback.jl")
-        #        end
-        #        @time @safetestset "register_server" begin
-        #            include("server/test_register_server.jl")
-        #        end
+        @time @safetestset "server_multiple_broker" begin
+            include("server/test_server_multiple_broker.jl")
+        end
+        @time @safetestset "server" begin
+            include("server/test_server.jl")
+        end
+        @time @safetestset "server_qos2" begin
+            include("server/test_server_qos2.jl")
+        end
+        @time @safetestset "server_error" begin
+            include("server/test_server_error.jl")
+        end
+        @time @safetestset "server_inject" begin
+            include("server/test_server_inject.jl")
+        end
+        @time @safetestset "server_policy" begin
+            include("server/test_server_policy.jl")
+        end
+        @time @safetestset "server_late_expose" begin
+            include("server/test_server_late_expose.jl")
+        end
+        @time @safetestset "broker_server_timeout" begin
+            include("server/test_broker_server_timeout.jl")
+        end
+        @time @safetestset "loopback" begin
+            include("server/test_loopback.jl")
+        end
+        @time @safetestset "register_server" begin
+            include("server/test_register_server.jl")
+        end
     end
     if GROUP == "all" || GROUP == "ack"
         @time @safetestset "qos0" begin

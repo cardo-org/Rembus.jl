@@ -1,8 +1,13 @@
 include("../utils.jl")
 
-broker(wait=false)
-@test from("broker") !== nothing
-shutdown()
+try
+    broker(wait=false)
+    @test from("broker") !== nothing
+catch e
+    @error "[test_caronte] unexpected error: $e"
+finally
+    shutdown()
+end
 
 sleep(1)
 @test from("broker") === nothing
