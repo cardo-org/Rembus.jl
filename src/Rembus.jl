@@ -50,7 +50,6 @@ export expose, unexpose
 export subscribe, unsubscribe
 export direct
 export rpc
-export rpc_future
 export fetch_response
 export publish
 export reactive, unreactive
@@ -273,6 +272,7 @@ mutable struct Server <: AbstractRouter
     ingress::Union{Nothing,Function}
     topic_function::Dict{String,Function}
     topic_auth::Dict{String,Dict{String,Bool}} # topic => {twin.id => true}
+    admins::Set{String}
     twin_initialize::Function
     twin_finalize::Function
     subinfo::Dict{String,Float64}
@@ -299,6 +299,7 @@ mutable struct Server <: AbstractRouter
         nothing,
         Dict(),
         Dict(),
+        Set(),
         twin_initialize,
         twin_finalize,
         Dict(),
@@ -592,6 +593,14 @@ struct CastCall
     qos::UInt8
     wait::Bool
     CastCall(topic, data, qos=QOS0, wait=true) = new(topic, data, qos, wait)
+end
+
+abstract type RembusCmd end
+
+struct FutureCall{T<:RembusCmd}
+    future::Distributed.Future
+    request::T
+    FutureCall(req) = new{typeof(req)}(Distributed.Future(), req)
 end
 
 Base.show(io::IO, call::CastCall) = print(io, call.topic)
@@ -1126,7 +1135,12 @@ struct SetHolder
     shared::Any
 end
 
-struct AddImpl
+struct RpcRequest <: RembusCmd
+    topic::String
+    data::Any
+end
+
+struct AddImpl <: RembusCmd
     topic::String
     fn::Function
     wait::Bool
@@ -1134,14 +1148,14 @@ struct AddImpl
     AddImpl(topic::AbstractString, fn::Function, wait=true) = new(topic, fn, wait)
 end
 
-struct RemoveImpl
+struct RemoveImpl <: RembusCmd
     fn::String
     wait::Bool
     RemoveImpl(fn::AbstractString, wait=true) = new(fn, wait)
     RemoveImpl(fn::Function, wait=true) = new(string(fn), wait)
 end
 
-struct AddInterest
+struct AddInterest <: RembusCmd
     topic::String
     fn::Function
     msg_from::Union{Real,Period,Dates.CompoundPeriod}
@@ -1159,21 +1173,21 @@ struct AddInterest
     ) = new(string(fn), fn, msg_from, wait)
 end
 
-struct RemoveInterest
+struct RemoveInterest <: RembusCmd
     fn::String
     wait::Bool
     RemoveInterest(fn::AbstractString, wait=true) = new(fn, wait)
     RemoveInterest(fn::Function, wait=true) = new(string(fn), wait)
 end
 
-struct Reactive
+struct Reactive <: RembusCmd
     status::Bool
     msg_from::Union{Real,Period,Dates.CompoundPeriod}
     wait::Bool
     Reactive(status, msg_from, wait=true) = new(status, msg_from, wait)
 end
 
-struct EnableAck
+struct EnableAck <: RembusCmd
     status::Bool
 end
 
@@ -1245,48 +1259,92 @@ end
 
 const last_error = LastErrorLog()
 
-function call_request(rb, msg)
+function fulfill_future(rb, msg)
+    req = msg.request
+    if isa(req, AddImpl)
+        expose(rb, req.topic, req.fn, msg.future)
+    elseif isa(req, RemoveImpl)
+        unexpose(rb, req.fn, msg.future)
+    elseif isa(req, AddInterest)
+        subscribe(
+            rb,
+            req.topic,
+            req.fn,
+            msg.future,
+            from=req.msg_from,
+        )
+    elseif isa(req, RemoveInterest)
+        unsubscribe(rb, req.fn, msg.future)
+    elseif isa(req, Reactive)
+        if req.status
+            reactive(
+                rb,
+                msg.future,
+                from=req.msg_from,
+            )
+        else
+            unreactive(rb, msg.future)
+        end
+    else
+        rpcreq(rb, RpcReqMsg(req.topic, req.data), msg.future)
+    end
+
+    return nothing
+end
+
+function fulfill_request(rb, msg, wait)
     req = msg.request
     if isa(req, SetHolder)
-        result = inject(rb, msg.request.shared)
+        result = inject(rb, req.shared)
     elseif isa(req, AddImpl)
         result = expose(
-            rb, msg.request.topic, msg.request.fn, raise=false, wait=msg.request.wait
+            rb, req.topic, req.fn, raise=false, wait=wait
         )
     elseif isa(req, RemoveImpl)
-        result = unexpose(rb, msg.request.fn, raise=false, wait=msg.request.wait)
+        result = unexpose(rb, req.fn, raise=false, wait=wait)
     elseif isa(req, AddInterest)
         result = subscribe(
             rb,
-            msg.request.topic,
-            msg.request.fn,
-            from=msg.request.msg_from,
+            req.topic,
+            req.fn,
+            from=req.msg_from,
             raise=false,
-            wait=msg.request.wait
+            wait=wait
         )
     elseif isa(req, RemoveInterest)
-        result = unsubscribe(rb, msg.request.fn, raise=false, wait=msg.request.wait)
+        result = unsubscribe(rb, req.fn, raise=false, wait=wait)
     elseif isa(req, Reactive)
         if req.status
             result = reactive(
                 rb,
-                from=msg.request.msg_from,
+                from=req.msg_from,
                 raise=false,
-                wait=msg.request.wait
+                wait=wait
             )
         else
-            result = unreactive(rb, raise=false, wait=msg.request.wait)
+            result = unreactive(rb, raise=false, wait=wait)
         end
     else
         result = rpc(
             rb,
-            msg.request.topic,
-            msg.request.data,
+            req.topic,
+            req.data,
             raise=false,
-            wait=msg.request.wait
+            wait=wait
         )
     end
-    reply(msg, result)
+
+    return result
+end
+
+
+function blocking_request(rb, msg)
+    try
+        result = fulfill_request(rb, msg, true)
+        reply(msg, result)
+    catch e
+        @error "[$rb] blocking request $msg: $e"
+    end
 end
 
 function rembus_task(pd, rb, init_fn)
@@ -1309,7 +1367,9 @@ function rembus_task(pd, rb, init_fn)
             elseif isa(msg, RembusMsg)
                 send_message(rb, msg)
             elseif isrequest(msg)
-                @async call_request(rb, msg)
+                @async blocking_request(rb, msg)
+            elseif isa(msg, FutureCall)
+                fulfill_future(rb, msg)
             else
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
@@ -1388,7 +1448,9 @@ function pool_task(pd, rb::RBPool)
             take!(pd.inbox)
 
             if isrequest(msg)
-                @async call_request(rb, msg)
+                @async blocking_request(rb, msg)
+            elseif isa(msg, FutureCall)
+                fulfill_future(rb, msg)
             else
                 publish(rb, msg.topic, msg.data, qos=msg.qos)
             end
@@ -1441,9 +1503,7 @@ end
 
 whenconnected(fn, url::AbstractString) = _when_connected(fn, component(url))
 
-whenconnected(fn, rb::Visor.Process) = _when_connected(fn, rb)
-
-whenconnected(fn, rb::Server) = _when_connected(fn, rb)
+whenconnected(fn, rb) = _when_connected(fn, rb)
 
 get_callback(rb::RBConnection, topic) = rb.receiver[topic]
 
@@ -2169,6 +2229,8 @@ isconnected(rb::RBPool) = any(c -> isconnected(c), rb.connections)
 
 isconnected(p::Visor.Process) = isconnected(p.args[1])
 
+isconnected(pool::Vector) = any(c -> isconnected(c), pool)
+
 function connect(rb::RBConnection)
     if !isconnected(rb)
         if !iszmq(rb) && CONFIG.connection_mode === authenticated
@@ -2290,7 +2352,7 @@ function callbacks(rb::RBConnection)
 end
 
 function callbacks(twin::Twin)
-    # Acctually the broker does not declares to connecting nodes
+    # Actually the broker does not declares to connecting nodes
     # the list of exposed and subscribed methods.
 end
 
@@ -2428,6 +2490,18 @@ function unreactive(rb::RBHandle; raise=true, wait=true)
     return response
 end
 
+function unreactive(rb::RBHandle, future::Distributed.Future)
+    response = rpcreq(
+        rb,
+        AdminReqMsg(BROKER_CONFIG, Dict(COMMAND => REACTIVE_CMD, STATUS => false)),
+        future
+    )
+    rb.reactive = false
+
+    return response
+end
+
+
 """
     reactive(
         rb::RBHandle;
@@ -2459,6 +2533,28 @@ function reactive(
         timeout=timeout,
         broadcast=true,
         wait=wait
+    )
+    rb.reactive = true
+
+    return response
+end
+
+function reactive(
+    rb::RBHandle,
+    future::Distributed.Future;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+)
+    response = rpcreq(
+        rb,
+        AdminReqMsg(
+            BROKER_CONFIG,
+            Dict(
+                COMMAND => REACTIVE_CMD,
+                STATUS => true,
+                MSG_FROM => to_microseconds(from))
+        ),
+        future,
+        broadcast=true,
     )
     rb.reactive = true
 
@@ -2526,6 +2622,21 @@ function subscribe(
     )
 end
 
+function subscribe(
+    rb::RBHandle, topic::AbstractString, fn::Function, future::Distributed.Future;
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now(),
+)
+    add_receiver(rb, topic, fn, from)
+    return rpcreq(rb,
+        AdminReqMsg(
+            topic,
+            Dict(COMMAND => SUBSCRIBE_CMD, MSG_FROM => to_microseconds(from))
+        ),
+        future,
+        broadcast=true,
+    )
+end
+
 """
     component(url)
 
@@ -2573,40 +2684,56 @@ function component(urls::Vector, policy=:default)
     return component(pool)
 end
 
-Visor.shutdown(proc::Visor.Supervised) = Visor.shutdown(proc)
-
-function expose(proc::Visor.Process, fn::Function, wait=true)
-    return call(proc, Rembus.AddImpl(fn, wait), timeout=call_timeout())
+function process_msg(proc, msg, wait)
+    if wait
+        return call(proc, msg, timeout=call_timeout())
+    else
+        req = FutureCall(msg)
+        cast(proc, req)
+        return req.future
+    end
 end
 
-function expose(proc::Visor.Process, topic::AbstractString, fn::Function, wait=true)
-    return call(proc, Rembus.AddImpl(topic, fn, wait), timeout=call_timeout())
+function expose(proc::Visor.Process, fn::Function; wait=true)
+    msg = Rembus.AddImpl(fn, wait)
+    return process_msg(proc, msg, wait)
 end
 
-function unexpose(proc::Visor.Process, fn, wait=true)
-    return call(proc, Rembus.RemoveImpl(fn, wait), timeout=call_timeout())
+function expose(proc::Visor.Process, topic::AbstractString, fn::Function; wait=true)
+    msg = Rembus.AddImpl(topic, fn, wait)
+    return process_msg(proc, msg, wait)
 end
 
-function subscribe(proc::Visor.Process, fn::Function, wait=true; from=Now())
-    return call(proc, Rembus.AddInterest(fn, from, wait), timeout=call_timeout())
+function unexpose(proc::Visor.Process, fn; wait=true)
+    msg = Rembus.RemoveImpl(fn, wait)
+    return process_msg(proc, msg, wait)
 end
 
-function unsubscribe(proc::Visor.Process, fn, wait=true)
-    return call(proc, Rembus.RemoveInterest(fn, wait), timeout=call_timeout())
+function subscribe(proc::Visor.Process, fn::Function; wait=true, from=Now())
+    msg = Rembus.AddInterest(fn, from, wait)
+    return process_msg(proc, msg, wait)
+end
+
+function unsubscribe(proc::Visor.Process, fn; wait=true)
+    msg = Rembus.RemoveInterest(fn, wait)
+    return process_msg(proc, msg, wait)
 end
 
 function subscribe(
-    proc::Visor.Process, topic::AbstractString, fn::Function, wait=true; from=Now()
+    proc::Visor.Process, topic::AbstractString, fn::Function; wait=true, from=Now()
 )
-    return call(proc, Rembus.AddInterest(topic, fn, from, wait), timeout=call_timeout())
+    msg = Rembus.AddInterest(topic, fn, from, wait)
+    return process_msg(proc, msg, wait)
 end
 
-function reactive(proc::Visor.Process, from=LastReceived(), wait=true)
-    return call(proc, Reactive(true, from, wait), timeout=call_timeout())
+function reactive(proc::Visor.Process, from=LastReceived(); wait=true)
+    msg = Reactive(true, from, wait)
+    return process_msg(proc, msg, wait)
 end
 
-function unreactive(proc::Visor.Process, wait=true)
-    return call(proc, Reactive(false, NaN, wait), timeout=call_timeout())
+function unreactive(proc::Visor.Process; wait=true)
+    msg = Reactive(false, NaN, wait)
+    return process_msg(proc, msg, wait)
 end
 
 function inject(proc::Visor.Process, ctx=nothing)
@@ -2618,7 +2745,8 @@ function publish(proc::Visor.Process, topic::AbstractString, data=[]; qos=QOS0)
 end
 
 function rpc(proc::Visor.Process, topic::AbstractString, data=[]; wait=true)
-    return call(proc, CastCall(topic, data, QOS0, wait), timeout=call_timeout())
+    msg = RpcRequest(topic, data)
+    return process_msg(proc, msg, wait)
 end
 
 """
@@ -2641,6 +2769,16 @@ end
 
 function unsubscribe(rb::RBHandle, fn::Function; raise=true, wait=true)
     return unsubscribe(rb, string(fn); raise=raise, wait=wait)
+end
+
+function unsubscribe(rb::RBHandle, topic::AbstractString, future::Distributed.Future)
+    remove_receiver(rb, topic)
+    delete!(rb.subinfo, topic)
+    return rpcreq(rb,
+        AdminReqMsg(topic, Dict(COMMAND => UNSUBSCRIBE_CMD)),
+        future,
+        broadcast=true,
+    )
 end
 
 """
@@ -2667,6 +2805,16 @@ end
 function expose(rb::RBHandle, fn::Function; raise=true, wait=true)
     return expose(rb, string(fn), fn; raise=raise, wait=wait)
 end
+
+function expose(rb::RBHandle, topic::AbstractString, fn::Function, future)
+    add_exposed(rb, topic, fn)
+    return rpcreq(rb,
+        AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)),
+        future,
+        broadcast=true,
+    )
+end
+
 
 function expose_server(rb::RBHandle, topic::AbstractString)
     return to_socket(rb, AdminReqMsg(topic, Dict(COMMAND => EXPOSE_CMD)))
@@ -2736,6 +2884,15 @@ end
 
 function unexpose(rb::RBHandle, fn::Function; raise=true, wait=true)
     return unexpose(rb, string(fn), raise=raise, wait=wait)
+end
+
+function unexpose(rb::RBHandle, topic::AbstractString, future::Distributed.Future)
+    remove_receiver(rb, topic)
+    return rpcreq(rb,
+        AdminReqMsg(topic, Dict(COMMAND => UNEXPOSE_CMD)),
+        future,
+        broadcast=true,
+    )
 end
 
 """
@@ -2961,10 +3118,23 @@ function rpc(rb, topic::AbstractString, data=[];
     )
 end
 
+struct Futures
+    responses::Vector{Distributed.Future}
+end
+
 function fetch_response(f::Distributed.Future)
     response = fetch(f)
     if isa(response, Exception)
         throw(response)
+    elseif isa(response, Futures)
+        return map(response.responses) do f
+            res = fetch(f)
+            if isa(res, ResMsg)
+                return res.data
+            else
+                return res
+            end
+        end
     elseif response.status == STS_SUCCESS
         return response.data
     else
@@ -3032,6 +3202,13 @@ function send_request(rb::RBHandle, msg::RembusMsg)
     rb.out[mid] = resp_cond
     put!(rb.process.inbox, msg)
     return resp_cond
+end
+
+function send_request(rb::RBHandle, msg::RembusMsg, future)
+    mid::UInt128 = msg.id
+    rb.out[mid] = future
+    put!(rb.process.inbox, msg)
+    return future
 end
 
 #=
@@ -3157,8 +3334,13 @@ function do_request(
     end
 end
 
+function do_request(rb::RBHandle, msg::RembusMsg, future::Distributed.Future)
+    send_request(rb, msg, future)
+    return nothing
+end
+
 function do_request(
-    rbs::Vector{RBConnection}, msg::RembusMsg, wait::Bool, timeout, raise
+    rbs::Vector, msg::RembusMsg, wait::Bool, timeout, raise
 )
     responses = []
     for rb in rbs
@@ -3179,6 +3361,45 @@ function do_request(
     return responses
 end
 
+function do_request(
+    rbs::Vector, msg::RembusMsg, future::Distributed.Future
+)
+    responses = []
+    for rb in rbs
+        if !isconnected(rb)
+            afuture = Distributed.Future()
+            push!(responses, afuture)
+            put!(afuture, missing)
+        else
+            afuture = send_request(rb, msg)
+            push!(responses, afuture)
+        end
+    end
+    put!(future, Futures(responses))
+    return nothing
+end
+
+function rpcreq(
+    handle::RBHandle, msg, future;
+    broadcast=false
+)
+    if isa(handle, RBPool)
+        if broadcast
+            conn = handle.connections
+        else
+            conn = pick_connections(handle, msg)
+        end
+    else
+        conn = handle
+    end
+
+    whenconnected(conn) do conn
+        do_request(conn, msg, future)
+    end
+
+    return nothing
+end
+
 # Send a RpcReqMsg message to rembus and return the response.
 # If broadcast is true send the request to all nodes of the pool.
 function rpcreq(
@@ -3189,7 +3410,7 @@ function rpcreq(
     broadcast=false
 )
     if !isconnected(handle)
-        do_request(nothing, msg, wait, timeout, raise)
+        return do_request(nothing, msg, wait, timeout, raise)
     end
 
     if isa(handle, RBPool)

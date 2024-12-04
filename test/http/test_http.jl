@@ -4,6 +4,10 @@ using Base64
 
 # tests: 11
 
+function mytopic()
+    @info "[test_http] mytopic() (NO ARGS)"
+end
+
 function mytopic(x, y)
     @info "[test_http] mytopic($x,$y)"
 end
@@ -24,6 +28,10 @@ function run()
     y = 2
 
     response = HTTP.post("http://localhost:9000/mytopic", [], JSON3.write([x, y]))
+    @info "[test_http] POST response=$(Rembus.body(response))"
+    @test Rembus.body(response) === nothing
+
+    response = HTTP.post("http://localhost:9000/mytopic")
     @info "[test_http] POST response=$(Rembus.body(response))"
     @test Rembus.body(response) === nothing
 

@@ -56,8 +56,6 @@ ucid(twin::Twin) = twin.id
 
 hasname(twin::Twin) = twin.hasname
 
-iszmq(twin::Twin) = (twin.type === zdealer) || (twin.type === zrouter)
-
 function Base.close(twin::Twin)
     if twin.type === zdealer
         close(twin.socket)
@@ -549,8 +547,6 @@ function attestation(router::Server, rb::RBServerConnection, msg)
     reason = nothing
     try
         login(router, rb, msg)
-        ### twin.id = msg.cid
-        ### twin.hasname = true
         rb.isauth = true
     catch e
         @error "[$(msg.cid)] attestation: $e"
@@ -1184,7 +1180,7 @@ function detach(twin)
         if !isa(twin.socket, ZMQ.Socket)
             ## TBD: check if neeeded
             #flush(twin.socket.io)
-            close(twin.socket)
+            close(twin)
         end
         twin.socket = nothing
     end
@@ -1436,9 +1432,8 @@ function broker(;
     setup(CONFIG)
     CONFIG.log_level = String(log)
 
-    if haskey(args, "debug") && args["debug"] === true
-        CONFIG.log_level = TRACE_DEBUG
-    end
+    haskey(args, "debug") && args["debug"] === true && (CONFIG.log_level = TRACE_DEBUG)
+
     rst = getparam(args, "reset", reset)
     if rst
         Rembus.caronte_reset(sv_name)
@@ -1643,9 +1638,7 @@ function server(
         # first rb process
         CONFIG.log_level = String(log)
 
-        if haskey(args, "debug") && args["debug"] === true
-            CONFIG.log_level = TRACE_DEBUG
-        end
+        haskey(args, "debug") && args["debug"] === true && (CONFIG.log_level = TRACE_DEBUG)
 
         init_log()
         tasks = Visor.Supervised[supervisor("twins", terminateif=:shutdown)]
@@ -2838,9 +2831,7 @@ function egress_task(proc, twin::Twin, remote::RbURL)
         end
 
         msg = take!(proc.inbox)
-        if isshutdown(msg)
-            close(twin.socket)
-        else
+        if !isshutdown(msg)
             # the only message is an error condition
             error(msg)
         end

@@ -36,7 +36,7 @@ function run()
     @info "[test_component_tomany] result=$result"
 
     publish(c, "mytopic")
-    sleep(0.1)
+    sleep(0.2)
     @info "[test_component_tomany] count: $(ctx.count)"
     @test ctx.count == 2
 

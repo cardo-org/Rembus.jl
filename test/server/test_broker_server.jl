@@ -43,6 +43,8 @@ function run()
     #islistening(wait=20, procs=["$BROKER_NAME.serve_ws"])
     islistening(bro, wait=20)
 
+    @test !islistening(bro, protocol=[:no_proto])
+
     # it seems that coverage requires some sleep time
     sleep(1)
 
@@ -52,7 +54,7 @@ function run()
     @test response == n + 1
 
     publish(cli, "mytopic", n)
-    sleep(0.1)
+    sleep(0.4)
 
     # the server send a QOS2 message to a broker
     # this tests that Ack2 messages are delivered (and currently ignored)

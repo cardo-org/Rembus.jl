@@ -19,6 +19,13 @@ function server_test()
             @info "[server_test] version: $ver"
             @test ver == Rembus.VERSION
         end
+
+        whenconnected("foo") do rb
+            @info "$rb connected"
+            ver = rpc(rb, "version")
+            @test ver == Rembus.VERSION
+        end
+
     catch e
         @error "[test_when_connected] server_test error: $e"
         @test false

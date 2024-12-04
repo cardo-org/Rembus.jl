@@ -9,54 +9,83 @@ function atopic(ctx, rb, x)
     ctx.data = x
 end
 
-function run()
-    ctx = Ctx(nothing)
-
-    @component "mycomponent"
-    sleep(1)
-
-    @subscribe atopic
-    @inject ctx
-    @reactive
-
-    value = 1.0
-    rb = connect("pub")
-    publish(rb, "atopic", value)
-
-    sleep(1)
-    @test ctx.data == value
-
-    ctx.data = nothing
-    @unreactive
-    publish(rb, "atopic", value)
-    sleep(0.5)
-    @test ctx.data === nothing
-
-    @unsubscribe atopic
-
-    @expose aservice(ctx, rb, x, y) = x + y
-
-    res = rpc(rb, "aservice", [1, 2])
-    @test res == 3
-
-    @unexpose aservice
-    @test_throws RpcMethodNotFound rpc(rb, "aservice", [1, 2])
-
-    close(rb)
-
-    # test unknown process
-    try
-        @publish "fabulous" foo()
-    catch e
-        @test isa(e, ErrorException)
-        @test e.msg == "unknown process fabulous"
-    finally
-        @shutdown
-    end
+function myservice()
+    @info "[test_component] myservice requested"
+    return 1
 end
 
-execute(run, "test_component")
-# expect 2 messages published (received and stored by broker)
-# and 1 message delivered because unreactive is executed before sending
-# the second pubsub message.
-verify_counters(total=2, components=Dict("mycomponent" => 1))
+function run()
+
+    rb = component("foo")
+
+    # first make a request
+    res = rpc(rb, "version", wait=false)
+    @info "response=$res"
+
+    # then start the broker
+    bro = broker(wait=false, ws=8000, tcp=8001)
+    islistening(bro, protocol=[:ws, :tcp])
+
+    # and get the response
+    ver = fetch_response(res)
+    @test ver === Rembus.VERSION
+
+    for fn in [expose, unexpose, subscribe, unsubscribe]
+        res = fn(rb, atopic, wait=false)
+        @test fetch_response(res) === nothing
+    end
+
+    res = reactive(rb, wait=false)
+    @test fetch_response(res) === nothing
+
+    res = unreactive(rb, wait=false)
+    @test fetch_response(res) === nothing
+
+    res = expose(rb, "my_cool_service", myservice, wait=false)
+    @test fetch_response(res) === nothing
+
+    res = unexpose(rb, "my_cool_service", wait=false)
+    @test fetch_response(res) === nothing
+
+    shutdown(rb)
+
+    rb = component(["ws://:8000", "tcp://:8001"])
+    all_policy(rb)
+
+    futures = rpc(rb, "version", wait=false)
+    values = fetch_response(futures)
+    @test values == [Rembus.VERSION, Rembus.VERSION]
+
+    # test rpcreq broadcast flag
+    expose(rb, myservice, wait=false)
+
+    shutdown(rb)
+
+    rb = component(["ws://:8000", "tcp://:8003"])
+    all_policy(rb)
+
+    futures = rpc(rb, "version", wait=false)
+    values = fetch_response(futures)
+    @test values[1] === Rembus.VERSION
+    @test values[2] === missing
+
+    shutdown(rb)
+
+    rb = connect(["ws://:8005", "ws://:8006"])
+    future = rpc(rb, "version", wait=false)
+    @test_throws RembusError fetch_response(future)
+end
+
+@info "[test_component] start"
+
+try
+    run()
+
+catch e
+    @error "[test_component] unexpected error: $e"
+    showerror(stdout, e, catch_backtrace())
+    @test false
+finally
+    shutdown()
+end
+@info "[test_component] stop"

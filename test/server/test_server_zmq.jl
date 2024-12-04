@@ -103,7 +103,8 @@ function run()
         @test isopen(rb.socket)
 
         # send an Admin command to the server
-        Rembus.rpcreq(
+        # throw an exception because rb node is not authorized to shutdown the server
+        @test_throws RembusError Rembus.rpcreq(
             rb,
             Rembus.AdminReqMsg(
                 Rembus.BROKER_CONFIG, Dict(Rembus.COMMAND => Rembus.SHUTDOWN_CMD)

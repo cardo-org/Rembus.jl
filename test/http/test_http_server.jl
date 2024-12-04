@@ -6,12 +6,16 @@ using Base64
 
 basic_auth(str::String) = Base64.base64encode(str)
 
+function mytopic()
+    @info "[test_http_server] mytopic() (NO ARGS)"
+end
+
 function mytopic(x, y)
-    @info "[test_http] mytopic($x,$y)"
+    @info "[test_http_server] mytopic($x,$y)"
 end
 
 function myservice(x, y)
-    @info "[test_http] myservice($x,$y)"
+    @info "[test_http_server] myservice($x,$y)"
     return x + y
 end
 
@@ -55,15 +59,19 @@ function run(user, password)
     Visor.dump()
 
     response = HTTP.post("http://localhost:8080/mytopic", [], JSON3.write([x, y]))
-    @info "[test_http] POST response=$(Rembus.body(response))"
+    @info "[test_http_server] POST response=$(Rembus.body(response))"
+    @test Rembus.body(response) === nothing
+
+    response = HTTP.post("http://localhost:8080/mytopic")
+    @info "[test_http_server] POST response=$(Rembus.body(response))"
     @test Rembus.body(response) === nothing
 
     response = HTTP.get("http://localhost:8080/myservice", [], JSON3.write([x, y]))
-    @info "[test_http] GET response=$(Rembus.body(response))"
+    @info "[test_http_server] GET response=$(Rembus.body(response))"
     @test Rembus.body(response) == 3
 
     response = HTTP.get("http://localhost:8080/version")
-    @info "[test_http] GET response=$(Rembus.body(response))"
+    @info "[test_http_server] GET response=$(Rembus.body(response))"
     @test Rembus.body(response) == Rembus.VERSION
 
     # force an authenticated connection
@@ -79,7 +87,7 @@ function run(user, password)
         "http://localhost:8080/version",
         ["Authorization" => auth]
     )
-    @info "[test_http] auth GET response=$(Rembus.body(response))"
+    @info "[test_http_server] auth GET response=$(Rembus.body(response))"
     @test Rembus.body(response) == Rembus.VERSION
 
     auth = basic_auth("$user:wrong_password")

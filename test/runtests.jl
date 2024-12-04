@@ -10,6 +10,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "broker" begin
             include("unit/test_caronte.jl")
         end
+        @time @safetestset "rpcreq" begin
+            include("unit/test_rpcreq.jl")
+        end
         @time @safetestset "brokerd" begin
             include("unit/test_caronted.jl")
         end
@@ -84,6 +87,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "server" begin
             include("server/test_server.jl")
+        end
+        @time @safetestset "server_zmq" begin
+            include("server/test_server_zmq.jl")
         end
         @time @safetestset "server_qos2" begin
             include("server/test_server_qos2.jl")

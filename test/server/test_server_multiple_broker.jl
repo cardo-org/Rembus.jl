@@ -56,6 +56,11 @@ function run()
     publish(srv, "mytopic", n)
     sleep(1)
 
+    # test broadcast from server
+    msg = Rembus.RpcReqMsg("version", [])
+    versions = Rembus.rpcreq(srv, msg, broadcast=true)
+    @info "brokers versions: $versions"
+
     close(rb)
     @test ctx.n == n
 end
