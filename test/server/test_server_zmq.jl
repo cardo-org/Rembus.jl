@@ -42,7 +42,7 @@ function run()
         # set large timeout because coverage.jl is slow
         @rpc_timeout 30
 
-        @async start_server()
+        srv = start_server()
         is_up = Rembus.islistening(procs=["server.serve_zmq"])
 
         @component "zmq://:8002/rpc_client"
@@ -110,6 +110,11 @@ function run()
                 Rembus.BROKER_CONFIG, Dict(Rembus.COMMAND => Rembus.SHUTDOWN_CMD)
             )
         )
+
+        # close the connection server-side
+        conn = srv.connections[1]
+        @info "closing socket $(conn.type)"
+        close(conn)
         sleep(1)
     catch e
         @error "[test_server_zmq] error: $e"

@@ -94,7 +94,16 @@ function shutdown_broker(router)
     end
 end
 
-function admin_command(router, twin, msg::AdminReqMsg)
+#=
+Currently Server does not implements admin commands.
+=#
+function admin_command(::Server, ::RBServerConnection, msg::AdminReqMsg)
+    sts = STS_SUCCESS
+    data = nothing
+    return ResMsg(msg.id, sts, data)
+end
+
+function admin_command(router::Router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
         return ResMsg(msg.id, STS_GENERIC_ERROR, nothing)
     end

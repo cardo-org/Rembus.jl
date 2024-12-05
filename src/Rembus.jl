@@ -2394,13 +2394,24 @@ function Base.close(rb::RBPool)
     end
 end
 
+function close_zmq_socket(rb::RBConnection)
+    close(rb.socket)
+    close(rb.zmqcontext)
+end
+
+function close_zmq_socket(rb::RBServerConnection)
+    close(rb.socket)
+    close(rb.router.zmqcontext)
+end
 
 function close_handle(rb)
     if rb.socket !== nothing
         if isa(rb.socket, ZMQ.Socket) && isopen(rb.socket)
             transport_send(Val(rb.type), rb, Close())
-            close(rb.socket)
-            close(rb.zmqcontext)
+
+            # in addition to close this connection,
+            # closing a ZMQ ROUTER socket implies that all client connections are closed.
+            close_zmq_socket(rb)
         else
             close(rb.socket)
         end

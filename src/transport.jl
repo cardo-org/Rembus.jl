@@ -523,7 +523,7 @@ end
 #=
     client_ack_timeout(tim, twin, msg, msgid)
 
-Resend a PubSub message in case the acknowledge message is not received.
+The component resends a PubSub message in case the acknowledge message is not received.
 =#
 function client_ack_timeout(tim, rb, msg, msgid)
     # TODO: is isopen() control needed?

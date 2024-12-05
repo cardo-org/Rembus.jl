@@ -7,6 +7,7 @@ function sub_egress(rb, msg)
     @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
         rb.router.shared.msgid["sub_ack"] = msg.id
+        return nothing
     end
 
     return response
@@ -56,13 +57,22 @@ function pub(topic, ctx)
     return pub
 end
 
+function zmq_pub(topic, ctx)
+    pub = connect("zmq://:8002/pub")
+    inject(pub, ctx)
+    egress_interceptor(pub, pub_egress)
+    ingress_interceptor(pub, pub_ingress)
+    publish(pub, topic, 1, qos=QOS2)
+    return pub
+end
+
 mutable struct Ctx
     msgid::Dict
     Ctx() = new(Dict())
 end
 
 function sub(topic, ctx)
-    srv = server(ctx)
+    srv = server(ctx, ws=8000, zmq=8002)
     egress_interceptor(srv, sub_egress)
     ingress_interceptor(srv, sub_ingress)
     subscribe(srv, topic, msg_handler)
@@ -75,34 +85,30 @@ function run()
     rb = sub(topic, ctx)
     pub_rb = pub(topic, ctx)
 
-    sleep(2)
+    sleep(1)
     @info "events: $ctx"
-    @test ctx.msgid["pub_ack"] == ctx.msgid["pub_pubsub"]
-    @test ctx.msgid["sub_pubsub"] == ctx.msgid["pub_pubsub"]
-    @test ctx.msgid["sub_ack"] == ctx.msgid["pub_pubsub"]
-    @test ctx.msgid["sub_ack2"] == ctx.msgid["pub_pubsub"]
+    @test !haskey(ctx.msgid, "pub_ack")
+
+    zmqpub_rb = zmq_pub(topic, ctx)
+    sleep(1)
+    @test !haskey(ctx.msgid, "pub_ack")
 
     shutdown(rb)
     close(pub_rb)
+    close(zmqpub_rb)
 end
 
 # cleanup files
 rm(joinpath(Rembus.rembus_dir(), "sub.db"), force=true)
 
-@info "[test_server_qos2] start"
+@info "[test_client_ack_timeout] start"
 try
     run()
 catch e
-    @error "[test_server_qos2] unexpected error: $e"
+    @error "[test_client_ack_timeout] unexpected error: $e"
     showerror(stdout, e, catch_backtrace())
     @test false
 finally
     shutdown()
 end
-@info "[test_server_qos2] stop"
-
-if !Sys.iswindows()
-    # expect one messages at rest
-    df = Rembus.data_at_rest(string(1), BROKER_NAME)
-    @test nrow(df) == 1
-end
+@info "[test_client_ack_timeout] stop"

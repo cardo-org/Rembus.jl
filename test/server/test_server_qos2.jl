@@ -24,10 +24,12 @@ function start_server(ctx)
 end
 
 function start_broker()
-    #url = "zmq://127.0.0.1:9002/myserver"
     url = "zmq://127.0.0.1:9002/myserver"
     router = broker(wait=false, name=BROKER_NAME, reset=true, zmq=8002, ws=8000, log="info")
     add_node(router, url)
+
+    # wait until broker is listening
+    islistening(router, wait=10, protocol=[:zmq])
 end
 
 mutable struct Ctx

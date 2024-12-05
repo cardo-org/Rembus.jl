@@ -91,6 +91,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "server_zmq" begin
             include("server/test_server_zmq.jl")
         end
+        @time @safetestset "server_zmq_close" begin
+            include("server/test_server_zmq_close.jl")
+        end
         @time @safetestset "server_qos2" begin
             include("server/test_server_qos2.jl")
         end
@@ -126,8 +129,11 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "qos2" begin
             include("ack/test_qos2.jl")
         end
-        @time @safetestset "server_qos2" begin
-            include("ack/test_server_qos2.jl")
+        @time @safetestset "server_ack_qos2" begin
+            include("ack/test_server_ack_qos2.jl")
+        end
+        @time @safetestset "client_ack_timeout" begin
+            include("ack/test_client_ack_timeout.jl")
         end
         @time @safetestset "simple_ack" begin
             include("ack/test_simple_ack.jl")
@@ -259,6 +265,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "component" begin
             include("api/test_component.jl")
+        end
+        @time @safetestset "component_macro" begin
+            include("api/test_component_macro.jl")
         end
         @time @safetestset "whenconnected" begin
             include("api/test_when_connected.jl")
