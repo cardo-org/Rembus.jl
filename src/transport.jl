@@ -509,7 +509,13 @@ function transport_send(
                 ), ACK_WAIT_TIME)
         )
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
-        broker_transport_write(twin.socket, pkt)
+        if twin.socket === nothing
+            # if the connection is closed stop trying to send pubsub messages
+            # that are not yet acknowledged.
+            put!(ack_cond, true)
+        else
+            broker_transport_write(twin.socket, pkt)
+        end
         outcome = fetch(ack_cond)
         delete!(twin.out, msgid)
     else
@@ -550,7 +556,14 @@ function transport_send(::Val{socket}, rb::RBHandle, msg::PubSubMsg)
                 ), ACK_WAIT_TIME)
         )
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
-        transport_write(rb.socket, pkt)
+        if rb.socket === nothing
+            # if the connection is closed stop trying to send pubsub messages
+            # that are not yet acknowledged.
+            put!(ack_cond, true)
+        else
+            transport_write(rb.socket, pkt)
+        end
+
         outcome = fetch(ack_cond)
         delete!(rb.out, msgid)
     else

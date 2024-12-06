@@ -2,7 +2,6 @@ include("../utils.jl")
 
 function sub_egress(rb, msg)
     response = msg
-    @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
         rb.shared.msgid["sub_ack"] = msg.id
     end
@@ -12,7 +11,6 @@ end
 
 function sub_ingress(rb, msg)
     response = msg
-    @info "[$rb] ingress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.PubSubMsg)
         rb.shared.msgid["sub_pubsub"] = msg.id
     end
@@ -21,7 +19,6 @@ end
 
 function pub_ingress(rb, msg)
     response = msg
-    @info "[$rb] ingress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
         rb.shared.msgid["pub_ack"] = msg.id
     end
@@ -30,8 +27,6 @@ end
 
 function pub_egress(rb, msg)
     response = msg
-    @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
-
     if isa(msg, Rembus.PubSubMsg)
         rb.shared.msgid["pub_pubsub"] = msg.id
     end

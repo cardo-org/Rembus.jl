@@ -41,7 +41,6 @@ export @rpc_timeout
 export @forever
 export @shutdown
 
-# rembus client api
 export component
 export connect
 export isauthenticated
@@ -2422,6 +2421,9 @@ function close_handle(rb)
         save_pubsub_received(rb)
     end
 
+    for ackstate in values(rb.acktimer)
+        close(ackstate.timer)
+    end
     return nothing
 end
 

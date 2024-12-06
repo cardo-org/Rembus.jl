@@ -4,7 +4,6 @@ include("../utils.jl")
 
 function sub_egress(rb, msg)
     response = msg
-    @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
         rb.router.shared.msgid["sub_ack"] = msg.id
         return nothing
@@ -15,7 +14,6 @@ end
 
 function sub_ingress(rb, msg)
     response = msg
-    @info "[$rb] ingress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.PubSubMsg)
         rb.router.shared.msgid["sub_pubsub"] = msg.id
     elseif isa(msg, Rembus.Ack2Msg)
@@ -26,7 +24,6 @@ end
 
 function pub_ingress(rb, msg)
     response = msg
-    @info "[$rb] ingress: $(msg.id) ($(typeof(msg)))"
     if isa(msg, Rembus.AckMsg)
         rb.shared.msgid["pub_ack"] = msg.id
     end
@@ -35,8 +32,6 @@ end
 
 function pub_egress(rb, msg)
     response = msg
-    @info "[$rb] egress: $(msg.id) ($(typeof(msg)))"
-
     if isa(msg, Rembus.PubSubMsg)
         rb.shared.msgid["pub_pubsub"] = msg.id
     end
@@ -81,7 +76,7 @@ end
 
 function run()
     ctx = Ctx()
-    topic = "qos2_topic"
+    topic = "client_ack_timeout_topic"
     rb = sub(topic, ctx)
     pub_rb = pub(topic, ctx)
 
