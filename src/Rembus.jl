@@ -1735,7 +1735,7 @@ function load_pubsub_received(component::RbURL)
     if hasname(component)
         path = acks_file(component.id)
         if isfile(path)
-            @debug "[$rb] loading $path"
+            @debug "[$(component.id)] loading $path"
             df = DataFrame(read_parquet(path))
             return DataFrame(
                 ts=df.ts,

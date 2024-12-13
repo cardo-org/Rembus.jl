@@ -23,13 +23,15 @@ function start_server(ctx)
     return s1
 end
 
-function start_broker()
-    url = "zmq://127.0.0.1:9002/myserver"
-    router = broker(wait=false, name=BROKER_NAME, reset=true, zmq=8002, ws=8000, log="info")
+function start_broker(url)
+
+    router = broker(wait=false, name=BROKER_NAME, reset=true, zmq=6002, ws=8000, log="info")
     add_node(router, url)
 
     # wait until broker is listening
     islistening(router, wait=10, protocol=[:zmq])
+
+    return router
 end
 
 mutable struct Ctx
@@ -37,12 +39,12 @@ mutable struct Ctx
 end
 
 function run()
+    url = "zmq://127.0.0.1:9002/myserver"
     ctx = Ctx(0)
     srv = start_server(ctx)
+    bro = start_broker(url)
 
-    start_broker()
-
-    rb = component("zmq://127.0.0.1:8002")
+    rb = component("zmq://127.0.0.1:6002")
     isconn = isconnected(rb)
     @info "isconnected: $isconn"
 
@@ -52,6 +54,7 @@ function run()
     shutdown(rb)
     shutdown(srv)
     sleep(1)
+    remove_node(bro, url)
     @test ctx.count == 1
 end
 

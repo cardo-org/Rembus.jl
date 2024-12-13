@@ -45,13 +45,12 @@ function run()
         conn = srv.connections[1]
         @info "closing socket $(conn.type)"
         close(conn)
-        #sleep(0.1)
+        sleep(0.1)
     catch e
         @error "[test_server_zmq_close] error: $e"
         @test false
     finally
         shutdown()
-        sleep(2)
     end
 
 end

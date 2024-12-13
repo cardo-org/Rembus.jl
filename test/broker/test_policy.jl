@@ -50,7 +50,7 @@ function run()
             @error "[test_policy] error: $e"
         end
     end
-    sleep(0.1)
+    sleep(0.2)
     response = rpc(client, "myservice")
     @info "[test_policy] myservice()=$response (expected 2)"
     @test response == 2

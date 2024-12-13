@@ -86,7 +86,7 @@ function run()
         @test isconnected(rb)
 
         close(rb)
-        @info "second round"
+        @info "[test_server_zmq] second round"
         sleep(3)
         # reconnect
         rb = connect("zmq://:8002/mycomponent")
@@ -113,7 +113,7 @@ function run()
 
         # close the connection server-side
         conn = srv.connections[1]
-        @info "closing socket $(conn.type)"
+        @info "[test_server_zmq] closing socket $(conn.type)"
         close(conn)
         sleep(1)
     catch e

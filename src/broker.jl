@@ -2233,12 +2233,12 @@ end
 
 function serve_zmq(pd, router, port)
     @debug "[serve_zmq] starting"
-    router_ready(router)
-    router.zmqcontext = ZMQ.Context()
-    router.zmqsocket = Socket(router.zmqcontext, ROUTER)
-    ZMQ.bind(router.zmqsocket, "tcp://*:$port")
-    router.listeners[:zmq].status = on
     try
+        router_ready(router)
+        router.zmqcontext = ZMQ.Context()
+        router.zmqsocket = Socket(router.zmqcontext, ROUTER)
+        ZMQ.bind(router.zmqsocket, "tcp://*:$port")
+        router.listeners[:zmq].status = on
         @info "$(pd.supervisor) listening at port zmq:$port"
         setphase(pd, :listen)
         zeromq_receiver(router)
