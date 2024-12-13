@@ -135,6 +135,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "client_ack_timeout" begin
             include("ack/test_client_ack_timeout.jl")
         end
+        @time @safetestset "twin_ack_timeout" begin
+            include("ack/test_twin_ack_timeout.jl")
+        end
         @time @safetestset "simple_ack" begin
             include("ack/test_simple_ack.jl")
         end

@@ -89,8 +89,13 @@ function run()
     @test !haskey(ctx.msgid, "pub_ack")
 
     shutdown(rb)
-    close(pub_rb)
+
+    # instead of closing set the socket to nothing
+    # when this happens transport_send must stop retransmit ack packets on timeout
+    pub_rb.socket = nothing
+
     close(zmqpub_rb)
+    sleep(1)
 end
 
 # cleanup files
