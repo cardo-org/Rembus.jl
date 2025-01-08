@@ -54,9 +54,9 @@ function save_servers(router)
 end
 
 #=
-    save_tenants(owners_df)
+    save_tenants(router, tenants::AbstractString)
 
-Save the owners table.
+Save the tenants table.
 =#
 function save_tenants(router, tenants::AbstractString)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
@@ -117,7 +117,7 @@ broker_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervis
 broker_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id)
 broker_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name)
 
-keystore_dir(router) = get(ENV, "REMBUS_KEYSTORE", joinpath(CONFIG.rembus_dir, "keystore"))
+keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(CONFIG.rembus_dir, "keystore"))
 
 keys_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys")
 keys_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id, "keys")

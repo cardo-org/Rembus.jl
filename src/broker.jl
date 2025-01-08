@@ -1774,7 +1774,7 @@ function client_receiver(router::Server, ws)
 end
 
 function secure_config(router)
-    trust_store = keystore_dir(router)
+    trust_store = keystore_dir()
 
     entropy = MbedTLS.Entropy()
     rng = MbedTLS.CtrDrbg()
