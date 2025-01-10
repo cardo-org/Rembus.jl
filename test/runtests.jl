@@ -70,6 +70,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "server"
+        @time @safetestset "server_to_client" begin
+            include("server/test_server_to_client.jl")
+        end
         @time @safetestset "broker_add_server" begin
             include("server/test_broker_add_server.jl")
         end
@@ -398,6 +401,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "broker"
+        @time @safetestset "prometheus" begin
+            include("broker/test_prometheus.jl")
+        end
         @time @safetestset "policy" begin
             include("broker/test_policy.jl")
         end

@@ -161,6 +161,49 @@ function Base.show(io::IO, msg::Msg)
     end
 end
 
+mutable struct RouterCollector <: Prometheus.Collector
+    router::Router
+    function RouterCollector(
+        router::Router;
+        registry::Union{Prometheus.CollectorRegistry,Nothing}=Prometheus.DEFAULT_REGISTRY
+    )
+        coll = new(router)
+        if registry !== nothing
+            # ignore already registered error
+            try
+                Prometheus.register(registry, coll)
+            catch
+            end
+        end
+        return coll
+    end
+end
+
+function Prometheus.metric_names(::RouterCollector)
+    return (
+        "broker_websocket_connections",
+    )
+end
+
+function Prometheus.collect!(metrics::Vector, rc::RouterCollector)
+    connected_clients = 0
+    for tw in values(rc.router.id_twin)
+        if (tw.type === socket) && !offline(tw)
+            connected_clients += 1
+        end
+    end
+
+    push!(
+        metrics,
+        Prometheus.Metric(
+            "gauge",
+            "broker_websocket_connections",
+            "Total number of WebSocket connections",
+            Prometheus.Sample(nothing, nothing, nothing, connected_clients)))
+
+    return metrics
+end
+
 firstup_policy(router::Router) = router.policy = :first_up
 
 roundrobin_policy(router::Router) = router.policy = :round_robin
@@ -1349,6 +1392,9 @@ function command_line(default_name="broker")
         "--http", "-p"
         help = "accept HTTP clients on port HTTP"
         arg_type = UInt16
+        "--prometheus", "-m"
+        help = "prometheus exposer port"
+        arg_type = UInt16
         "--ws", "-w"
         help = "accept WebSocket clients on port WS"
         arg_type = UInt16
@@ -1395,6 +1441,7 @@ end
         tcp=nothing,
         zmq=nothing,
         http=nothing,
+        prometheus=nothing,
         name="broker",
         policy=:first_up,
         mode=nothing,
@@ -1417,6 +1464,7 @@ function broker(;
     tcp=nothing,
     zmq=nothing,
     http=nothing,
+    prometheus=nothing,
     name="broker",
     policy=:first_up,
     mode=nothing,
@@ -1455,6 +1503,12 @@ function broker(;
         process("broker", broker_task, args=(router,)),
         supervisor("twins", terminateif=:shutdown)
     ]
+
+    prometheus_port = getparam(args, "prometheus", prometheus)
+    if prometheus_port !== nothing
+        RouterCollector(router)
+        push!(tasks, process(prometheus_task, args=(prometheus_port,)))
+    end
 
     http_port = getparam(args, "http", http)
     if http_port !== nothing
@@ -2381,6 +2435,9 @@ function round_robin(router, topic, implementors)
     return target
 end
 
+Base.min(t::Twin) = t
+Base.min(sc::RBServerConnection) = sc
+
 Base.isless(t1::Twin, t2::Twin) = length(t1.sent) < length(t2.sent)
 
 function less_busy(router, topic, implementors)
@@ -2879,4 +2936,17 @@ function connect(
     )
 
     return nothing
+end
+
+function prometheus_task(self, port)
+    IP = "0.0.0.0"
+    @info "starting prometheus at port $port"
+
+    server = HTTP.listen!(IP, port) do http
+        return Prometheus.expose(http)  # Expose the metrics.
+    end
+
+    # wait for a message: the only one is a shutdown request.
+    take!(self.inbox)
+    close(server)
 end

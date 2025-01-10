@@ -36,9 +36,8 @@ mutable struct Settings
     log_destination::String
     log_level::String
     overwrite_connection::Bool
-    stacktrace   # log stacktrace on error
-    metering     # log in and out messages
-    rawdump      # log in and out raw bytes
+    stacktrace::Bool  # log stacktrace on error
+    rawdump::Bool     # log in and out raw bytes
     cid::RbURL
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
@@ -53,13 +52,12 @@ mutable struct Settings
         log_level = TRACE_INFO
         overwrite_connection = true
         stacktrace = false
-        metering = false
         rawdump = false
         cid = RbURL()
         connection_retry_period = 2.0
         db_max_messages = parse(UInt, REMBUS_DB_MAX_SIZE)
         new(zmq_ping_interval, ws_ping_interval, rdir, log_destination, log_level,
-            overwrite_connection, stacktrace, metering, rawdump, cid,
+            overwrite_connection, stacktrace, rawdump, cid,
             connection_retry_period, nothing, true, db_max_messages, anonymous)
     end
 end
@@ -87,7 +85,6 @@ function setup(setting)
     setting.log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
     setting.overwrite_connection = get(cfg, "overwrite_connection", true)
     setting.stacktrace = get(cfg, "stacktrace", false)
-    setting.metering = get(cfg, "metering", false)
     setting.rawdump = get(cfg, "rawdump", false)
     setting.cid = component_id(cfg)
     setting.connection_retry_period = get(cfg, "connection_retry_period", 2.0)

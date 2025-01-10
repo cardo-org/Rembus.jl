@@ -46,3 +46,7 @@ Rembus.cleanup(twin, router)
 
 @test !isempty(router.topic_impls)
 @test !haskey(router.address2twin, identity)
+
+t1 = Rembus.Twin(router, "t1", Rembus.loopback)
+t = min(t1)
+@test t === t1

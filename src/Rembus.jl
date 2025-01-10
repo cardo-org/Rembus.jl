@@ -24,6 +24,7 @@ using Parquet
 using PrecompileTools
 using Preferences
 using Printf
+using Prometheus
 using URIs
 using Serialization
 using UUIDs

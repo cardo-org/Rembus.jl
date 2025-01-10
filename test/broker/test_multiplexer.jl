@@ -12,13 +12,13 @@ end
 function run(exposer_url, secure=false)
     # main broker
     broker(
-        wait=false,
+        wait=false, prometheus=7070,
         name="main_broker", reset=true, secure=secure
     )
     yield()
 
     edge_broker = broker(
-        wait=false,
+        wait=false, prometheus=7071,
         name="edge_broker", ws=9000, secure=secure)
     yield()
     sleep(1)

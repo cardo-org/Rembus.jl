@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.0
+
+- Prometheus integration
+
 ## 0.5.0 (25 November, 2024)
 
 - Componenent multiplexing.
