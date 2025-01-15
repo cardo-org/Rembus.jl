@@ -49,11 +49,10 @@ function run()
     @info "isconnected: $isconn"
 
     publish(rb, "mytopic", qos=QOS2)
-    sleep(1)
+    check_sentinel(ctx.count)
 
     shutdown(rb)
     shutdown(srv)
-    sleep(1)
     remove_node(bro, url)
     @test ctx.count == 1
 end

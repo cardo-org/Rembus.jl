@@ -3,12 +3,12 @@ include("../utils.jl")
 using Prometheus
 
 function run()
-    router = broker(wait=false)
+    repl = broker(wait=false)
 
-    islistening(router, wait=10)
+    islistening(repl, wait=10)
     rb = connect()
 
-    Rembus.RouterCollector(router)
+    Rembus.RouterCollector(repl.router)
     metrics = []
     for collector in Prometheus.DEFAULT_REGISTRY.collectors
         if isa(collector, Rembus.RouterCollector)
@@ -16,7 +16,6 @@ function run()
             Prometheus.collect!(metrics, collector)
         end
     end
-    @info "metrics: $metrics"
     @test length(metrics) == 1
     close(rb)
 end

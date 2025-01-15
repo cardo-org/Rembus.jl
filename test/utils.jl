@@ -16,6 +16,25 @@ const REMBUS_CA = "rembus-ca.crt"
 
 results = []
 
+"""
+    check_sentinel(value; max_wait=10)
+
+Wait until `value` is greater then zero and return `true`.
+Return `false` if `max_wait` seconds have passed and `value` is not greater than zero.
+"""
+function check_sentinel(value; max_wait=10)
+    wtime = 0.1
+    t = 0
+    while t < max_wait
+        t += wtime
+        sleep(wtime)
+        if value > 0
+            @info "check=$value"
+            break
+        end
+    end
+end
+
 macro start_caronte(init, secure, policy, ws, tcp, zmq, http, name, reset, mode, log)
     quote
         running = get(ENV, "CARONTE_RUNNING", "0") !== "0"

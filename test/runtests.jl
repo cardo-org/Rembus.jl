@@ -404,6 +404,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "prometheus" begin
             include("broker/test_prometheus.jl")
         end
+        @time @safetestset "full_node" begin
+            include("broker/test_full_node.jl")
+        end
         @time @safetestset "policy" begin
             include("broker/test_policy.jl")
         end

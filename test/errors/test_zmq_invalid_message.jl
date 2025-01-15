@@ -15,12 +15,12 @@ end
 function run()
     srv = server(zmq=9001)
 
-    bro = broker(wait=false, zmq=8002)
-    add_node(bro, "zmq://127.0.0.1:9001/server")
+    repl = broker(wait=false, zmq=8002)
+    add_node(repl, "zmq://127.0.0.1:9001/server")
     sleep(0.5)
     conns = srv.connections
     wrong_message_type(conns[1].zaddress, conns[1].socket)
-    @test length(bro.servers) == 1
+    @test length(repl.router.servers) == 1
 end
 
 @info "[test_zmq_invalid_message] start"

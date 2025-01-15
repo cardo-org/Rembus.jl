@@ -175,7 +175,9 @@ mutable struct Listener
     Listener(port) = new(off, port)
 end
 
-abstract type RBHandle end
+abstract type Connected end
+
+abstract type RBHandle <: Connected end
 
 mutable struct RBConnection <: RBHandle
     type::NodeType
@@ -1195,8 +1197,8 @@ end
 Provide an exposed server method.
 =#
 function expose(
-    server::Server, name::AbstractString, func::Function;
-    raise=true, wait=true
+    server::AbstractRouter, name::AbstractString, func::Function;
+    raise=false, wait=true
 )
     server.topic_function[name] = func
     # inform all (already) connected nodes
@@ -1210,10 +1212,31 @@ function expose(
 end
 
 expose(
-    server::Server,
+    server::AbstractRouter,
     func::Function;
-    raise=true,
+    raise=false,
     wait=true) = expose(server, string(func), func, raise=raise, wait=wait)
+
+function expose(repl_twin::Twin, name::AbstractString, func::Function;
+    raise=false, wait=true)
+
+    router = repl_twin.router
+    router.topic_function[name] = func
+    # inform all (already) connected nodes
+    for (id, twin) in router.id_twin
+        rpcreq(repl_twin,
+            AdminReqMsg(name, Dict(COMMAND => EXPOSE_CMD), twin.id),
+            raise=raise,
+            wait=wait
+        )
+    end
+end
+
+expose(
+    twin::Twin,
+    func::Function;
+    raise=false,
+    wait=true) = expose(twin, string(func), func, raise=raise, wait=wait)
 
 function subscribe(
     server::Server, name::AbstractString, func::Function; from=Now()
@@ -1223,6 +1246,21 @@ function subscribe(
 end
 
 subscribe(server::Server, func::Function) = subscribe(server, string(func), func)
+
+function subscribe(repl_twin::Twin, name::AbstractString, func::Function; from=Now())
+    router = repl_twin.router
+    router.topic_function[name] = func
+    # inform all (already) connected nodes
+    for (id, twin) in router.id_twin
+        rpcreq(repl_twin,
+            AdminReqMsg(name, Dict(COMMAND => SUBSCRIBE_CMD), twin.id),
+            raise=false,
+            wait=wait
+        )
+    end
+end
+
+subscribe(twin::Twin, func::Function) = subscribe(twin, string(func), func)
 
 """
     inject(rb::RBHandle, ctx)
@@ -3210,7 +3248,7 @@ function inquiry_timeout(rb, condition::Distributed.Future)
     return nothing
 end
 
-function send_request(rb::RBHandle, msg::RembusMsg)
+function send_request(rb::Connected, msg::RembusMsg)
     mid::UInt128 = msg.id
     resp_cond = Distributed.Future()
     rb.out[mid] = resp_cond
@@ -3218,7 +3256,7 @@ function send_request(rb::RBHandle, msg::RembusMsg)
     return resp_cond
 end
 
-function send_request(rb::RBHandle, msg::RembusMsg, future)
+function send_request(rb::Connected, msg::RembusMsg, future)
     mid::UInt128 = msg.id
     rb.out[mid] = future
     put!(rb.process.inbox, msg)
@@ -3300,18 +3338,18 @@ end
 
 function pick_connections(handle, msg)
     if handle.policy === :first_up
-        return first_up(handle, msg.topic, handle.connections)
+        return first_up(handle, msg.topic, all_connected(handle))
     elseif handle.policy === :round_robin
-        return round_robin(handle, msg.topic, handle.connections)
+        return round_robin(handle, msg.topic, all_connected(handle))
     elseif handle.policy === :less_busy
-        return less_busy(handle, msg.topic, handle.connections)
+        return less_busy(handle, msg.topic, all_connected(handle))
     elseif handle.policy === :all
-        return handle.connections
+        return all_connected(handle)
     elseif isa(msg, PubSubMsg)
         # pick all if it is a publish message
-        return handle.connections
+        return all_connected(handle)
     else
-        return first_up(handle, msg.topic, handle.connections)
+        return first_up(handle, msg.topic, all_connected(handle))
     end
 end
 
@@ -3338,7 +3376,7 @@ function do_request(
 end
 
 function do_request(
-    rb::RBHandle, msg::RembusMsg, wait::Bool, timeout, raise
+    rb::Connected, msg::RembusMsg, wait::Bool, timeout, raise
 )
     if wait
         response = wait_response(rb, msg, timeout)
@@ -3348,7 +3386,7 @@ function do_request(
     end
 end
 
-function do_request(rb::RBHandle, msg::RembusMsg, future::Distributed.Future)
+function do_request(rb::Connected, msg::RembusMsg, future::Distributed.Future)
     send_request(rb, msg, future)
     return nothing
 end
@@ -3394,7 +3432,7 @@ function do_request(
 end
 
 function rpcreq(
-    handle::RBHandle, msg, future;
+    handle::Connected, msg, future;
     broadcast=false
 )
     if isa(handle, RBPool)
@@ -3441,20 +3479,53 @@ function rpcreq(
 end
 
 function rpcreq(
-    handle::Server, msg;
+    twin::Twin, msg;
+    raise=true,
+    timeout=request_timeout(),
+    wait=true,
+    broadcast=false
+)
+    twin.socket = Condition()
+    t = Timer(request_timeout()) do tmr
+        notify(twin.socket, RembusTimeout("$msg: request timeout"), error=raise)
+    end
+
+    rpc_request(twin.router, twin, msg)
+    response = Base.wait(twin.socket)
+    close(t)
+    if isa(response, RembusTimeout)
+        return response
+    elseif isa(response.data, IOBuffer) || isa(response.data, ZMQ.Message)
+        return decode(response.data)
+    else
+        return response.data
+    end
+end
+
+function rpcreq(
+    handle::AbstractRouter, msg;
     raise=true,
     timeout=request_timeout(),
     wait=true,
     broadcast=false
 )
     if broadcast
-        conn = handle.connections
+        conn = all_connected(handle)
     else
         conn = pick_connections(handle, msg)
     end
 
     return do_request(conn, msg, wait, timeout, raise)
 end
+
+inject(twin::Twin, ctx=nothing) = twin.router.shared = ctx
+
+all_connected(handle) = handle.connections
+
+## TODO: API policy for REPL twin awaiting implementation.
+#all_connected(handle::Router) = values(handle.id_twin)
+
+get_response(::RBHandle, response) = response.data
 
 function get_response(rb, msg, response; raise=true)
     outcome = nothing
@@ -3464,7 +3535,7 @@ function get_response(rb, msg, response; raise=true)
             throw(outcome)
         end
     elseif response.status == STS_SUCCESS
-        outcome = response.data
+        outcome = get_response(rb, response)
     else
         topic = nothing
         if isa(msg, RembusTopicMsg)

@@ -60,14 +60,15 @@ struct AdminReqMsg{T} <: RembusTopicMsg
     id::UInt128
     topic::String
     data::T
+    target::Union{Nothing,String}
     flags::UInt8
 
-    function AdminReqMsg(msgid::UInt128, topic, data, flags=0x0)
-        return new{typeof(data)}(msgid, topic, data, flags)
+    function AdminReqMsg(msgid::UInt128, topic, data, target=nothing, flags=0x0)
+        return new{typeof(data)}(msgid, topic, data, target, flags)
     end
 
-    function AdminReqMsg(topic::String, data, flags=0x0)
-        return new{typeof(data)}(id(), topic, data, flags)
+    function AdminReqMsg(topic::String, data, target=nothing, flags=0x0)
+        return new{typeof(data)}(id(), topic, data, target, flags)
     end
 end
 
@@ -88,6 +89,10 @@ struct ResMsg{T} <: RembusMsg
     ResMsg(id, status, data, flags=0x0) = new{typeof(data)}(id, status, data, flags)
 
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
+        return new{typeof(data)}(req.id, status, data, flags)
+    end
+
+    function ResMsg(req::AdminReqMsg, status::UInt8, data=nothing, flags=0x0)
         return new{typeof(data)}(req.id, status, data, flags)
     end
 end

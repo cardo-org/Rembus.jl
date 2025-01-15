@@ -145,7 +145,7 @@ function broker_parse(pkt)
         topic = decode_internal(io, Val(TYPE_3))
         data = decode_internal(io)
         @debug "<<message: ADMIN, topic: $topic, data:$data"
-        return AdminReqMsg(bytes2id(id), topic, data, flags)
+        return AdminReqMsg(bytes2id(id), topic, data, nothing, flags)
     elseif ptype == TYPE_RESPONSE
         id = decode_internal(io, Val(TYPE_2))
         status = decode_internal(io, Val(TYPE_0))
@@ -364,7 +364,7 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
         mid = bytes2id(pkt.header[2])
         topic = pkt.header[3]
         data = message2data(pkt.data)
-        return AdminReqMsg(mid, topic, data, flags)
+        return AdminReqMsg(mid, topic, data, nothing, flags)
     elseif ptype == TYPE_RESPONSE
         mid = bytes2id(pkt.header[2])
         status = pkt.header[3]
@@ -719,6 +719,18 @@ function transport_send(::Val{zdealer}, rb, msg::RpcReqMsg, enc=false)
     return true
 end
 
+function transport_send(::Val{zdealer}, rb, msg::AdminReqMsg, enc=false)
+    content = get_content(rb, msg.data)
+    target = nothing
+    lock(zmqsocketlock) do
+        send(rb.socket, Message(), more=true)
+        send(rb.socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic, target]), more=true)
+        send(rb.socket, content, more=true)
+        send(rb.socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
 function transport_send(::Val{zrouter}, twin, msg::ResMsg, enc=false)
     address = twin.zaddress
     lock(zmqsocketlock) do
@@ -759,7 +771,7 @@ function transport_send(::Val{socket}, rb::Twin, msg::ResMsg, enc=false)
     return true
 end
 
-function transport_send(::Val{loopback}, rb::Twin, msg::ResMsg, enc=false)
+function transport_send(::Val{loopback}, rb::Twin, msg::RembusMsg, enc=false)
     notify(rb.socket, msg)
     return true
 end

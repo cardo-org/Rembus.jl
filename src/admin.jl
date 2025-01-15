@@ -139,8 +139,8 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                 for tw in values(router.id_twin)
                     if tw.type !== loopback && tw.id !== twin.id
                         @debug "[$tw] broadcasting $msg"
-                        if tw.socket === nothing
-                            @debug "[$tw] expose not sent: socket is nothing"
+                        if tw.socket === nothing || !isopen(tw.socket)
+                            @debug "[$tw] expose not sent: socket is closed"
                         else
                             transport_send(Val(tw.type), tw, msg)
                         end

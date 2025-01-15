@@ -12,7 +12,7 @@ Twin is the broker-side image of a component.
 
 For ZMQ sockets one socket is shared between all twins.
 =#
-mutable struct Twin
+mutable struct Twin <: Connected
     type::NodeType
     router::AbstractRouter
     id::String
@@ -209,6 +209,13 @@ firstup_policy(router::Router) = router.policy = :first_up
 roundrobin_policy(router::Router) = router.policy = :round_robin
 
 lessbusy_policy(router::Router) = router.policy = :less_busy
+
+## TODO: API policy for REPL twin awaiting implementation.
+#all_policy(router::Router) = router.policy = :all
+#roundrobin_policy(twin::Twin) = roundrobin_policy(twin.router)
+#firstup_policy(twin::Twin) = firstup_policy(twin.router)
+#lessbusy_policy(twin::Twin) = lessbusy_policy(twin.router)
+#all_policy(twin::Twin) = all_policy(twin.router)
 
 forever(rb::Router) = !isinteractive() && wait(Visor.root_supervisor(rb.process))
 
@@ -704,7 +711,6 @@ function rpc_response(router, twin, msg)
     if haskey(twin.out, msg.id)
         put!(twin.out[msg.id], msg)
     end
-
     if haskey(twin.sent, msg.id)
         twinput = twin.sent[msg.id].request.twchannel
         reqdata = twin.sent[msg.id].request.content
@@ -732,38 +738,43 @@ function admin_msg(router, twin, msg)
     return nothing
 end
 
-function rpc_request(router, twin, msg)
+function rpc_request(router, twin, msg::RpcReqMsg)
+    return _rpc_request(router, twin, msg, TYPE_RPC)
+end
+
+function rpc_request(router, twin, msg::AdminReqMsg)
+    return _rpc_request(router, twin, msg, TYPE_ADMIN)
+end
+
+function _rpc_request(router, twin, msg, mtype)
+
     if !isauthorized(router, twin, msg.topic)
-        put!(
-            twin.process.inbox,
-            Msg(TYPE_RESPONSE, ResMsg(msg, STS_GENERIC_ERROR, "unauthorized"), twin)
-        )
+        m = Msg(TYPE_RESPONSE, ResMsg(msg, STS_GENERIC_ERROR, "unauthorized"), twin)
+        put!(twin.process.inbox, m)
     elseif msg.target !== nothing
         # it is a direct rpc
         if haskey(router.id_twin, msg.target)
             target_twin = router.id_twin[msg.target]
             if offline(target_twin)
-                put!(
-                    twin.process.inbox,
-                    Msg(TYPE_RESPONSE, ResMsg(msg, STS_TARGET_DOWN, msg.target), twin)
-                )
+                m = Msg(TYPE_RESPONSE, ResMsg(msg, STS_TARGET_DOWN, msg.target), twin)
+                put!(twin.process.inbox, m)
             else
-                put!(target_twin.process.inbox, Msg(TYPE_RPC, msg, twin))
+                m = Msg(mtype, msg, twin)
+                put!(target_twin.process.inbox, m)
             end
         else
             # target twin is unavailable
-            put!(
-                twin.process.inbox,
-                Msg(TYPE_RESPONSE, ResMsg(msg, STS_TARGET_NOT_FOUND, msg.target), twin)
-            )
+            m = Msg(TYPE_RESPONSE, ResMsg(msg, STS_TARGET_NOT_FOUND, msg.target), twin)
+            put!(twin.process.inbox, m)
         end
     else
         # msg is routable, get it to router
+        m = Msg(mtype, msg, twin, msg)
         @debug "[$twin] to router: $(prettystr(msg))"
-        put!(router.process.inbox, Msg(TYPE_RPC, msg, twin, msg))
+        put!(router.process.inbox, m)
     end
 
-    return nothing
+    return m
 end
 
 #=
@@ -802,15 +813,8 @@ function publish(router::Router, topic::AbstractString, data=[]; qos=QOS0)
     put!(router.process.inbox, Msg(TYPE_PUB, new_msg, Twin(router, "tmp", loopback)))
 end
 
-#=
-Publish data on topic. Used by broker plugin module to republish messages
-after transforming them.
-
-The message is delivered by the twin.
-=#
 function publish(twin::Twin, topic::AbstractString, data=[]; qos=QOS0)
-    new_msg = PubSubMsg(topic, data, qos)
-    put!(twin.process.inbox, Msg(TYPE_PUB, new_msg, twin))
+    publish(twin.router, topic, data; qos=qos)
 end
 
 function pubsub_msg(router, twin, msg)
@@ -1297,7 +1301,7 @@ function signal!(twin, msg::Msg)
         return nothing
     end
     # current message
-    if isa(msg.content, RpcReqMsg)
+    if isa(msg.content, RpcReqMsg) || isa(msg.content, AdminReqMsg)
         tmr = Timer(request_timeout()) do tmr
             delete!(twin.sent, msg.content.id)
         end
@@ -1320,6 +1324,10 @@ function signal!(twin, msg::Msg)
         # retry until outcome is true (ack message received)
         outcome = false
         while !outcome
+            if twin.socket === nothing
+                # give up: connection was closed.
+                return nothing
+            end
             outcome = transport_send(Val(twin.type), twin, pkt)
         end
         if isa(pkt, PubSubMsg)
@@ -1372,7 +1380,7 @@ function callback_and(
         end
         fn()
     catch e
-        @error "$cb callback error: $e"
+        @error "[$twin] $cb callback error: $e"
     end
 end
 
@@ -1457,7 +1465,7 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 
 Overwrite command line arguments if args is not empty.
 """
-function broker(;
+function _broker(;
     wait=true,
     secure=nothing,
     ws=nothing,
@@ -1573,6 +1581,45 @@ function broker(;
 
     yield()
     return router
+end
+
+function broker(;
+    wait=false,
+    secure=nothing,
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    http=nothing,
+    prometheus=nothing,
+    name="broker",
+    policy=:first_up,
+    mode=nothing,
+    reset=nothing,
+    log=TRACE_INFO,
+    plugin=nothing,
+    context=nothing
+)
+    router = _broker(;
+        wait=wait,
+        secure=secure,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        http=http,
+        prometheus=prometheus,
+        name=name,
+        policy=policy,
+        mode=mode,
+        reset=reset,
+        log=log,
+        plugin=plugin,
+        context=context
+    )
+
+    # create a REPL twin
+    twin = create_twin("_repl", router, loopback)
+
+    return twin
 end
 
 function brokerd()::Cint
@@ -2381,6 +2428,10 @@ function islistening(router::AbstractRouter; protocol::Vector{Symbol}=[:ws], wai
     return (wait >= 0)
 end
 
+function islistening(twin::Twin; protocol::Vector{Symbol}=[:ws], wait=0)
+    islistening(twin.router, protocol=protocol, wait=wait)
+end
+
 isconnected(twin) = twin.socket !== nothing && isopen(twin.socket)
 
 function first_up(router, topic, implementors)
@@ -2602,26 +2653,39 @@ function embedded_eval(router, twin::Twin, msg::RembusMsg)
             end
         end
         try
-            result = router.topic_function[msg.topic](router.shared, twin, getargs(payload)...)
+            if router.shared === nothing
+                result = router.topic_function[msg.topic](getargs(payload)...)
+            else
+                result = router.topic_function[msg.topic](
+                    router.shared, twin, getargs(payload)...
+                )
+            end
             sts = STS_SUCCESS
         catch e
-            ##    @debug "[$(msg.topic)] server error (method too young?): $e"
-            ##    result = "$e"
-            ##    sts = STS_METHOD_EXCEPTION
-            ##
-            ##    if isa(e, MethodError)
-            ##        try
-            ##            result = Base.invokelatest(
-            ##                router.topic_function[msg.topic],
-            ##                router.shared,
-            ##                twin,
-            ##                getargs(payload)...
-            ##            )
-            ##            sts = STS_SUCCESS
-            ##        catch e
+            @debug "[$(msg.topic)] server error (method too young?): $e"
             result = "$e"
-            ##        end
-            ##    end
+            sts = STS_METHOD_EXCEPTION
+
+            if isa(e, MethodError)
+                try
+                    if router.shared === nothing
+                        result = Base.invokelatest(
+                            router.topic_function[msg.topic],
+                            getargs(payload)...
+                        )
+                    else
+                        result = Base.invokelatest(
+                            router.topic_function[msg.topic],
+                            router.shared,
+                            twin,
+                            getargs(payload)...
+                        )
+                    end
+                    sts = STS_SUCCESS
+                catch e
+                    result = "$e"
+                end
+            end
         end
 
         if sts != STS_SUCCESS
@@ -2645,6 +2709,11 @@ function caronte_embedded_method(router, twin::Twin, msg::RembusMsg)
     end
 
     return found
+end
+
+function local_subscribers(router, twin::Twin, msg::RembusMsg)
+    embedded_eval(router, twin, msg)
+    return nothing
 end
 
 function encode_message(msg::PubSubMsg)
@@ -2675,8 +2744,8 @@ function broker_task(self, router)
         init(router)
 
         # example for registering a broker implementor
-        router.topic_function["uptime"] = (ctx, session) -> uptime(router)
-        router.topic_function["version"] = (ctx, session) -> Rembus.VERSION
+        router.topic_function["uptime"] = (ctx=missing, session=nothing) -> uptime(router)
+        router.topic_function["version"] = (ctx=missing, session=nothing) -> Rembus.VERSION
 
         for msg in self.inbox
             !isshutdown(msg) || break
@@ -2689,6 +2758,10 @@ function broker_task(self, router)
                     end
                     # publish to interested twins
                     broadcast!(router, msg)
+
+                    # relay to embebbed subscribers
+                    local_subscribers(router, msg.twchannel, msg.content)
+
                 elseif msg.ptype == TYPE_RPC
                     topic = msg.content.topic
                     if caronte_embedded_method(router, msg.twchannel, msg.content)
@@ -2848,6 +2921,8 @@ end
 
 add_node(router, url::AbstractString) = add_node(router, RbURL(url))
 
+add_node(twin::Twin, url::AbstractString) = add_node(twin.router, RbURL(url))
+
 #=
     remove_node(components)
 
@@ -2863,6 +2938,8 @@ function remove_node(router, component)
 end
 
 remove_node(router, url::AbstractString) = remove_node(router, RbURL(url))
+
+remove_node(twin::Twin, url::AbstractString) = remove_node(twin.router, url)
 
 function setup_receiver(process, socket, twin::Twin, isconnected)
     twin.socket = socket
@@ -2905,6 +2982,8 @@ Connect to server or broker extracted from remote_url.
 
 Loopback connection is not permitted.
 =#
+connect(t::Twin, url::AbstractString) = connect(t.router, url)
+
 function connect(
     router::Router, remote_url::AbstractString
 )
