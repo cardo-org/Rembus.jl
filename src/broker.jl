@@ -87,10 +87,31 @@ msg_dataframe() = DataFrame(
     ptr=UInt[], ts=UInt[], uid=UInt[], topic=String[], pkt=String[]
 )
 
+struct RembusMetrics
+    rpc::Prometheus.Family{Prometheus.Histogram}
+    pub::Prometheus.Family{Prometheus.Counter}
+    RembusMetrics(reg) = new(
+        Prometheus.Family{Prometheus.Histogram}(
+            "broker_rpc",
+            "Round trip time for rpc requests",
+            ("topic",),
+            registry=reg
+        ),
+        Prometheus.Family{Prometheus.Counter}(
+            "broker_pub",
+            "Count of published messages",
+            ("topic",),
+            registry=reg
+        )
+    )
+end
+
+
 mutable struct Router <: AbstractRouter
     id::String
     mode::ConnectionMode
     policy::Symbol
+    metrics::Union{Nothing,RembusMetrics}
     msg_df::DataFrame
     mcounter::UInt64
     start_ts::Float64
@@ -122,6 +143,7 @@ mutable struct Router <: AbstractRouter
         name,
         anonymous,
         :first_up,
+        nothing,
         msg_dataframe(),
         0,
         NaN,
@@ -717,9 +739,11 @@ function rpc_response(router, twin, msg)
         put!(router.process.inbox, Msg(TYPE_RESPONSE, msg, twinput, reqdata))
 
         elapsed = time() - twin.sent[msg.id].sending_ts
-        #if CONFIG.metering
-        #    @debug "[$(twin.id)][$(reqdata.topic)] exec elapsed time: $elapsed secs"
-        #end
+        if router.metrics !== nothing
+            @debug "[$twin] $(reqdata.topic) elapsed=$elapsed secs"
+            h = Prometheus.labels(router.metrics.rpc, (reqdata.topic,))
+            Prometheus.observe(h, elapsed)
+        end
         close(twin.sent[msg.id].timer)
         delete!(twin.sent, msg.id)
     else
@@ -1514,8 +1538,12 @@ function _broker(;
 
     prometheus_port = getparam(args, "prometheus", prometheus)
     if prometheus_port !== nothing
-        RouterCollector(router)
-        push!(tasks, process(prometheus_task, args=(prometheus_port,)))
+        registry = Prometheus.CollectorRegistry()
+        router.metrics = RembusMetrics(registry)
+        RouterCollector(router, registry=registry)
+        Prometheus.GCCollector(; registry=registry)
+        Prometheus.ProcessCollector(; registry=registry)
+        push!(tasks, process(prometheus_task, args=(prometheus_port, registry)))
     end
 
     http_port = getparam(args, "http", http)
@@ -2761,7 +2789,10 @@ function broker_task(self, router)
 
                     # relay to embebbed subscribers
                     local_subscribers(router, msg.twchannel, msg.content)
-
+                    if router.metrics !== nothing
+                        counter = Prometheus.labels(router.metrics.pub, (msg.content.topic,))
+                        Prometheus.inc(counter)
+                    end
                 elseif msg.ptype == TYPE_RPC
                     topic = msg.content.topic
                     if caronte_embedded_method(router, msg.twchannel, msg.content)
@@ -3017,12 +3048,12 @@ function connect(
     return nothing
 end
 
-function prometheus_task(self, port)
+function prometheus_task(self, port, registry)
     IP = "0.0.0.0"
     @info "starting prometheus at port $port"
 
     server = HTTP.listen!(IP, port) do http
-        return Prometheus.expose(http)  # Expose the metrics.
+        return Prometheus.expose(http, registry)
     end
 
     # wait for a message: the only one is a shutdown request.

@@ -49,7 +49,7 @@ function run()
     @info "isconnected: $isconn"
 
     publish(rb, "mytopic", qos=QOS2)
-    check_sentinel(ctx.count)
+    check_sentinel(ctx)
 
     shutdown(rb)
     shutdown(srv)

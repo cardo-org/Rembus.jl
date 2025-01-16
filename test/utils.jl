@@ -17,19 +17,18 @@ const REMBUS_CA = "rembus-ca.crt"
 results = []
 
 """
-    check_sentinel(value; max_wait=10)
+    check_sentinel(ctx; max_wait=10)
 
-Wait until `value` is greater then zero and return `true`.
-Return `false` if `max_wait` seconds have passed and `value` is not greater than zero.
+Wait until `ctx.count` is greater then zero and return `true`.
+Return `false` if `max_wait` seconds have passed and `ctx.count` is not greater than zero.
 """
-function check_sentinel(value; max_wait=10)
+function check_sentinel(ctx; max_wait=10)
     wtime = 0.1
     t = 0
     while t < max_wait
         t += wtime
         sleep(wtime)
-        if value > 0
-            @info "check=$value"
+        if ctx.count > 0
             break
         end
     end
