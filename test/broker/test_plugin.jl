@@ -1,29 +1,30 @@
 include("../utils.jl")
 
 test_name = "test_plugin"
+broker_name = "plugin"
 
 # set a mismatched shared secret
 function init(ok_cid, ko_cid)
-    mkpath(Rembus.keys_dir(BROKER_NAME))
+    mkpath(Rembus.keys_dir(broker_name))
     # component side
     for cid in [ok_cid, ko_cid]
-        pkfile = Rembus.pkfile(cid)
+        pkfile = Rembus.pkfile(cid, create_dir=true)
         open(pkfile, create=true, write=true) do f
             write(f, "aaa")
         end
     end
 
     # broker side
-    fn = Rembus.key_base(BROKER_NAME, ok_cid)
+    fn = Rembus.key_base(broker_name, ok_cid)
     open(fn, create=true, write=true) do f
         write(f, "aaa")
     end
-    fn = Rembus.key_base(BROKER_NAME, ko_cid)
+    fn = Rembus.key_base(broker_name, ko_cid)
     open(fn, create=true, write=true) do f
         write(f, "bbb")
     end
 
-    set_admin(ok_cid)
+    set_admin(broker_name, ok_cid)
 end
 
 
@@ -34,29 +35,13 @@ using Rembus
 export challenge
 export login
 
-export myfunction
-
-function myfunction(ctx, twin, arg)
-    @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
-    return "hello from broker plugin"
-end
-
-function myfunction(ctx, twin, arg1, arg2)
-    error("myfunction error")
-end
-
-function myfunction(ctx, twin)
-    @info "myfunction: $(session(twin)) - isauth: $(twin.isauth)"
-    return "no args"
-end
-
 function challenge(twin)
+    @info "challenge invoked"
     return UInt8[0, 0, 0, 0]
 end
 
 function login(twin, user, hash)
-    sess = session(twin)
-    @info "[$twin] custom login [$user]: $sess"
+    @info "[$twin] custom login [$user]: $(twin.shared)"
     if user == "ok_cid"
         return true
     end
@@ -103,62 +88,17 @@ end # module CarontePlugin
 function test_plugin_topic()
 end
 
-function start_broker(ctx)
-    rb = broker(
-        wait=false,
-        plugin=CarontePlugin,
-        context=ctx,
-        name=BROKER_NAME
-    )
-    forever(rb)
-end
-
 function run(ok_cid, ko_cid)
-    # wait for secret files creation
-    sleep(1)
-
     # store test related info
     ctx = Dict()
 
-    Rembus.setup(Rembus.CONFIG)
+    bro = broker(name=broker_name, ws=8000)
+    Rembus.set_plugin(bro, CarontePlugin, ctx)
 
-    @async start_broker(ctx)
-    sleep(2)
+    Rembus.islistening(bro, protocol=[:ws], wait=10)
 
-    rb = tryconnect(ok_cid)
-
+    rb = connect(ok_cid)
     subscribe(rb, test_plugin_topic)
-
-    # invoke myfunction defined by CarontePlugin module
-    response = rpc(rb, "myfunction", "arg_1")
-    @test response == "hello from broker plugin"
-
-    response = rpc(rb, "myfunction", ["arg_1"])
-    @test response == "hello from broker plugin"
-
-    response = rpc(rb, "myfunction", nothing)
-    @test response == "no args"
-
-    try
-        rpc(rb, "myfunction", ["arg_1", "arg_2"])
-    catch e
-        @info "expected error: $e"
-        @test true
-    end
-
-    okcid = from("$BROKER_NAME.twins.ok_cid")
-    twin = okcid.args[1]
-    tim = Timer(0)
-    msgid = 1
-    twin.acktimer[1] = Rembus.AckState(false, tim)
-
-    # triggers CarontePlugin.park
-    Rembus.handle_ack_timeout(tim, twin, "my_string", msgid)
-
-    # request a broker shutdown
-    res = Rembus.broker_shutdown(rb)
-    @info "shutdown: $res"
-
     close(rb)
 
     try
@@ -166,7 +106,7 @@ function run(ok_cid, ko_cid)
         @test false
     catch e
         @info "[$ko_cid] expected error: $e"
-        @test isa(e, HTTP.Exceptions.ConnectError)
+        @test isa(e, RembusError)
     end
 
     sleep(1)
@@ -184,8 +124,5 @@ catch e
     @error "[$test_name]: $e"
     @test false
 finally
-    remove_keys(ok_cid)
-    remove_keys(ko_cid)
     shutdown()
-    rm(Rembus.broker_dir(BROKER_NAME), recursive=true)
 end

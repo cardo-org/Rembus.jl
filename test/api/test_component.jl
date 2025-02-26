@@ -1,91 +1,59 @@
 include("../utils.jl")
 
-mutable struct Ctx
-    data::Any
-end
-
-function atopic(ctx, rb, x)
-    @info "[test_component] atopic: $x"
-    ctx.data = x
-end
-
-function myservice()
-    @info "[test_component] myservice requested"
-    return 1
-end
+myservice(val) = val;
 
 function run()
+    # Test requests timeout
+    Rembus.error!()
+    Rembus.request_timeout!(0.1)
+    try
+        connect("rpc_timeout_component")
+    catch e
+        @info "[test_rpc] expected: $e"
+    end
+    Rembus.request_timeout!(20)
 
-    rb = component("foo")
+    Rembus.debug!()
+    # Starts a component just for being notified of subscribed events
+    dummy = connect("rpc_dummy_component", name="rpc_dummy_component")
 
-    # first make a request
-    res = rpc(rb, "version", wait=false)
-    @info "response=$res"
+    Rembus.warn!()
 
-    # then start the broker
-    bro = broker(wait=false, ws=8000, tcp=8001)
-    islistening(bro, protocol=[:ws, :tcp])
+    server = component("rpc_myserver", ws=10000)
+    expose(server, myservice)
 
-    # and get the response
-    ver = fetch_response(res)
-    @test ver === Rembus.VERSION
-
-    for fn in [expose, unexpose, subscribe, unsubscribe]
-        res = fn(rb, atopic, wait=false)
-        @test fetch_response(res) === nothing
+    Rembus.info!()
+    router = from("component.broker").args[1]
+    for node in router.network
+        @info "router node: $node"
     end
 
-    res = reactive(rb, wait=false)
-    @test fetch_response(res) === nothing
+    #for url in ["ws://127.0.0.1:8000/c1", "zmq://127.0.0.1:8002/c1"]
+    #for url in ["zmq://127.0.0.1:8002/c1"]
+    for url in ["ws://127.0.0.1:8000/rpc_c1"]
+        rb = connect(url)
+        response = rpc(rb, "myservice", "hello")
+        @info "response=$response"
+        @test response == "hello"
 
-    res = unreactive(rb, wait=false)
-    @test fetch_response(res) === nothing
+        response = direct(rb, "rpc_myserver", "myservice", "hello")
+        @test response == "hello"
 
-    res = expose(rb, "my_cool_service", myservice, wait=false)
-    @test fetch_response(res) === nothing
+        futres = Rembus.fpc(rb, "myservice", "hello")
+        @test issuccess(futres)
+        @test fetch(futres) == "hello"
 
-    res = unexpose(rb, "my_cool_service", wait=false)
-    @test fetch_response(res) === nothing
+        sts = Rembus.fpc(rb, "unknown_method")
+        @test !issuccess(sts)
 
-    shutdown(rb)
+        shutdown(rb)
+    end
 
-    rb = component(["ws://:8000", "tcp://:8001"])
-    all_policy(rb)
+    unexpose(server, myservice)
 
-    futures = rpc(rb, "version", wait=false)
-    values = fetch_response(futures)
-    @test values == [Rembus.VERSION, Rembus.VERSION]
-
-    # test rpcreq broadcast flag
-    expose(rb, myservice, wait=false)
-
-    shutdown(rb)
-
-    rb = component(["ws://:8000", "tcp://:8003"])
-    all_policy(rb)
-
-    futures = rpc(rb, "version", wait=false)
-    values = fetch_response(futures)
-    @test values[1] === Rembus.VERSION
-    @test values[2] === missing
-
-    shutdown(rb)
-
-    rb = connect(["ws://:8005", "ws://:8006"])
-    future = rpc(rb, "version", wait=false)
-    @test_throws RembusError fetch_response(future)
+    shutdown(dummy)
+    shutdown(server)
+    Rembus.info!()
 end
 
-@info "[test_component] start"
-
-try
-    run()
-
-catch e
-    @error "[test_component] unexpected error: $e"
-    showerror(stdout, e, catch_backtrace())
-    @test false
-finally
-    shutdown()
-end
-@info "[test_component] stop"
+execute(run, "component")

@@ -5,27 +5,22 @@ Return the owners dataframe
 =#
 function load_tenants(router)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
-    db = DuckDB.DB()
-    try
-        if isfile(fn)
-            @debug "loading file $fn"
-            df = DataFrame(DuckDB.query(db, "SELECT * FROM read_json('$fn')"))
-            if !isempty(df)
-                # if not found then set default tenant
-                if columnindex(df, :tenant) == 0
-                    @debug "setting default tenant: [$(router.process.supervisor.id)]"
-                    df[!, :tenant] .= router.process.supervisor.id
-                end
-                return df
-            end
+    if isfile(fn)
+        json_data = open(fn, "r") do f
+            JSON3.read(f)
         end
-        @debug "$TENANTS_FILE empty/not found"
+
+        df = DataFrame(json_data)
+        # if not found then set default tenant
+        if columnindex(df, :tenant) == 0
+            @debug "setting default tenant: [$(router.process.supervisor.id)]"
+            df[!, :tenant] .= router.process.supervisor.id
+        end
+        return df
+    else
         return DataFrame(pin=String[], tenant=String[], enabled=Bool[])
-    finally
-        close(db)
     end
 end
-
 
 #=
     load_servers(router)
@@ -60,15 +55,38 @@ Save the tenants table.
 =#
 function save_tenants(router, tenants::AbstractString)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
-    db = DuckDB.DB()
-    try
-        open(fn, "w") do f
-            write(f, tenants)
+    open(fn, "w") do f
+        write(f, tenants)
+    end
+end
+
+#=
+    load_tenant_component(router)
+
+Return the dataframe that maps tenants with components.
+=#
+function load_tenant_component(router)
+    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
+    if isfile(fn)
+        json_data = open(fn, "r") do f
+            JSON3.read(f)
         end
-    catch e
-        rethrow()
-    finally
-        close(db)
+
+        return DataFrame(json_data)
+    else
+        return DataFrame(tenant=String[], component=String[])
+    end
+end
+
+#=
+    save_tenant_component(df)
+
+Save the tenant_component table.
+=#
+function save_tenant_component(router, df)
+    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
+    open(fn, "w") do f
+        write(f, arraytable(df))
     end
 end
 
@@ -79,18 +97,14 @@ Return the component_owner dataframe
 =#
 function load_token_app(router)
     fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    db = DuckDB.DB()
-    try
-        if isfile(fn)
-            df = DataFrame(DuckDB.query(db, "SELECT * FROM read_json('$fn')"))
-            if !isempty(df)
-                return df
-            end
+    if isfile(fn)
+        json_data = open(fn, "r") do f
+            JSON3.read(f)
         end
-        @debug "$TENANT_COMPONENT empty/not found"
+
+        return DataFrame(json_data)
+    else
         return DataFrame(tenant=String[], component=String[])
-    finally
-        close(db)
     end
 end
 
@@ -101,30 +115,30 @@ Save the component_owner table.
 =#
 function save_token_app(router, df)
     fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    db = DuckDB.DB()
-    try
-        open(fn, "w") do f
-            write(f, arraytable(df))
-        end
-    catch e
-        rethrow()
-    finally
-        close(db)
+    open(fn, "w") do f
+        write(f, arraytable(df))
     end
 end
 
-broker_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id)
-broker_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id)
-broker_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name)
+broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
+broker_dir(name::AbstractString) = joinpath(@load_preference("rembus_dir"), name)
 
-keystore_dir() = get(ENV, "REMBUS_KEYSTORE", joinpath(CONFIG.rembus_dir, "keystore"))
+function keystore_dir()
+    return get(ENV, "REMBUS_KEYSTORE", joinpath(@load_preference("rembus_dir"), "keystore"))
+end
 
-keys_dir(router::Router) = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys")
-keys_dir(router::Server) = joinpath(CONFIG.rembus_dir, router.process.id, "keys")
-keys_dir(broker_name::AbstractString) = joinpath(CONFIG.rembus_dir, broker_name, "keys")
+keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "keys")
+keys_dir(name::AbstractString) = joinpath(@load_preference("rembus_dir"), name, "keys")
 
-messages_dir(r::Router) = joinpath(CONFIG.rembus_dir, r.process.supervisor.id, "messages")
-messages_dir(broker::AbstractString) = joinpath(CONFIG.rembus_dir, broker, "messages")
+function messages_dir(r::Router)
+    return joinpath(r.settings.rembus_dir, r.process.supervisor.id, "messages")
+end
+
+messages_dir(t::Twin) = messages_dir(t.router)
+
+function messages_dir(broker::AbstractString)
+    return joinpath(@load_preference("rembus_dir"), broker, "messages")
+end
 
 function fullname(basename::AbstractString)
     for format in ["pem", "der"]
@@ -139,25 +153,16 @@ function fullname(basename::AbstractString)
 end
 
 function key_base(router::Router, cid::AbstractString)
-    res = joinpath(CONFIG.rembus_dir, router.process.supervisor.id, "keys", cid)
+    res = joinpath(router.settings.rembus_dir, router.process.supervisor.id, "keys", cid)
     return res
 end
 
-function key_base(server::Server, cid::AbstractString)
-    return joinpath(CONFIG.rembus_dir, server.process.id, "keys", cid)
-end
-
 function key_base(broker_name::AbstractString, cid::AbstractString)
-    return joinpath(CONFIG.rembus_dir, broker_name, "keys", cid)
+    return joinpath(@load_preference("rembus_dir"), broker_name, "keys", cid)
 end
 
 function key_file(router::Router, cid::AbstractString)
     basename = key_base(router, cid)
-    return fullname(basename)
-end
-
-function key_file(server::Server, cid::AbstractString)
-    basename = key_base(server, cid)
     return fullname(basename)
 end
 
@@ -169,7 +174,7 @@ end
 function save_table(router, router_tbl, filename)
     table = Dict()
     for (topic, twins) in router_tbl
-        twin_ids = [tw.id for tw in twins if tw.hasname]
+        twin_ids = [tw.uid.id for tw in twins if hasname(tw)]
         table[topic] = twin_ids
     end
     fn = joinpath(broker_dir(router), filename)
@@ -251,7 +256,7 @@ function load_impl_table(router)
         for (topic, twin_ids) in table
             twins = Set{Twin}()
             for tid in twin_ids
-                twin = create_twin(tid, router, loopback)
+                twin = bind(router, RbURL(tid))
                 push!(twins, twin)
             end
             if !isempty(twins)
@@ -300,8 +305,7 @@ function load_twins(router)
 
     twins = Dict()
     for (cid, topicsdict) in twin_topicsdict
-        twin = create_twin(cid, router, loopback)
-        twin.hasname = true
+        twin = bind(router, RbURL(cid))
         twin.msg_from = topicsdict
 
         for topic in keys(topicsdict)
@@ -324,8 +328,8 @@ function save_marks(router)
     twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
     for twin in values(router.id_twin)
         # save only named twins, anonymous twin cannot be msg_from
-        if twin.hasname
-            twin_mark[twin.id] = twin.mark
+        if hasname(twin)
+            twin_mark[tid(twin)] = twin.mark
         end
     end
     JSON3.write(fn, twin_mark)
@@ -359,9 +363,9 @@ function save_twins(router)
     @debug "saving subscribers table"
     twin_cfg = Dict{String,Dict{String,Float64}}()
     for (twin_id, twin) in router.id_twin
-        if twin.hasname
-            router.twin_finalize(router.shared, twin)
-            # ??? delete!(router.id_twin, twin_id)
+        if hasname(twin)
+            # TODO: finalizer callback
+            #router.twin_finalize(router.shared, twin)
             twin_cfg[twin_id] = twin.msg_from
         end
     end
@@ -378,7 +382,7 @@ Persist router configuration on disk.
 =#
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
-        @debug "saving configuration on disk"
+        @debug "[$router] saving configuration to $(broker_dir(router))"
         save_impl_table(router)
         save_topic_auth_table(router)
         save_admins(router)
@@ -390,13 +394,13 @@ end
 
 function load_configuration(router)
     callback_or(router, :load_configuration) do
-        @debug "loading configuration from disk"
+        @debug "[$router] loading configuration from $(broker_dir(router))"
         load_twins(router)
         load_impl_table(router)
         load_topic_auth_table(router)
         load_admins(router)
         router.owners = load_tenants(router)
-        router.component_owner = load_token_app(router)
+        router.component_owner = load_tenant_component(router)
         load_servers(router)
         load_marks(router)
     end

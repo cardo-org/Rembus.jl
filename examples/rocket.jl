@@ -33,4 +33,4 @@ subscribe!(subject, logger())
 @component "rocket"
 @inject subject
 @subscribe my_topic before_now
-@forever
+@wait

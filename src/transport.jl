@@ -16,11 +16,9 @@ const WAIT_DATA = UInt8(4)
 abstract type ZMQAbstractPacket end
 
 mutable struct ZMQPacket <: ZMQAbstractPacket
-    status::UInt8
     identity::Vector{UInt8}
     header::Vector{Any}
     data::ZMQ.Message
-    ZMQPacket() = new(WAIT_ID, UInt8[], [], Message())
 end
 
 mutable struct ZMQDealerPacket <: ZMQAbstractPacket
@@ -29,27 +27,23 @@ mutable struct ZMQDealerPacket <: ZMQAbstractPacket
 end
 
 #=
-    zmq_load(socket::ZMQ.Socket)
+    zmq_load(twin::Twin, pkt, socket::ZMQ.Socket)
 
 Get a Rembus message from a ZeroMQ multipart message.
-
-The decoding is performed at the component side, a server side
-or from a twin with a dedicated DEALER socket that has established
-a connection to a server or a broker.
 =#
-function zmq_load(socket::ZMQ.Socket)
+function zmq_load(twin::Twin, socket::ZMQ.Socket)
     pkt = zmq_message(socket)
-    return broker_parse(pkt, false)
+    return zmq_parse(twin, pkt, false)
 end
 
 #=
-    from_cbor(packet)
+    from_cbor(twin, msgid, counter, packet)
 
-Get a Rembus message decoding from a CBOR binary.
+Send a Rembus message from a CBOR encoded array of bytes.
 
-The decoding is performed at the component side.
+Currently only a PubSub message is supported.
 =#
-function from_cbor(packet)
+function from_cbor(twin, counter, packet)
     payload = decode(packet)
     ptype = payload[1] & 0x0f
     flags = payload[1] & 0xf0
@@ -57,53 +51,25 @@ function from_cbor(packet)
         if flags > QOS0
             ackid = bytes2id(payload[2])
             data = dataframe_if_tagvalue(payload[4])
-            return PubSubMsg(payload[3], data, flags, ackid)
+            msg = PubSubMsg(twin, payload[3], data, flags, ackid)
         else
             ackid = 0
             data = dataframe_if_tagvalue(payload[3])
-            return PubSubMsg(payload[2], data, flags, ackid)
+            msg = PubSubMsg(twin, payload[2], data, flags, ackid)
         end
-    elseif ptype == TYPE_RPC
-        data = dataframe_if_tagvalue(payload[5])
-        #                       id               topic             target
-        return RpcReqMsg(bytes2id(payload[2]), payload[3], data, payload[4], flags)
-    elseif ptype == TYPE_RESPONSE
-        data = dataframe_if_tagvalue(payload[4])
-        #                          id        status
-        return ResMsg(bytes2id(payload[2]), payload[3], data, flags)
-    elseif ptype == TYPE_ACK
-        return AckMsg(bytes2id(payload[2]))
-    elseif ptype == TYPE_ACK2
-        return Ack2Msg(bytes2id(payload[2]))
-    elseif ptype == TYPE_IDENTITY
-        cid = payload[3]
-        @debug "<<message IDENTITY, cid: $cid)"
-        return IdentityMsg(bytes2id(payload[2]), cid)
-    elseif ptype == TYPE_ADMIN
-        #                                          topic        data
-        return AdminReqMsg(bytes2id(payload[2]), payload[3], payload[4])
-    elseif ptype == TYPE_REGISTER
-        #                           cid        tenant      pubkey,      type
-        return Register(
-            bytes2id(payload[2]), payload[3], payload[4], payload[5], payload[6]
-        )
-    elseif ptype == TYPE_UNREGISTER
-        #                                         cid
-        return Unregister(bytes2id(payload[2]), payload[3])
-    elseif ptype == TYPE_ATTESTATION
-        #                                         cid         signature
-        return Attestation(bytes2id(payload[2]), payload[3], payload[4])
+        msg.counter = counter
+        put!(twin.process.inbox, msg)
     end
+
+    return nothing
 end
 
 #=
     broker_parse(pkt)
 
-Get a Rembus message from a CBOR encoded packet.
-
-The decoding is performed at the broker side.
+Get a Rembus message from a CBOR packet.
 =#
-function broker_parse(pkt)
+function broker_parse(twin::Twin, pkt)
     io = IOBuffer(pkt)
     header = read(io, UInt8)
     if (header & TYPE_BITS_MASK) !== TYPE_4
@@ -120,45 +86,38 @@ function broker_parse(pkt)
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        @debug "<<message IDENTITY, cid: $cid)"
-        return IdentityMsg(bytes2id(id), cid)
+        meta = decode_internal(io)
+        return IdentityMsg(twin, bytes2id(id), cid, meta)
     elseif ptype == TYPE_PUB
         if flags > QOS0
             id = decode_internal(io, Val(TYPE_2))
             topic = decode_internal(io, Val(TYPE_3))
-            @debug "<<message PUB/ACK, topic: $topic"
-            return PubSubMsg(topic, io, flags, bytes2id(id))
+            return PubSubMsg(twin, topic, io, flags, bytes2id(id))
         else
-            # do not decode dataframe, just pass through the broker
+            # Do not decode dataframe, just pass through the broker.
             topic = decode_internal(io, Val(TYPE_3))
-            @debug "<<message PUB, topic: $topic"
-            return PubSubMsg(topic, io, flags)
+            return PubSubMsg(twin, topic, io, flags)
         end
     elseif ptype == TYPE_RPC
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
         target = decode_internal(io)
-        @debug "<<message RPC, id:$id, topic: $topic"
-        return RpcReqMsg(bytes2id(id), topic, io, target, flags)
+        return RpcReqMsg(twin, bytes2id(id), topic, io, target, flags)
     elseif ptype == TYPE_ADMIN
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
         data = decode_internal(io)
-        @debug "<<message: ADMIN, topic: $topic, data:$data"
-        return AdminReqMsg(bytes2id(id), topic, data, nothing, flags)
+        return AdminReqMsg(twin, bytes2id(id), topic, Dict{String,Any}(data), nothing, flags)
     elseif ptype == TYPE_RESPONSE
         id = decode_internal(io, Val(TYPE_2))
         status = decode_internal(io, Val(TYPE_0))
-        # do not decode dataframe, just pass through the broker
-        @debug "<<message: RESPONSE, id:$id, status: $status"
+        # Do not decode dataframe, just pass through the broker.
         return ResMsg(bytes2id(id), status, io, flags)
     elseif ptype == TYPE_ACK
         id = decode_internal(io, Val(TYPE_2))
-        @debug "<<message ACK: id: $id)"
         return AckMsg(bytes2id(id))
     elseif ptype == TYPE_ACK2
         id = decode_internal(io, Val(TYPE_2))
-        @debug "<<message ACK2: id: $id)"
         return Ack2Msg(bytes2id(id))
     elseif ptype == TYPE_REGISTER
         id = decode_internal(io, Val(TYPE_2))
@@ -166,19 +125,17 @@ function broker_parse(pkt)
         tenant = decode_internal(io)
         pubkey = decode_internal(io)
         type = decode_internal(io)
-        @debug "<<message REGISTER, cid: $cid"
         return Register(bytes2id(id), cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        @debug "<<message UNREGISTER, cid: $cid"
         return Unregister(bytes2id(id), cid)
     elseif ptype == TYPE_ATTESTATION
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
-        @debug "<<message ATTESTATION, cid: $cid"
-        return Attestation(bytes2id(id), cid, signature)
+        meta = decode_internal(io)
+        return Attestation(bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")
 end
@@ -246,96 +203,100 @@ Receive a Multipart ZeroMQ message.
 
 Return the packet identity, header and data values extracted from a ROUTER socket.
 =#
-function zmq_message(router::AbstractRouter, pkt::ZMQPacket)::Bool
+function zmq_message(router::Router)::ZMQPacket
     pkt_is_valid = false
-    header::Vector{UInt8} = []
+    status = WAIT_ID
+    header = UInt8[]
+    identy = UInt8[]
+    data = Message()
     while !pkt_is_valid
         msg = recv(router.zmqsocket)
-        if pkt.status == WAIT_ID
+        if status == WAIT_ID
             if length(msg) != 5 || msg[1] != 0
-                @error "ZMQ router: expected identity, got: $msg"
+                @error "[ZMQ router] expected identity, got: $msg"
             else
-                pkt.status = WAIT_EMPTY
-                pkt.identity = msg
+                status = WAIT_EMPTY
+                identy = msg
             end
-        elseif pkt.status == WAIT_EMPTY
+        elseif status == WAIT_EMPTY
             if !isempty(msg)
-                @error "ZMQ router [$identity]: expected empty message"
+                @error "[ZMQ router] expected empty message, got: $msg"
                 if is_identity(msg)
-                    pkt.identity = msg
+                    identy = msg
                 else
-                    pkt.identity = UInt8[]
-                    pkt.status = WAIT_ID
+                    identy = UInt8[]
+                    status = WAIT_ID
                 end
             else
-                pkt.status = WAIT_HEADER
+                status = WAIT_HEADER
             end
-        elseif pkt.status == WAIT_HEADER
+        elseif status == WAIT_HEADER
             header = msg
-            pkt.status = WAIT_DATA
-        elseif pkt.status == WAIT_DATA
+            status = WAIT_DATA
+        elseif status == WAIT_DATA
             data = msg
             msgend = recv(router.zmqsocket)
             if msgend != MESSAGE_END
-                # search for identity message in header, data or msgend
+                # Search for identity message in header, data or msgend.
                 if is_identity(header)
                     if (isempty(data))
-                        # detected another zmq message
-                        pkt.identity = header
+                        # Detected another zmq message.
+                        identy = header
                         header = msgend
                     else
-                        # unable to detect header message type
-                        # restart searching from identity
-                        pkt.status = WAIT_ID
+                        # Unable to detect header message type,
+                        # restart searching from identity.
+                        status = WAIT_ID
                     end
                 elseif is_identity(data)
                     if (isempty(msgend))
-                        # detected another zmq message
-                        pkt.status = WAIT_HEADER
-                        pkt.identity = data
+                        # Detected another zmq message.
+                        status = WAIT_HEADER
+                        identy = data
                     else
-                        # unable to detect data message type
+                        # Unable to detect data message type,
                         # restart searching from identity
-                        pkt.status = WAIT_ID
+                        status = WAIT_ID
                     end
                 elseif is_identity(msgend)
-                    pkt.status = WAIT_EMPTY
+                    status = WAIT_EMPTY
                 else
-                    # unable to detect data message type
+                    # Unable to detect data message type,
                     # restart searching from identity
-                    pkt.status = WAIT_ID
+                    status = WAIT_ID
                 end
             else
-                pkt.status = WAIT_ID
-                pkt.header = decode(header)
-                pkt.data = data
                 pkt_is_valid = true
             end
         end
     end
-    return pkt_is_valid
+    return ZMQPacket(identy, decode(header), data)
 end
 
 #=
-    broker_parse(pkt::ZMQPacket, isbroker=true)
+    zmq_parse(pkt::ZMQPacket, isbroker=true)
 
 The parser of ZeroMQ messages.
 
 `pkt` is the zeromq message decoded as `[identity, header, data]`.
 =#
-function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
+function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
     type = pkt.header[1]
-
     ptype = type & 0x0f
     flags = type & 0xf0
 
     if ptype == TYPE_IDENTITY
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
+        if length(pkt.header) == 4
+            meta = pkt.header[4]
+        else
+            meta = Dict()
+        end
         if isempty(cid)
             error("empty cid")
         end
-        return IdentityMsg(mid, cid)
+        return IdentityMsg(twin, mid, cid, meta)
     elseif ptype == TYPE_PUB
         if flags === QOS0
             ack_id = 0
@@ -346,9 +307,13 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
         end
         data = pkt.data
         if isbroker
-            return PubSubMsg(topic, data, flags, ack_id)
+            return PubSubMsg(
+                twin, topic, data, flags, ack_id
+            )
         else
-            return PubSubMsg(topic, dataframe_if_tagvalue(decode(data)), flags, ack_id)
+            return PubSubMsg(
+                twin, topic, dataframe_if_tagvalue(decode(data)), flags, ack_id
+            )
         end
     elseif ptype == TYPE_RPC
         mid = bytes2id(pkt.header[2])
@@ -356,15 +321,17 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
         target = pkt.header[4]
         data = pkt.data
         if isbroker
-            return RpcReqMsg(mid, topic, data, target, flags)
+            return RpcReqMsg(twin, mid, topic, data, target, flags)
         else
-            return RpcReqMsg(mid, topic, dataframe_if_tagvalue(decode(data)), target, flags)
+            return RpcReqMsg(
+                twin, mid, topic, dataframe_if_tagvalue(decode(data)), target, flags
+            )
         end
     elseif ptype == TYPE_ADMIN
         mid = bytes2id(pkt.header[2])
         topic = pkt.header[3]
         data = message2data(pkt.data)
-        return AdminReqMsg(mid, topic, data, nothing, flags)
+        return AdminReqMsg(twin, mid, topic, Dict{String,Any}(data), nothing, flags)
     elseif ptype == TYPE_RESPONSE
         mid = bytes2id(pkt.header[2])
         status = pkt.header[3]
@@ -394,8 +361,9 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
     elseif ptype == TYPE_ATTESTATION
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
+        meta = pkt.header[4]
         signature::Vector{UInt8} = pkt.data
-        return Attestation(mid, cid, signature)
+        return Attestation(mid, cid, signature, meta)
     elseif ptype == TYPE_PING
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
@@ -409,23 +377,14 @@ function broker_parse(pkt::ZMQAbstractPacket, isbroker=true)
     error("unknown rembus packet type $ptype")
 end
 
-function pong(socket, mid, identity)
+function pong(z::ZRouter, mid, identity)
+    socket = z.sock
     send(socket, identity, more=true)
     send(socket, Message(), more=true)
     send(socket, encode([TYPE_RESPONSE, id2bytes(mid), STS_SUCCESS]), more=true)
     send(socket, encode(nothing), more=true)
     send(socket, MESSAGE_END, more=false)
 end
-
-#=
-data2payload(data) = data
-
-function data2payload(data::IOBuffer)
-    mark(data)
-    decode(read(data))
-    reset(data)
-end
-=#
 
 function id2bytes(id::UInt128)::Vector{UInt8}
     io = IOBuffer(maxsize=16)
@@ -441,37 +400,66 @@ function bytes2zid(buff::Vector{UInt8})
     UInt128(read(IOBuffer(buff[2:end]), UInt32))
 end
 
-function transport_send(::Val{zdealer}, rb, msg::PingMsg)
+function transport_send(twin, msg)
+    twin.probe && probe_add(twin, msg, pktout)
+    return transport_send(twin.socket, msg)
+end
+
+message_send(twin, future::FutureResponse) = transport_send(twin, future.request)
+
+function message_send(twin, msg)
+    if isa(msg, RpcReqMsg) || isa(msg, AdminReqMsg)
+        tmr = Timer(twin.router.settings.request_timeout) do tmr
+            delete!(twin.socket.out, msg.id)
+        end
+        twin.socket.out[msg.id] = FutureResponse(msg, tmr)
+    end
+
+    outcome = transport_send(twin, msg)
+    if isa(msg, PubSubMsg) && outcome
+        twin.mark = msg.counter
+    end
+
+    return outcome
+end
+
+function transport_send(z::ZDealer, msg::PingMsg)
+    socket = z.sock
     lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_PING, id2bytes(msg.id), msg.cid]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_PING, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{socket}, rb, msg::IdentityMsg)
-    pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid]
-    transport_write(rb.socket, pkt)
+function transport_send(socket::AbstractPlainSocket, msg::IdentityMsg)
+    pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid, msg.meta]
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{zdealer}, rb, msg::IdentityMsg)
+function transport_send(z::ZDealer, msg::IdentityMsg)
+    socket = z.sock
     lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_IDENTITY, id2bytes(msg.id), msg.cid]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, Message(), more=true)
+        send(
+            socket,
+            encode([TYPE_IDENTITY, id2bytes(msg.id), msg.cid, msg.meta]),
+            more=true
+        )
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
 message2data(data) = data
 
-# Return data to be sent via ws or tcp from ZMQ
+# Return data to be sent via ws or tcp from ZMQ.
 function message2data(data::ZMQ.Message)
-    # allocate instead of consuming message
+    # Allocate instead of consuming message.
     decode(Vector{UInt8}(data))
 end
 
@@ -485,187 +473,90 @@ function data2message(data::IOBuffer)
     return msg
 end
 
-# allocate and return a buffer because send method consume the Message
-# needed by multiple broadcast invocations (reqdata field).
+# Allocate and return a buffer because send method consume the message
+# used by multiple broadcast invocations (reqdata field).
 data2message(data::ZMQ.Message) = Vector{UInt8}(data)
 
-transport_send(twin, ::Nothing, msg) = error("$twin connection closed")
+#=
+    handle_ack_timeout(tim, twin, msg, msgid)
 
-function transport_send(
-    ::Val{socket},
-    twin::Twin,
-    msg::PubSubMsg
-)
+Persist a PubSub message in case the acknowledge message is not received.
+=#
+function handle_ack_timeout(tim, socket, msg, msgid)
+    if haskey(socket.out, msgid) && !isready(socket.out[msgid].future)
+        put!(socket.out[msgid].future, false)
+    end
+end
+
+function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
     if msg.flags > QOS0
         msgid = msg.id
 
-        ack_cond = Distributed.Future()
-        twin.out[msgid] = ack_cond
-        twin.acktimer[msgid] = AckState(
-            msg.flags === QOS2,
-            Timer((tim) -> handle_ack_timeout(
-                    tim, twin, msg, msgid
-                ), ACK_WAIT_TIME)
+        timer = Timer(
+            (tim) -> handle_ack_timeout(tim, socket, msg, msgid),
+            msg.twin.router.settings.ack_timeout
         )
+
+        ack_cond = FutureResponse(msg, timer)
+        socket.out[msgid] = ack_cond
         pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
-        if twin.socket === nothing
-            # if the connection is closed stop trying to send pubsub messages
-            # that are not yet acknowledged.
-            put!(ack_cond, true)
-        else
-            broker_transport_write(twin.socket, pkt)
-        end
-        outcome = fetch(ack_cond)
-        delete!(twin.out, msgid)
+        transport_write(socket, pkt)
+        outcome = fetch(ack_cond.future)
+        close(ack_cond.timer)
+        delete!(socket.out, msgid)
     else
         pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
-        broker_transport_write(twin.socket, pkt)
+        transport_write(socket, pkt)
     end
 
     return outcome
 end
 
-#=
-    client_ack_timeout(tim, twin, msg, msgid)
-
-The component resends a PubSub message in case the acknowledge message is not received.
-=#
-function client_ack_timeout(tim, rb, msg, msgid)
-    # TODO: is isopen() control needed?
-    if haskey(rb.acktimer, msgid) & isopen(rb.process.inbox)
-        put!(rb.process.inbox, msg)
-    end
-
-    if haskey(rb.out, msgid)
-        put!(rb.out[msgid], false)
-    end
+function transport_send(z::ZDealer, msg::PubSubMsg)
+    return transport_zmq_pubsub(z, msg)
 end
 
-function transport_send(::Val{socket}, rb::RBHandle, msg::PubSubMsg)
-    content = tagvalue_if_dataframe(msg.data)
-    outcome = true
-    if msg.flags > QOS0
-        msgid = msg.id
-        ack_cond = Distributed.Future()
-        rb.out[msgid] = ack_cond
-        rb.acktimer[msgid] = AckState(
-            msg.flags === QOS2,
-            Timer((tim) -> client_ack_timeout(
-                    tim, rb, msg, msgid
-                ), ACK_WAIT_TIME)
-        )
-        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
-        if rb.socket === nothing
-            # if the connection is closed stop trying to send pubsub messages
-            # that are not yet acknowledged.
-            put!(ack_cond, true)
-        else
-            transport_write(rb.socket, pkt)
-        end
-
-        outcome = fetch(ack_cond)
-        delete!(rb.out, msgid)
-    else
-        pkt = [TYPE_PUB | msg.flags, msg.topic, content]
-        transport_write(rb.socket, pkt)
-    end
-
-    return outcome
+function transport_send(z::ZRouter, msg::PubSubMsg)
+    return transport_zmq_pubsub(z, msg)
 end
 
-
-get_content(::RBConnection, data) = encode(tagvalue_if_dataframe(data))
-
-get_content(::Twin, data) = data2message(data)
-
-function transport_send(::Val{zdealer}, rb, msg::PubSubMsg)
-    content = get_content(rb, msg.data)
-    outcome = true
-    if msg.flags == QOS0
-        lock(zmqsocketlock) do
-            send(rb.socket, Message(), more=true)
-            send(rb.socket, encode([TYPE_PUB | msg.flags, msg.topic]), more=true)
-            send(rb.socket, content, more=true)
-            send(rb.socket, MESSAGE_END, more=false)
-        end
-    else
-        msgid = msg.id
-        ack_cond = Distributed.Future()
-        rb.out[msgid] = ack_cond
-        rb.acktimer[msgid] = AckState(
-            msg.flags === QOS2,
-            Timer((tim) -> client_ack_timeout(
-                    tim, rb, msg, msgid
-                ), ACK_WAIT_TIME)
-        )
-        lock(zmqsocketlock) do
-            send(rb.socket, Message(), more=true)
-            send(
-                rb.socket,
-                encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic]), more=true
-            )
-            send(rb.socket, content, more=true)
-            send(rb.socket, MESSAGE_END, more=false)
-        end
-        outcome = fetch(ack_cond)
-        delete!(rb.out, msgid)
-    end
-    return outcome
-end
-
-function transport_send(::Val{zrouter}, twin, msg::PubSubMsg)
-    address = twin.zaddress
+function transport_zmq_pubsub(z, msg::PubSubMsg)
+    socket = z.sock
     data = data2message(msg.data)
     outcome = true
     if msg.flags > QOS0
-        ack_cond = Distributed.Future()
-        twin.out[msg.id] = ack_cond
-
-        twin.acktimer[msg.id] = AckState(
-            msg.flags === QOS2,
-            Timer((tim) -> handle_ack_timeout(
-                    tim, twin, msg, msg.id
-                ), ACK_WAIT_TIME)
+        timer = Timer(
+            (tim) -> handle_ack_timeout(tim, z, msg, msg.id),
+            msg.twin.router.settings.ack_timeout
         )
+        ack_cond = FutureResponse(msg, timer)
+        z.out[msg.id] = ack_cond
         header = encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic])
         lock(zmqsocketlock) do
-            send(twin.socket, address, more=true)
-            send(twin.socket, Message(), more=true)
-            send(twin.socket, header, more=true)
-            send(twin.socket, data, more=true)
-            send(twin.socket, MESSAGE_END, more=false)
+            isa(z, ZRouter) && send(socket, z.zaddress, more=true)
+            send(socket, Message(), more=true)
+            send(socket, header, more=true)
+            send(socket, data, more=true)
+            send(socket, MESSAGE_END, more=false)
         end
-
-        outcome = fetch(ack_cond)
-        delete!(twin.out, msg.id)
+        outcome = fetch(ack_cond.future)
+        delete!(z.out, msg.id)
     else
         header = encode([TYPE_PUB | msg.flags, msg.topic])
         lock(zmqsocketlock) do
-            send(twin.socket, address, more=true)
-            send(twin.socket, Message(), more=true)
-            send(twin.socket, header, more=true)
-            send(twin.socket, data, more=true)
-            send(twin.socket, MESSAGE_END, more=false)
+            isa(z, ZRouter) && send(socket, z.zaddress, more=true)
+            send(socket, Message(), more=true)
+            send(socket, header, more=true)
+            send(socket, data, more=true)
+            send(socket, MESSAGE_END, more=false)
         end
     end
 
     return outcome
 end
 
-function transport_send(::Val{socket}, rb::Twin, msg::RpcReqMsg)
-    pkt = [
-        TYPE_RPC | msg.flags,
-        id2bytes(msg.id),
-        msg.topic,
-        msg.target,
-        msg.data
-    ]
-    broker_transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{socket}, rb::RBHandle, msg::RpcReqMsg)
+function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     if msg.target === nothing
         pkt = [
@@ -684,27 +575,30 @@ function transport_send(::Val{socket}, rb::RBHandle, msg::RpcReqMsg)
             message2data(content)
         ]
     end
-    transport_write(rb.socket, pkt)
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{zrouter}, rb, msg::RpcReqMsg)
-    address = rb.zaddress
+function transport_send(z::ZRouter, msg::RpcReqMsg)
+    socket = z.sock
+    address = z.zaddress
     lock(zmqsocketlock) do
-        send(rb.socket, address, more=true)
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, nothing]), more=true)
-        send(rb.socket, data2message(msg.data), more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, nothing]), more=true)
+        send(socket, data2message(msg.data), more=true)
+        send(socket, MESSAGE_END, more=false)
     end
 
     return true
 end
 
-function transport_send(::Val{zdealer}, rb, msg::RpcReqMsg, enc=false)
-    content = get_content(rb, msg.data)
+function transport_send(z::ZDealer, msg::RpcReqMsg, enc=false)
+    #content = get_content(rb, msg.data)
+    socket = z.sock
+    content = data2message(msg.data)
     lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
+        send(socket, Message(), more=true)
 
         if msg.target === nothing
             target = nothing
@@ -712,259 +606,222 @@ function transport_send(::Val{zdealer}, rb, msg::RpcReqMsg, enc=false)
             target = msg.target
         end
 
-        send(rb.socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, target]), more=true)
-        send(rb.socket, content, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, encode([TYPE_RPC, id2bytes(msg.id), msg.topic, target]), more=true)
+        send(socket, content, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{zdealer}, rb, msg::AdminReqMsg, enc=false)
-    content = get_content(rb, msg.data)
-    target = nothing
+function transport_send(z::ZRouter, msg::ResMsg)
+    socket = z.sock
+    address = z.zaddress
     lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic, target]), more=true)
-        send(rb.socket, content, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
+        data = data2message(msg.data)
+        send(socket, data, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
+
     return true
 end
 
-function transport_send(::Val{zrouter}, twin, msg::ResMsg, enc=false)
-    address = twin.zaddress
+function transport_send(z::ZDealer, msg::ResMsg)
+    socket = z.sock
+    content = data2message(msg.data)
     lock(zmqsocketlock) do
-        send(twin.socket, address, more=true)
-        send(twin.socket, Message(), more=true)
-        send(twin.socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
-        if enc
-            data = encode(msg.data)
-        else
-            data = data2message(msg.data)
-        end
-        send(twin.socket, data, more=true)
-        send(twin.socket, MESSAGE_END, more=false)
-    end
-
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, msg::ResMsg, enc=false)
-    content = get_content(rb, msg.data)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
-        send(rb.socket, content, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_RESPONSE, id2bytes(msg.id), msg.status]), more=true)
+        send(socket, content, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{socket}, rb::Twin, msg::ResMsg, enc=false)
+function transport_send(socket::AbstractPlainSocket, msg::ResMsg, enc=false)
+    content = tagvalue_if_dataframe(msg.data)
     pkt = [
         TYPE_RESPONSE | msg.flags,
         id2bytes(msg.id),
         msg.status,
-        tagvalue_if_dataframe(msg.data)
+        message2data(content)
     ]
-    broker_transport_write(rb.socket, pkt)
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{loopback}, rb::Twin, msg::RembusMsg, enc=false)
-    notify(rb.socket, msg)
-    return true
-end
-
-function transport_send(::Val{socket}, rb::RBHandle, msg::ResMsg, ::Bool=false)
-    content = tagvalue_if_dataframe(msg.data)
-    pkt = [TYPE_RESPONSE | msg.flags, id2bytes(msg.id), msg.status, message2data(content)]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{socket}, rb::RBHandle, msg::AdminReqMsg)
+function transport_send(socket::AbstractPlainSocket, msg::AdminReqMsg)
     content = tagvalue_if_dataframe(msg.data)
     pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, content]
-    transport_write(rb.socket, pkt)
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{zdealer}, rb::RBConnection, msg::AdminReqMsg)
-    content = get_content(rb, msg.data)
+function transport_send(z::ZDealer, msg::AdminReqMsg)
+    socket = z.sock
+    content = data2message(msg.data)
+    target = nothing
     lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
-        send(rb.socket, content, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic, target]), more=true)
+        send(socket, content, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{zrouter}, rb, msg::AdminReqMsg)
+function transport_send(z::ZRouter, msg::AdminReqMsg)
+    socket = z.sock
+    address = z.zaddress
     content = tagvalue_if_dataframe(msg.data)
-    address = rb.zaddress
     lock(zmqsocketlock) do
-        send(rb.socket, address, more=true)
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
-        send(rb.socket, encode(content), more=true)
-        send(rb.socket, MESSAGE_END, more=false)
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ADMIN, id2bytes(msg.id), msg.topic]), more=true)
+        send(socket, encode(content), more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{socket}, rb::Twin, msg::AckMsg)
+function transport_send(socket::AbstractPlainSocket, msg::AckMsg)
     pkt = [TYPE_ACK, id2bytes(msg.id)]
-    broker_transport_write(rb.socket, pkt)
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{zrouter}, twin, msg::AckMsg)
-    address = twin.zaddress
+function transport_send(z::ZRouter, msg::AckMsg)
+    socket = z.sock
+    address = z.zaddress
     lock(zmqsocketlock) do
-        send(twin.socket, address, more=true)
-        send(twin.socket, Message(), more=true)
-        send(twin.socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
-        send(twin.socket, DATA_EMPTY, more=true)
-        send(twin.socket, MESSAGE_END, more=false)
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{socket}, rb::Twin, msg::Ack2Msg)
+function transport_send(socket::AbstractPlainSocket, msg::Ack2Msg)
     pkt = [TYPE_ACK2, id2bytes(msg.id)]
-    broker_transport_write(rb.socket, pkt)
+    transport_write(socket, pkt)
     return true
 end
 
-function transport_send(::Val{zrouter}, twin, msg::Ack2Msg)
-    address = twin.zaddress
+function transport_send(z::ZRouter, msg::Ack2Msg)
+    socket = z.sock
+    address = z.zaddress
     lock(zmqsocketlock) do
-        send(twin.socket, address, more=true)
-        send(twin.socket, Message(), more=true)
-        send(twin.socket, encode([TYPE_ACK2, id2bytes(msg.id)]), more=true)
-        send(twin.socket, DATA_EMPTY, more=true)
-        send(twin.socket, MESSAGE_END, more=false)
+        send(socket, address, more=true)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK2, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
-function transport_send(::Val{zdealer}, twin, msg::Ack2Msg)
+function transport_send(z::ZDealer, msg::Ack2Msg)
+    socket = z.sock
     lock(zmqsocketlock) do
-        send(twin.socket, Message(), more=true)
-        send(twin.socket, encode([TYPE_ACK2, id2bytes(msg.id)]), more=true)
-        send(twin.socket, DATA_EMPTY, more=true)
-        send(twin.socket, MESSAGE_END, more=false)
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK2, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(z::ZDealer, msg::AckMsg)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(socket::AbstractPlainSocket, msg::Attestation)
+    pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature, msg.meta]
+    transport_write(socket, pkt)
+    return true
+end
+
+function transport_send(z::ZDealer, msg::Attestation)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(
+            socket,
+            encode([TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.meta]),
+            more=true
+        )
+        send(socket, msg.signature, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(socket::AbstractPlainSocket, msg::Register)
+    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.pubkey, msg.type]
+    transport_write(socket, pkt)
+    return true
+end
+
+function transport_send(z::ZDealer, msg::Register)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(
+            socket,
+            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.type]),
+            more=true
+        )
+        send(socket, msg.pubkey, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(socket::AbstractPlainSocket, msg::Unregister)
+    pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
+    transport_write(socket, pkt)
+    return true
+end
+
+function transport_send(z::ZDealer, msg::Unregister)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(z::ZDealer, ::Close)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(socket, encode([TYPE_CLOSE]), more=true)
+        send(socket, DATA_EMPTY, more=true)
+        send(socket, MESSAGE_END, more=false)
     end
     return true
 end
 
 #=
-The twin send an admin request to the peer broker.
+Convert data or elements of data to a TAG value if data is/contains a DataFrame.
+
+Return the transformed value if a DataFrame is encountered or return the
+data argument otherwise.
 =#
-function transport_send(::Val{socket}, rb, msg::AdminReqMsg)
-    pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, msg.data]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{socket}, rb::RBHandle, msg::AckMsg)
-    pkt = [TYPE_ACK, id2bytes(msg.id)]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{socket}, rb::RBHandle, msg::Ack2Msg)
-    pkt = [TYPE_ACK2, id2bytes(msg.id)]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, msg::AckMsg)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_ACK, id2bytes(msg.id)]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
-function transport_send(::Val{socket}, rb, msg::Attestation)
-    pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, msg::Attestation)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_ATTESTATION, id2bytes(msg.id), msg.cid]), more=true)
-        send(rb.socket, msg.signature, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
-function transport_send(::Val{socket}, rb, msg::Register)
-    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.pubkey, msg.type]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, msg::Register)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(
-            rb.socket,
-            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.type]),
-            more=true
-        )
-        send(rb.socket, msg.pubkey, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
-function transport_send(::Val{socket}, rb, msg::Unregister)
-    pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
-    transport_write(rb.socket, pkt)
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, msg::Unregister)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
-function transport_send(::Val{zdealer}, rb, ::Close)
-    lock(zmqsocketlock) do
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_CLOSE]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
-function transport_send(::Val{zrouter}, rb, ::Close)
-    address = rb.zaddress
-    lock(zmqsocketlock) do
-        send(rb.socket, address, more=true)
-        send(rb.socket, Message(), more=true)
-        send(rb.socket, encode([TYPE_CLOSE]), more=true)
-        send(rb.socket, DATA_EMPTY, more=true)
-        send(rb.socket, MESSAGE_END, more=false)
-    end
-    return true
-end
-
 function tagvalue_if_dataframe(data)
     if isa(data, Vector{UInt8})
         return data
@@ -1015,26 +872,12 @@ function dataframe_if_tagvalue(buffer)
 end
 
 function ws_write(ws::WebSockets.WebSocket, payload)
-    @rawlog("out: $payload")
     HTTP.WebSockets.send(ws, payload)
 end
 
-function broker_transport_write(::Nothing, pkt)
-    @warn "broker send $pkt failed: connection closed"
-end
-
-function broker_transport_write(ws::WebSockets.WebSocket, pkt)
+function transport_write(ws::WS, pkt)
     payload = encode_partial(pkt)
-    ws_write(ws, payload)
-end
-
-function transport_write(::Nothing, pkt)
-    @warn "send $pkt failed: connection closed"
-end
-
-function transport_write(ws::WebSockets.WebSocket, pkt)
-    payload = encode(pkt)
-    ws_write(ws, payload)
+    ws_write(ws.sock, payload)
 end
 
 function tcp_write(sock, payload)
@@ -1056,19 +899,13 @@ function tcp_write(sock, payload)
     io = IOBuffer(maxsize=length(header) + len)
     write(io, header)
     write(io, payload)
-    @rawlog("out: $(io.data)")
     write(sock, io.data)
     flush(sock)
 end
 
-function broker_transport_write(sock, llmsg)
+function transport_write(tcp, llmsg)
     payload = encode_partial(llmsg)
-    tcp_write(sock, payload)
-end
-
-function transport_write(sock, llmsg)
-    payload = encode(llmsg)
-    tcp_write(sock, payload)
+    tcp_write(tcp.sock, payload)
 end
 
 function transport_read(sock)
@@ -1090,25 +927,118 @@ function transport_read(sock)
         throw(WrongTcpPacket())
     end
     payload = read(sock, len)
-    @rawlog("in: $payload")
     return payload
 end
 
-function transport_read(socket::WebSockets.WebSocket)
-    d = HTTP.WebSockets.receive(socket)
-    #@info "IN: $d"
-    @rawlog("in: $d ($(typeof(d)))")
-    return d
-end
+transport_read(socket::WebSockets.WebSocket) = HTTP.WebSockets.receive(socket)
 
-function isconnectionerror(ws::WebSockets.WebSocket, e)
+isconnectionerror(::Float, e) = false
+
+function isconnectionerror(::WS, e)
     isa(e, EOFError) ||
         isa(e, Base.IOError) ||
         isa(e, WebSockets.WebSocketError)
 end
 
-function isconnectionerror(ws, e)
+function isconnectionerror(::AbstractPlainSocket, e)
     return isa(e, EOFError) || isa(e, Base.IOError) || isa(e, WrongTcpPacket)
 end
 
-Base.isopen(ws::WebSockets.WebSocket) = Base.isopen(ws.io)
+function close_is_ok(::WS, e)
+    HTTP.WebSockets.isok(e)
+end
+
+function close_is_ok(::AbstractPlainSocket, e)
+    !isa(e, WrongTcpPacket)
+end
+
+function encode_partial(data::Vector)
+    io = IOBuffer()
+    encode_partial(io, data)
+    return take!(io)
+end
+
+function add_payload(io, payload)
+    if isa(payload, Base.GenericIOBuffer)
+        pos = position(payload)
+        write(io, payload)
+        seek(payload, pos)
+    elseif isa(payload, ZMQ.Message)
+        write(io, Vector{UInt8}(payload))
+    else
+        encode(io, payload)
+    end
+end
+
+function encode_partial(io, data::Vector)
+    type = data[1] & 0x0f
+    if type == TYPE_PUB
+        if (data[1] & QOS1) == QOS1
+            write(io, 0x84)
+        else
+            write(io, 0x83)
+        end
+        encode(io, data[1]) # type
+        if (data[1] & QOS1) == QOS1
+            encode(io, data[2]) # msgid
+            encode(io, data[3]) # topic
+            add_payload(io, data[4])
+        else
+            encode(io, data[2]) # topic
+            add_payload(io, data[3])
+        end
+    elseif type == TYPE_IDENTITY
+        write(io, 0x84)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # cid
+        encode(io, data[4]) # meta
+    elseif type == TYPE_RPC
+        write(io, 0x85)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # topic
+        encode(io, data[4]) # target
+        add_payload(io, data[5])
+    elseif type == TYPE_ADMIN
+        write(io, 0x84)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # topic
+        add_payload(io, data[4])
+    elseif type == TYPE_RESPONSE
+        write(io, 0x84)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # status
+        add_payload(io, data[4])
+    elseif type == TYPE_REGISTER
+        write(io, 0x86)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # cid
+        encode(io, data[4]) # tenant
+        encode(io, data[5]) # pubkey
+        encode(io, data[6]) # type
+    elseif type == TYPE_UNREGISTER
+        write(io, 0x83)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # cid
+    elseif type == TYPE_ATTESTATION
+        write(io, 0x85)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+        encode(io, data[3]) # cid
+        encode(io, data[4]) # signature
+        encode(io, data[5]) # meta
+    elseif type == TYPE_ACK
+        write(io, 0x82)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+    elseif type == TYPE_ACK2
+        write(io, 0x82)
+        encode(io, data[1]) # type
+        encode(io, data[2]) # id
+    end
+end

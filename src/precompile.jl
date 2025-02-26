@@ -1,233 +1,113 @@
-# When compiling responses are delayed a litte bit
-ENV["REMBUS_TIMEOUT"] = "60"
+using DataFrames
 
-const MESSAGES = 100
-
-df = DataFrame(name=["trento", "belluno"], score=[10, 50])
-bdf = DataFrame(x=1:10, y=1:10)
-
-mutable struct TestBag
-    noarg_message_received::Bool
-    msg_received::Int
+mutable struct TypeHolder
+    valuemap::Vector
+    TypeHolder() = new([
+        Rembus.SmallInteger(UInt(1)),
+        Rembus.SmallInteger(2),
+        Rembus.SmallInteger(-3),
+        BigInt(1),
+        BigInt(-1),
+        Int8(1),
+        UInt8(255),
+        UInt16(256),
+        UInt32(65536),
+        UInt64(1),
+        Int8(-1),
+        Int16(-129),
+        Int32(-40000),
+        Int64(-1),
+        Float16(1.0),
+        Float32(1.1),
+        Float64(1.2),
+        DataFrame(:a => [1, 2]),
+        "foo",
+        Dict(1 => 2),
+        [[1, 2]],
+        [Rembus.UndefLength([1, 2])],
+        Undefined()
+    ])
 end
 
-function mytopic(bag::TestBag, rb, data::Number)
-    @debug "mytopic recv: $data"
+precompile_topic(ctx, rb, x) = ctx[tid(rb)] = x
+precompile_service(ctx, rb, x) = x
+precompile_service(ctx, rb, x, y) = x + y
+
+function rpc_api(url)
+    ctx = Dict()
+    srv = connect("$url/precompile_server")
+    expose(srv, precompile_service)
+    inject(srv, ctx)
+
+    cli = connect("$url/precompile_client")
+    rpc(cli, "precompile_service", 1)
+    direct(cli, "precompile_server", "precompile_service", (1, 2))
+    unexpose(srv, precompile_service)
+    close(cli)
+    close(srv)
 end
 
-function mytopic(bag::TestBag, rb, data)
-    @debug "df:\n$(view(data, 1:2, :))"
-end
-
-function publish_messages()
-    pub = connect()
-    for i in 1:MESSAGES
-        publish(pub, "topicut")
-    end
-    sleep(2)
+function pubsub(pub_url, sub_url)
+    ctx = Dict()
+    sub = connect(sub_url)
+    subscribe(sub, precompile_topic)
+    inject(sub, ctx)
+    reactive(sub)
+    pub = connect(pub_url)
+    val = 1
+    publish(pub, "precompile_topic", val)
+    publish(pub, "precompile_topic", val, qos=QOS2)
+    unsubscribe(sub, precompile_topic)
+    close(sub)
     close(pub)
 end
 
-topicut() = nothing
+foo(df) = df
 
-function read_messages()
-    sub = connect("mysub")
-    subscribe(sub, topicut, from=LastReceived())
-    reactive(sub)
-    sleep(5)
-    close(sub)
+function pool()
+    Rembus.cid!("policies_component")
+    df = DataFrame(:a => 1:3)
+    server = connect("server")
+    expose(server, foo)
+
+    nodes = ["a", "b"]
+    for policy in [:round_robin, :less_busy]
+        rb = component(nodes, policy=policy)
+        for round in 1:3
+            rpc(rb, "foo", df)
+        end
+        close(rb)
+    end
+    close(server)
 end
 
-function publish_macroapi(publisher, sub1; waittime=1)
-    testbag = TestBag(false, 0)
+function bar(bag, rb, n)
+    return n
+end
 
-    @component sub1
-    @inject sub1 testbag
-    @subscribe sub1 mytopic from = Now()
-    @reactive sub1
+function alltypes(client, server)
+    bag = TypeHolder()
 
-    sleep(waittime / 3)
+    exposer = component(server)
+    requestor = component(client)
 
-    @component publisher
-    @publish publisher mytopic(2)
-    @publish publisher mytopic(df)
+    inject(exposer, bag)
+    expose(exposer, bar)
 
-    @publish publisher noarg()
-
-    sleep(waittime / 2)
-
-    for cli in [publisher, sub1]
-        @shutdown cli
+    for msg in bag.valuemap
+        rpc(requestor, "bar", msg)
     end
 end
 
-function publish_api(pub, sub1; waittime=1)
-    mytopic_topic = "mytopic_topic"
-    noarg_topic = "noarg"
+pool()
+rpc_api("ws://:8000")
 
-    testbag = TestBag(false, 0)
-
-    publisher = connect(pub)
-
-    sub1 = connect(sub1)
-    inject(sub1, testbag)
-
-    subscribe(sub1, mytopic_topic, mytopic)
-    reactive(sub1)
-
-    publish(publisher, mytopic_topic, 2)
-    publish(publisher, mytopic_topic, df)
-    publish(publisher, mytopic_topic, bdf)
-
-    publish(publisher, noarg_topic)
-
-    sleep(waittime)
-    unsubscribe(sub1, mytopic_topic)
-
-    sleep(waittime / 4)
-
-    for cli in [publisher, sub1]
-        close(cli)
+for pub_url in ["tcp://:8001/pub", "ws://:8000/pub"]
+    for sub_url in ["tcp://:8001/tcpsub", "ws://:8000/wssub"]
+        pubsub(pub_url, sub_url)
     end
 end
 
-function add_one(add_one_arg)
-    add_one_arg + 1
-end
-
-function request_api(request_url, exposer_url)
-    rpc_topic = "rpc_method"
-    request_arg = 1
-
-    client = connect(request_url)
-
-    try
-        rpc(client, rpc_topic, raise=true)
-    catch e
-    end
-
-    implementor = connect(exposer_url)
-    expose(implementor, rpc_topic, add_one)
-
-    res = rpc(client, rpc_topic, request_arg)
-
-    for cli in [implementor, client]
-        close(cli)
-    end
-end
-
-mutable struct Holder
-    valuemap::Vector
-    Holder() = new([ # type of value received => value sent
-        SmallInteger => SmallInteger(UInt(1)),
-        SmallInteger => SmallInteger(1),
-        SmallInteger => SmallInteger(-1),
-        BigInt => BigInt(1),
-        BigInt => BigInt(-1),
-        UInt8 => Int8(1),
-        UInt8 => UInt8(255),
-        UInt16 => UInt16(256),
-        UInt32 => UInt32(65536),
-        UInt64 => UInt64(1),
-        Int8 => Int8(-1),
-        Int16 => Int16(-129),
-        Int32 => Int32(-40000),
-        Int64 => Int64(1),
-        Float16 => Float16(1.0),
-        Float32 => Float32(1.1),
-        Float64 => Float64(1.2),
-        DataFrame => DataFrame(:a => [1, 2]),
-        String => "foo",
-        Dict => Dict(1 => 2),
-        Vector => [1, 2],
-        Rembus.UndefLength => Rembus.UndefLength([1, 2]),
-        Undefined => Undefined()])
-end
-
-function type_consumer(bag, rb, n)
-    @debug "[type_consumer]: recv $n ($(typeof(n)))"
-end
-
-function types()
-    bag = Holder()
-    REQUESTOR = "tcp://:8001/type_publisher"
-    TYPE_LISTENER = "type_listener"
-
-    @component REQUESTOR
-    @component TYPE_LISTENER
-
-    sleep(0.1)
-
-    @subscribe TYPE_LISTENER type_consumer from = Now()
-    @inject TYPE_LISTENER bag
-    @reactive TYPE_LISTENER
-
-    sleep(0.1)
-    for (typ, msg) in bag.valuemap
-        sleep(0.05)
-        @publish REQUESTOR type_consumer(msg)
-    end
-    sleep(2)
-    @shutdown REQUESTOR
-    @shutdown TYPE_LISTENER
-end
-
-function mymethod(n)
-    return n + 1
-end
-
-mytopic(n) = nothing
-
-function broker_server()
-    server_url = "ws://:9005/s1"
-    p = from("broker.broker")
-    router = p.args[1]
-
-    try
-        srv = server(mode="anonymous", log="error", ws=9005)
-        expose(srv, mymethod)
-        subscribe(srv, mytopic)
-
-        Rembus.islistening(wait=15, procs=["server.serve:9005"])
-
-        add_node(router, server_url)
-        sleep(2)
-
-        cli = connect()
-        rpc(cli, "mymethod", 1)
-        publish(cli, "mytopic", 1)
-        sleep(1)
-        close(cli)
-    catch e
-        @error "broker_server: $e"
-    finally
-        remove_node(router, server_url)
-    end
-end
-
-@rpc version()
-@rpc uptime()
-@shutdown
-
-types()
-
-request_api("requestor", "exposer")
-waittime = 0.5
-for sub1 in ["tcp://:8001/sub_tcp", "zmq://:8002/sub_zmq"]
-    for publisher in ["tcp://:8001/pub", "zmq://:8002/pub"]
-        publish_macroapi(publisher, sub1, waittime=waittime)
-        publish_api(publisher, sub1, waittime=waittime)
-    end
-end
-
-publish_messages()
-
-broker_server()
-
-response = HTTP.get("http://localhost:9000/version", [])
-
-shutdown()
-broker(wait=false, mode="anonymous", log="error")
-yield()
-Rembus.islistening(wait=20)
-read_messages()
+rpc_api("tcp://:8001")
+rpc_api("zmq://:8002")
+alltypes("zmq://:8002/client", "zmq://:8002/server")

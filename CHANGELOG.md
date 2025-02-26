@@ -1,16 +1,22 @@
-# Change Log
+# Changelog
 
-## 0.6.0
+## 0.6.0 [2025-02-26]
+
+### Added
 
 - Prometheus integration
 
-## 0.5.0 (25 November, 2024)
+### Changed
+
+- Renamed macro @wait to @wait
+
+## 0.5.0 [2024-11-25]
 
 - Componenent multiplexing.
 
 - Internals refatoring and bug fixes.
 
-## 0.4.0 (17 October, 2024)
+## 0.4.0 [2024-10-17]
 
 - Improve server api.
 
@@ -20,7 +26,7 @@
 
 - [#32](https://github.com/cardo-org/Rembus.jl/issues/32) Update for julia 1.11.
 
-## 0.3.0 (2 July, 2024)
+## 0.3.0 [2024-07-02]
 
 - HTTP api (GET for RPC, POST for Pub/Sub).
 
@@ -30,11 +36,11 @@
 
 - rpc_future() and fetch_response(): APIs for asynchronous RPC.
 
-## 0.2.1 (21 May, 2024)
+## 0.2.1 [2024-05-21]
 
 - Add publish_interceptor method for extract and transform published messages.
 
-## 0.2.0 (18 May, 2024)
+## 0.2.0 [2024-05-18]
 
 - [#4](https://github.com/cardo-org/Rembus.jl/issues/4) Improve connection error logs .
 
@@ -44,6 +50,6 @@
 
 - Full test coverage.
 
-## 0.1.0 (25 March, 2024)
+## 0.1.0 [2024-03-25]
 
 - First Release.

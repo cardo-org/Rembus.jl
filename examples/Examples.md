@@ -25,7 +25,7 @@ a name and reply with a greeting:
 using Rembus
 
 @expose say_hello(name) = "hello loving $name"
-@forever
+@wait
 ```
 
 A client component that invoke `say_hello`
@@ -111,12 +111,12 @@ end
 ```
 
 What remain to do is declare the method as a consumer of the topic `announcement`
-using the macro `@subscribe` and wait for messages with `@forever`:
+using the macro `@subscribe` and wait for messages with `@wait`:
 
 ```julia
 @subscribe announcement
 
-@forever
+@wait
 ```
 
 The full code for this minimal `organizer` component that you can run in a REPL is then:
@@ -132,7 +132,7 @@ end
 
 @subscribe announcement
 
-@forever
+@wait
 ```
 
 ## hierarchy_broker.jl
@@ -158,7 +158,7 @@ consume(topic, value) = @info "$topic = $value"
 rb = connect()
 
 subscribe(rb, "a/*/c", consume)
-forever(rb)
+wait(rb)
 ```
 
 Please note that the first argument of the subscribed function `consume` is
@@ -216,7 +216,7 @@ subscribe!(subject, logger())
 @component "rocket"
 @inject subject
 @subscribe my_topic before_now
-@forever
+@wait
 ```
 
 To see in action, start the subscriber in a REPL:
@@ -235,7 +235,7 @@ getvalues(keeper)
 Start another process to listen for alarms:
 
 ```shell
-terminal_2> j -e 'using Rembus; @subscribe alarm(msg) = @info msg; @forever'
+terminal_2> j -e 'using Rembus; @subscribe alarm(msg) = @info msg; @wait'
 ```
 
 In another REPL publish messages:
@@ -264,7 +264,7 @@ A server accepting connections may be setup with these lines:
     expose(rb, power)
     expose(rb, set_exponent)
     
-    forever(rb)
+    wait(rb)
 ```
 
 The exposed method have the following signature:

@@ -1,4 +1,35 @@
 #=
+    isadmin(router, twin, cmd)
+Check if twin client has admin privilege.
+=#
+function isadmin(router, twin, cmd)
+    sts = twin.uid.id in router.admins
+    if !sts
+        @error "$cmd failed: $(tid(twin)) not authorized"
+    end
+
+    return sts
+end
+
+#=
+    isauthorized(router::Router, twin::Twin, topic::AbstractString)
+
+Return true if topic is public or client is authorized to bind to topic.
+=#
+function isauthorized(router::Router, twin::Twin, topic::AbstractString)
+    # check if topic is private
+    if haskey(router.topic_auth, topic)
+        # check if twin is authorized to bind to topic
+        if !haskey(router.topic_auth[topic], twin.uid.id)
+            return false
+        end
+    end
+
+    # topic is public or twin is authorized
+    return true
+end
+
+#=
     private_topic(router, twin, msg)
 
 Administration command to declare a private topic.
@@ -90,17 +121,57 @@ function shutdown_broker(router)
         Visor.shutdown(router.process.supervisor)
         save_configuration(router)
     catch e
-        @error "$SHUTDOWN_CMD: $e"
+        @warn "$SHUTDOWN_CMD: $e"
     end
 end
 
-#=
-Currently Server does not implements admin commands.
-=#
-function admin_command(::Server, ::RBServerConnection, msg::AdminReqMsg)
-    sts = STS_SUCCESS
-    data = nothing
-    return ResMsg(msg.id, sts, data)
+function color_admin(tw::Twin, msg)
+    @debug "[$tw] coloring admin message $(msg.data)"
+    if !haskey(msg.data, "touch")
+        msg.data["touch"] = []
+    end
+    push!(msg.data["touch"], tid(tw))
+    transport_send(tw, msg)
+end
+
+function admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
+    @debug "[$(path(twin))] admin command broadcast: $msg"
+    touched = haskey(msg.data, "touch") ? msg.data["touch"] : []
+    for tw in values(router.id_twin)
+        if hasname(tw) && tid(tw) != tid(twin) &&
+           !(tid(tw) in touched)
+            @debug "[$(path(twin))] broadcasting $msg to $tw"
+            if !isopen(tw.socket)
+                @debug "[$tw] expose not sent: socket is closed"
+            else
+                color_admin(tw, msg)
+            end
+        end
+    end
+
+    # resolve the future
+    if haskey(twin.socket.direct, msg.id)
+        req = twin.socket.direct[msg.id]
+        put!(req.future, ResMsg(msg, STS_SUCCESS))
+        delete!(twin.socket.direct, msg.id)
+    end
+
+    return nothing
+end
+
+function mark_and_broadcast(router, twin, msg)
+    if haskey(msg.data, "rmark")
+        if router.eid in msg.data["rmark"]
+            # Already traversed, do not add the twin to the map of interests.
+            return nothing
+        else
+            push!(msg.data["rmark"], router.eid)
+        end
+    else
+        msg.data["rmark"] = [router.eid]
+    end
+
+    admin_broadcast(router, twin, msg)
 end
 
 function admin_command(router::Router, twin, msg::AdminReqMsg)
@@ -121,6 +192,8 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                 else
                     router.topic_interests[msg.topic] = Set([twin])
                 end
+
+                mark_and_broadcast(router, twin, msg)
             end
         else
             sts = STS_GENERIC_ERROR
@@ -134,18 +207,8 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                 else
                     router.topic_impls[msg.topic] = Set([twin])
                 end
-                # TODO: apply to subscribe, unsubscribe and unexpose
-                # broadcast to all
-                for tw in values(router.id_twin)
-                    if tw.type !== loopback && tw.id !== twin.id
-                        @debug "[$tw] broadcasting $msg"
-                        if tw.socket === nothing || !isopen(tw.socket)
-                            @debug "[$tw] expose not sent: socket is closed"
-                        else
-                            transport_send(Val(tw.type), tw, msg)
-                        end
-                    end
-                end
+
+                mark_and_broadcast(router, twin, msg)
             end
         else
             sts = STS_GENERIC_ERROR
@@ -167,6 +230,8 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                     if haskey(twin.msg_from, msg.topic)
                         delete!(twin.msg_from, msg.topic)
                     end
+
+                    mark_and_broadcast(router, twin, msg)
                 else
                     sts = STS_GENERIC_ERROR
                 end
@@ -184,6 +249,8 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                         if isempty(router.topic_impls[msg.topic])
                             delete!(router.topic_impls, msg.topic)
                         end
+
+                        mark_and_broadcast(router, twin, msg)
                     else
                         sts = STS_GENERIC_ERROR
                     end
@@ -256,13 +323,13 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
         end
     elseif cmd == ENABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.log_level = "debug"
+            logging("debug")
         else
             sts = STS_GENERIC_ERROR
         end
     elseif cmd == DISABLE_DEBUG_CMD
         if isadmin(router, twin, cmd)
-            CONFIG.log_level = "info"
+            logging("info")
         else
             sts = STS_GENERIC_ERROR
         end

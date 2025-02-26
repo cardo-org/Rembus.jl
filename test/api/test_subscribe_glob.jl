@@ -27,16 +27,22 @@ end
 
 function run(admin_component)
     ctx = TestCtx()
-    sub = "mysub"
-    sub_noshared = "another_sub"
+    sub = "subscribe_glob_sub"
+    subzmq = "zmq://:8002/subscribe_glob_subzmq"
+    sub_noshared = "subscribe_glob_another_sub"
 
-    producer = "myproducer"
+    producer = "subscribe_glob_producer"
+    producerzmq = "zmq://:8002/subscribe_glob_producerzmq"
     my_private_topic = "my_private_topic"
 
     user_sub = connect(sub)
     inject(user_sub, ctx)
     subscribe(user_sub, "*", consume_all)
     reactive(user_sub)
+
+    user_subzmq = connect(subzmq)
+    subscribe(user_subzmq, "*", another_consume)
+    reactive(user_subzmq)
 
     another_sub = connect(sub_noshared)
     subscribe(another_sub, "*", another_consume)
@@ -58,18 +64,22 @@ function run(admin_component)
     publish(cli, "bar", [1, 2])
     publish(cli, my_private_topic, 3)
 
+    clizmq = connect(producerzmq)
+    publish(clizmq, "foo", 1)
+
     # generate a broker error log
     publish(cli, "bar", [1, 2, 3])
 
     sleep(0.5)
-    close(cli)
-    close(admin_sub)
-    @test ctx.admin_count == 4
-    @test ctx.user_count == 4
+    for c in [cli, clizmq, admin_sub, user_sub, user_subzmq]
+        close(c)
+    end
+    @test ctx.admin_count == 5
+    @test ctx.user_count == 5
 end
 
-admin_component = "test_admin"
+admin_component = "subscribe_glob_admin"
 
-setup() = set_admin(admin_component)
-execute(() -> run(admin_component), "test_subscribe_glob", setup=setup)
-rm(Rembus.broker_dir(BROKER_NAME), recursive=true)
+broker_name = "subscribe_glob"
+setup() = set_admin(broker_name, admin_component)
+execute(() -> run(admin_component), broker_name, setup=setup)

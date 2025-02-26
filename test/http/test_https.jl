@@ -2,6 +2,8 @@ include("../utils.jl")
 
 using Base64
 
+broker_name = "https"
+
 function mytopic(x, y)
     @info "[test_http] mytopic($x,$y)"
 end
@@ -24,33 +26,32 @@ basic_auth(str::String) = Base64.base64encode(str)
 # set a shared secret
 function init(cid, password)
     # component side
-    pkfile = Rembus.pkfile(cid)
+    pkfile = Rembus.pkfile(cid, create_dir=true)
     open(pkfile, create=true, write=true) do f
         write(f, password)
     end
 
     # broker side
-    kdir = Rembus.keys_dir(BROKER_NAME)
+    kdir = Rembus.keys_dir(broker_name)
     if !isdir(kdir)
         mkpath(kdir)
     end
 
-    fn = Rembus.key_base(BROKER_NAME, cid)
+    fn = Rembus.key_base(broker_name, cid)
     open(fn, create=true, write=true) do f
         write(f, password)
     end
 end
 
 function run()
-    authenticated_component = "bar"
+    authenticated_component = "https_bar"
     password = "aaa"
     init(authenticated_component, password)
 
-    @component "wss://:8000/myapp"
-
-    @expose myservice
-    @subscribe mytopic
-    @reactive
+    rb = connect("wss://:8000/https_myapp")
+    expose(rb, myservice)
+    subscribe(rb, mytopic)
+    reactive(rb)
 
     x = 1
     y = 2
@@ -110,8 +111,7 @@ function run()
         "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
     )
 
-    @shutdown
-    remove_keys(authenticated_component)
+    remove_keys(broker_name, authenticated_component)
 end
 
 if Base.Sys.iswindows()
@@ -124,7 +124,7 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        execute(run, "test_https", secure=true, http=9000)
+        execute(run, broker_name, secure=true, http=9000)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

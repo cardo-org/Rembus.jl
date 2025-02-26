@@ -23,7 +23,7 @@ end
 
 @expose myservice
 
-@forever
+@wait
 ```
 
 Fault-tolerance holds equally for publish/subscribe setups: in case of connection lost the subscriber retries to reconnect to the broker until the connection will be up again.   
@@ -43,5 +43,5 @@ end
 
 @subscribe mytopic before_now
 
-@forever
+@wait
 ```

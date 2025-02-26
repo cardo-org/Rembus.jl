@@ -20,7 +20,7 @@ function start_server()
     rb = server(Ctx(2))
     expose(rb, power)
     expose(rb, set_exponent)
-    forever(rb)
+    wait(rb)
 end
 
 start_server()

@@ -40,7 +40,7 @@ end
 @expose myservice
 
 # Serve forever until Ctrl-C 
-@forever
+@wait
 ```
 
 > The `@component` macro declares a unique name for the component that get known to the broker.
@@ -66,7 +66,7 @@ end
 @subscribe mytopic
 
 # Receive messages forever until Ctrl-C 
-@forever
+@wait
 ```
 
 ## Pub/Sub publisher

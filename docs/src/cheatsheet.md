@@ -17,12 +17,12 @@ Close the connection and shutdown the component:
 Loop unless `Ctrl-C` or `shutdown()`:
 
 ```julia
-forever()
+wait()
 ```
 
-> **NOTE:** `forever` is required by `@subscribe` and `@expose` unless you are in the REPL.
+> **NOTE:** `wait` is required by `@subscribe` and `@expose` unless you are in the REPL.
 
-Terminate background Rembus task and return from `forever()`:
+Terminate background Rembus task and return from `wait()`:
 
 ```julia
 shutdown()

@@ -2,6 +2,12 @@ include("../utils.jl")
 
 using Base64
 
+broker_name = "http_admin"
+admin = "http_admin_superuser"
+
+myservice() = 100
+mytopic() = nothing
+
 function body(response::HTTP.Response)
     if isempty(response.body)
         return nothing
@@ -13,14 +19,14 @@ end
 basic_auth(str::String) = Base64.base64encode(str)
 
 function setup_admin()
-    bdir = Rembus.broker_dir(BROKER_NAME)
+    bdir = Rembus.broker_dir(broker_name)
     mkpath(bdir)
     @info "broker_dir:$bdir - ($(pwd())) $(isdir(bdir))"
 
     fn = joinpath(bdir, "admins.json")
     @info "setting admin: $fn"
     open(fn, "w") do io
-        write(io, JSON3.write(Set(["admin"])))
+        write(io, JSON3.write(Set([admin])))
     end
     @info "admins.json setup done"
 end
@@ -28,18 +34,18 @@ end
 # set a shared secret
 function init(cid, password)
     # component side
-    pkfile = Rembus.pkfile(cid)
+    pkfile = Rembus.pkfile(cid, create_dir=true)
     open(pkfile, create=true, write=true) do f
         write(f, password)
     end
 
     # broker side
-    kdir = Rembus.keys_dir(BROKER_NAME)
+    kdir = Rembus.keys_dir(broker_name)
     if !isdir(kdir)
         mkpath(kdir)
     end
 
-    fn = Rembus.key_base(BROKER_NAME, cid)
+    fn = Rembus.key_base(broker_name, cid)
     open(fn, create=true, write=true) do f
         write(f, password)
     end
@@ -47,9 +53,13 @@ end
 
 
 function run()
-    admin = "admin"
     password = "aaa"
     init(admin, password)
+
+    # subscribe and expose some methods
+    rb = connect("wss://:8000/mycomponent")
+    expose(rb, myservice)
+    subscribe(rb, mytopic)
 
     auth = basic_auth("user")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
@@ -90,7 +100,10 @@ function run()
         ["Authorization" => auth]
     )
     @test response.status == 200
-    @test body(response) == Dict("subscribers" => Dict(), "exposers" => Dict())
+    @test body(response) == Dict(
+        "subscribers" => Dict("mytopic" => ["mycomponent"]),
+        "exposers" => Dict("myservice" => ["mycomponent"])
+    )
 
     @test_throws HTTP.Exceptions.StatusError HTTP.get(
         "https://127.0.0.1:9000/admin/wrong_command",
@@ -103,7 +116,7 @@ function run()
         ["Authorization" => auth]
     )
 
-    remove_keys(admin)
+    remove_keys(broker_name, admin)
 end
 
 if Base.Sys.iswindows()
@@ -116,7 +129,7 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        execute(run, "test_http_admin", setup=setup_admin, secure=true, http=9000)
+        execute(run, broker_name, setup=setup_admin, secure=true, http=9000)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

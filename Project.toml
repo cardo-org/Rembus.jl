@@ -12,15 +12,14 @@ DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
-DuckDB = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 JSONTables = "b9914132-a727-11e9-1322-f18e41205b0b"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MbedTLS = "739be429-bea8-5141-9913-cc70e7f3736d"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
-Parquet = "626c502c-15b0-58ad-a749-f091afb673ae"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
@@ -39,26 +38,30 @@ ArgParse = "1"
 Arrow = "2"
 DataFrames = "1"
 DataStructures = "0.18"
+Distributed = "1.11.0"
 DocStringExtensions = "0.9"
-DuckDB = "1"
 HTTP = "1"
+JLD2 = "0.5.11"
 JSON3 = "1"
 JSONTables = "1"
 MbedTLS = "1"
 Parameters = "0.12"
-Parquet = "0.8"
 PrecompileTools = "1"
 Preferences = "1"
 Prometheus = "1.4.1"
 Reexport = "1"
+TestItemRunner = "1.1.0"
+TestItems = "1.0.0"
 URIs = "1"
-Visor = "0.7.3"
+Visor = "0.8"
 ZMQ = "1"
 julia = "1.10"
 
 [extras]
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
+TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
 
 [preferences.Rembus]
 metering = false
@@ -67,4 +70,4 @@ overwrite_connection = true
 stacktrace = false
 
 [targets]
-test = ["Test", "SafeTestsets"]
+test = ["Test", "SafeTestsets", "TestItems", "TestItemRunner"]

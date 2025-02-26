@@ -2,8 +2,6 @@ include("../utils.jl")
 
 using Base64
 
-# tests: 11
-
 function mytopic()
     @info "[test_http] mytopic() (NO ARGS)"
 end
@@ -18,11 +16,10 @@ function myservice(x, y)
 end
 
 function run()
-    @component "myapp"
-
-    @expose myservice
-    @subscribe mytopic
-    @reactive
+    rb = connect("http_myapp")
+    expose(rb, myservice)
+    subscribe(rb, mytopic)
+    reactive(rb)
 
     x = 1
     y = 2
@@ -65,16 +62,14 @@ function run()
 
     # It is not permitted to use a name of a connected component
     # with HTTP rest api
-    auth = Base64.base64encode("myapp")
+    auth = Base64.base64encode("http_myapp")
     @test_throws HTTP.Exceptions.StatusError HTTP.get(
         "http://localhost:9000/version",
         ["Authorization" => auth]
     )
-
-    @shutdown
 end
 
 # for coverage runs
 ENV["REMBUS_TIMEOUT"] = 30
-execute(run, "test_http", http=9000)
+execute(run, "http", http=9000)
 delete!(ENV, "REMBUS_TIMEOUT")

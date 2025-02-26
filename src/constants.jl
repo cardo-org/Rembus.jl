@@ -18,12 +18,17 @@ const SIG_ECDSA = 0x2
 
 const CONNECTION_ID = 0x12345678961deadbeef123456789
 
+# Keywords for handlers functions related to twin lifecycle events.
+const HR_CHALLENGE = "chnge"
+const HR_CONN_DOWN = "cdown"
+
 const TENANTS_FILE = "tenants.json"
 const TENANT_COMPONENT = "tenant_component.json"
 
 const BROKER_CONFIG = "__config__"
 const CID = "cid"
 const COMMAND = "cmd"
+const TOUCHED = "touch"
 const DATA = :data
 const MSG_FROM = "msg_from"
 const STATUS = "status"
@@ -50,6 +55,8 @@ const PRIVATE_TOPICS_CONFIG_CMD = "private_topics_config"
 const BROKER_CONFIG_CMD = "broker_config"
 const LOAD_CONFIG_CMD = "load_config"
 const SAVE_CONFIG_CMD = "save_config"
+
+const LEADER_HERE = "leader_here"
 
 const REACTIVE_HANDLER = "reactive_handler"
 const SUBSCRIBE_HANDLER = "subscribe_handler"
@@ -83,8 +90,6 @@ const TYPE_CLOSE::UInt8 = 15
 
 const REACTIVE_DISABLE::Bool = false
 const REACTIVE_ENABLE::Bool = true
-
-const ACK_WAIT_TIME = 2
 
 const STS_SUCCESS::UInt8 = 0
 const STS_GENERIC_ERROR::UInt8 = 10

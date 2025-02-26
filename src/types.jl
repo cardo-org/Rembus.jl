@@ -1,0 +1,653 @@
+abstract type RembusException <: Exception end
+
+"""
+    RembusTimeout
+
+Thrown when a response it is not received.
+"""
+struct RembusTimeout{T} <: RembusException
+    msg::T
+    RembusTimeout{T}(msg) where {T} = new{T}(msg)
+end
+
+RembusTimeout(msg) = RembusTimeout{typeof(msg)}(msg)
+
+# An error response from the broker that is not one of:
+# STS_METHOD_NOT_FOUND, STS_METHOD_EXCEPTION, STS_METHOD_LOOPBACK, STS_METHOD_UNAVAILABLE
+Base.@kwdef struct RembusError <: RembusException
+    code::UInt8
+    topic::Union{String,Nothing} = nothing
+    reason::Union{String,Nothing} = nothing
+end
+
+struct AlreadyConnected <: RembusException
+    cid::String
+end
+
+"""
+`RpcMethodNotFound` is thrown from a rpc request when the called method is unknown.
+
+fields:
+$(FIELDS)
+
+## RPC Client
+```julia
+@rpc coolservice()
+```
+Output:
+```
+ERROR: Rembus.RpcMethodNotFound("rembus", "coolservice")
+Stacktrace:
+...
+```
+"""
+struct RpcMethodNotFound <: RembusException
+    "service name"
+    topic::String
+end
+
+"""
+    RpcMethodUnavailable
+
+Thrown when a RPC method is unavailable.
+
+A method is considered unavailable when some component that exposed the method is
+currently disconnected from the broker.
+
+# Fields
+$(FIELDS)
+"""
+struct RpcMethodUnavailable <: RembusException
+    "service name"
+    topic::String
+end
+
+"""
+    RpcMethodLoopback
+
+Thrown when a RPC request would invoke a locally exposed method.
+
+# Fields
+$(FIELDS)
+"""
+struct RpcMethodLoopback <: RembusException
+    "service name"
+    topic::String
+end
+
+"""
+    RpcMethodException
+
+Thrown when a RPC method throws an exception.
+
+# Fields
+$(FIELDS)
+
+## Exposer
+```julia
+@expose foo(name::AbstractString) = "hello " * name
+```
+## RPC client
+```julia
+try
+    @rpc foo(1)
+catch e
+    @error e.reason
+end
+```
+Output:
+```
+┌ Error: MethodError: no method matching foo(::UInt64)
+│
+│ Closest candidates are:
+│   foo(!Matched::AbstractString)
+│    @ Main REPL[2]:1
+└ @ Main REPL
+```
+"""
+struct RpcMethodException <: RembusException
+    "service name"
+    topic::String
+    "remote exception description"
+    reason::String
+end
+
+@enum NodeStatus up down
+
+# REED: Router Eligible End Device
+# ED: End Device
+@enum DeviceType ed reed router
+
+# Available modes of connection.
+# if mode is authenticated then anonymous modes are not permitted.
+# if mode is anonymous all connection modes are available.
+@enum ConnectionMode anonymous authenticated
+
+mutable struct RbURL
+    id::String
+    hasname::Bool
+    protocol::Symbol
+    host::String
+    port::UInt16
+    props::Dict{String,String}
+    function RbURL(;
+        name="",
+        protocol=:ws,
+        host="127.0.0.1",
+        port=8000,
+        hasname=true
+    )
+        if protocol === :repl
+            return new("__repl__", false, :repl, "", 0, Dict())
+        else
+            if isempty(name)
+                name = string(uuid4())
+                hasname = false
+            end
+            return new(name, hasname, protocol, host, port, Dict())
+        end
+    end
+    function RbURL(url::String)
+        baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
+        baseuri = URI(baseurl)
+        uri = URI(url)
+        props = queryparams(uri)
+
+        host = uri.host
+        if host == ""
+            host = baseuri.host
+        end
+
+        portstr = uri.port
+        if portstr == ""
+            portstr = baseuri.port
+        end
+
+        port = parse(UInt16, portstr)
+
+        proto = uri.scheme
+        if proto == ""
+            name = uri.path
+            protocol = Symbol(baseuri.scheme)
+        elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
+            name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
+            protocol = Symbol(proto)
+        else
+            error("wrong url $url: unknown protocol $proto")
+        end
+        if isempty(name)
+            name = string(uuid4())
+            hasname = false
+        else
+            hasname = true
+        end
+        return new(name, hasname, protocol, host, port, props)
+    end
+end
+
+nodeurl(c::RbURL) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
+
+tid(c::RbURL) = c.id
+
+function cid(c::RbURL)
+    c.protocol === :repl ? "__repl__" : "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
+end
+
+hasname(c::RbURL) = c.hasname
+
+isrepl(c::RbURL) = c.protocol === :repl
+
+struct AckState
+    ack2::Bool
+    timer::Timer
+end
+
+ack_dataframe() = DataFrame(ts=UInt64[], id=UInt128[])
+
+# Wrong tcp packet received.
+struct WrongTcpPacket <: Exception
+end
+
+struct CABundleNotFound <: Exception
+end
+
+"""
+A component of the Rembus network.
+
+If port is equal to zero the node is not eligible to become a broker.
+"""
+struct Node
+    cid::String # component id
+    protocol::Symbol # :ws, :wss, :tcp, :tls, :zmq
+    host::String  # hostname or ip address
+    port::UInt16  # listening port
+    status::NodeStatus
+end
+
+function nodes(cid::String, source_address::String, portmap::Dict)
+    res = []
+    for (proto, port) in portmap
+        push!(res, Node(cid, Symbol(proto), source_address, port, up))
+    end
+
+    return res
+end
+
+function Base.show(io::IO, n::Node)
+    print(io, "$(n.cid) -> $(n.protocol)://$(n.host):$(n.port) [$(n.status)]")
+end
+
+struct FutureResponse{T}
+    future::Distributed.Future
+    sending_ts::Float64
+    request::T
+    timer::Timer
+    FutureResponse(request, timer) = new{typeof(request)}(
+        Distributed.Future(),
+        time(),
+        request,
+        timer
+    )
+end
+
+abstract type AbstractSocket end
+
+abstract type AbstractPlainSocket <: AbstractSocket end
+
+struct Float <: AbstractSocket
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    Float(out=Dict(), direct=Dict()) = new(out, direct)
+end
+
+Base.show(io::IO, s::Float) = print(io, "FLOAT")
+
+struct WS <: AbstractPlainSocket
+    sock::HTTP.WebSockets.WebSocket
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    WS(sock) = new(
+        sock,
+        Dict(), # out
+        Dict(), # direct
+    )
+end
+
+Base.show(io::IO, s::WS) = print(io, "WS:$(isopen(s))")
+
+struct TCP <: AbstractPlainSocket
+    sock::Sockets.TCPSocket
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    TCP(sock) = new(
+        sock,
+        Dict(), # out
+        Dict(), # direct
+    )
+end
+
+Base.show(io::IO, s::TCP) = print(io, "TCP:$(isopen(s))")
+
+struct TLS <: AbstractPlainSocket
+    sock::MbedTLS.SSLContext
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    TLS(sock) = new(
+        sock,
+        Dict(), # out
+        Dict(), # direct
+    )
+end
+
+Base.show(io::IO, s::TLS) = print(io, "TLS:$(isopen(s))")
+
+struct ZDealer <: AbstractSocket
+    sock::ZMQ.Socket
+    context::ZMQ.Context
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    function ZDealer()
+        context = ZMQ.Context()
+        sock = ZMQ.Socket(context, DEALER)
+        sock.linger = 1
+        return new(
+            sock,
+            context,
+            Dict(), # out
+            Dict(), # direct
+        )
+    end
+end
+
+struct ZRouter <: AbstractSocket
+    sock::ZMQ.Socket
+    zaddress::Vector{UInt8}
+    out::Dict{UInt128,FutureResponse}
+    direct::Dict{UInt128,FutureResponse}
+    ZRouter(sock, address) = new(
+        sock,
+        address,
+        Dict(), # out
+        Dict(), # direct
+    )
+end
+
+Base.isopen(ws::WebSockets.WebSocket) = isopen(ws.io)
+
+Base.isopen(endpoint::AbstractSocket) = isopen(endpoint.sock)
+
+Base.isopen(endpoint::Float) = false
+
+Base.close(::AbstractSocket) = nothing
+Base.close(endpoint::AbstractPlainSocket) = close(endpoint.sock)
+
+function Base.close(endpoint::ZDealer)
+    transport_send(endpoint, Close())
+    close(endpoint.sock)
+    close(endpoint.context)
+end
+
+const FLOAT = Float()
+
+@enum ListenerStatus on off
+
+struct WsPing end
+
+mutable struct Listener
+    status::ListenerStatus
+    port::UInt
+    Listener(port) = new(off, port)
+end
+
+struct RembusMetrics
+    rpc::Prometheus.Family{Prometheus.Histogram}
+    pub::Prometheus.Family{Prometheus.Counter}
+    RembusMetrics(reg) = new(
+        Prometheus.Family{Prometheus.Histogram}(
+            "broker_rpc",
+            "Round trip time for rpc requests",
+            ("topic",),
+            registry=reg
+        ),
+        Prometheus.Family{Prometheus.Counter}(
+            "broker_pub",
+            "Count of published messages",
+            ("topic",),
+            registry=reg
+        )
+    )
+end
+
+mutable struct Settings
+    zmq_ping_interval::Float32
+    ws_ping_interval::Float32
+    rembus_dir::String
+    log_destination::String
+    log_level::String
+    overwrite_connection::Bool
+    stacktrace::Bool  # log stacktrace on error
+    cid::String
+    connection_retry_period::Float32 # seconds between reconnection attempts
+    broker_plugin::Union{Nothing,Module}
+    save_messages::Bool
+    db_max_messages::UInt
+    connection_mode::ConnectionMode
+    request_timeout::Float64
+    challenge_timeout::Float64
+    ack_timeout::Float64
+    Settings() = begin
+        cfg = get(Base.get_preferences(), "Rembus", Dict())
+
+        zmq_ping_interval = get(cfg, "zmq_ping_interval",
+            parse(Float32, get(ENV, "REMBUS_ZMQ_PING_INTERVAL", "10")))
+
+        ws_ping_interval = get(cfg, "ws_ping_interval",
+            parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
+        rdir = get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", default_rembus_dir()))
+        log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
+
+        if haskey(ENV, "REMBUS_DEBUG")
+            log_level = TRACE_INFO
+            if ENV["REMBUS_DEBUG"] == "1"
+                log_level = TRACE_DEBUG
+            end
+        else
+            log_level = get(cfg, "log_level", TRACE_INFO)
+        end
+
+        overwrite_connection = get(cfg, "overwrite_connection", true)
+        stacktrace = get(cfg, "stacktrace", false)
+        cid = get(cfg, "cid", "")
+
+        connection_mode = string_to_enum(get(cfg, "connection_mode", "anonymous"))
+        connection_retry_period = get(cfg, "connection_retry_period", 2.0)
+
+        db_max_messages = get(
+            cfg,
+            "db_max_messages",
+            parse(UInt, get(ENV, "REMBUS_DB_MAX_SIZE", REMBUS_DB_MAX_SIZE))
+        )
+        request_timeout = get(
+            cfg,
+            "request_timeout",
+            parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5"))
+        )
+        challenge_timeout = get(
+            cfg,
+            "challenge_timeout",
+            parse(Float64, get(ENV, "REMBUS_CHALLENGE_TIMEOUT", "3"))
+        )
+        ack_timeout = get(
+            cfg,
+            "request_timeout",
+            parse(Float64, get(ENV, "REMBUS_ACK_TIMEOUT", "2"))
+        )
+        new(
+            zmq_ping_interval,
+            ws_ping_interval,
+            rdir,
+            log_destination,
+            log_level,
+            overwrite_connection,
+            stacktrace,
+            cid,
+            connection_retry_period,
+            nothing,
+            true,
+            db_max_messages,
+            connection_mode,
+            request_timeout,
+            challenge_timeout,
+            ack_timeout
+        )
+    end
+end
+
+abstract type AbstractTwin end
+
+mutable struct Router{T<:AbstractTwin}
+    id::String
+    eid::UInt64 # ephemeral unique id
+    settings::Settings
+    mode::ConnectionMode
+    lock::ReentrantLock
+    policy::Symbol
+    metrics::Union{Nothing,RembusMetrics}
+    msg_df::DataFrame
+    mcounter::UInt64
+    network::Set{Node}
+    start_ts::Float64
+    servers::Set{String}
+    listeners::Dict{Symbol,Listener} # protocol => listener status
+    address2twin::Dict{Vector{UInt8},T} # zeromq address => twin
+    plugin::Union{Nothing,Module}
+    shared::Any
+    topic_impls::Dict{String,OrderedSet{T}} # topic => twins implementor
+    last_invoked::Dict{String,Int} # topic => twin index last called
+    topic_interests::Dict{String,Set{T}} # topic => twins subscribed to topic
+    id_twin::Dict{String,T} # id => twin
+    topic_function::Dict{String,Function}
+    subinfo::Dict{String,Float64}
+    topic_auth::Dict{String,Dict{String,Bool}} # topic => {tid(twin) => true}
+    admins::Set{String}
+    server::Sockets.TCPServer
+    http_server::HTTP.Server
+    ws_server::Sockets.TCPServer
+    zmqsocket::ZMQ.Socket
+    zmqcontext::ZMQ.Context
+    process::Visor.Process
+    owners::DataFrame
+    component_owner::DataFrame
+    Router{T}(name, plugin=nothing, context=missing) where {T<:AbstractTwin} = new{T}(
+        name,
+        rand(Xoshiro(time_ns()), UInt64),
+        Settings(),
+        anonymous,
+        ReentrantLock(),
+        :first_up,
+        nothing,
+        msg_dataframe(),
+        0,
+        Set(),
+        NaN, # start_ts
+        Set(),
+        Dict(),
+        Dict(),
+        plugin,
+        context, # shared
+        Dict(), # topic_impls
+        Dict(), # last_invoked
+        Dict(), # topic_interests
+        Dict(), # id_twin
+        Dict(), # topic_function
+        Dict(), # subinfo
+        Dict(), # topic_auth
+        Set(), # admins
+    )
+end
+
+mutable struct Twin <: AbstractTwin
+    uid::RbURL
+    shared::Any
+    handler::Dict{String,Function}
+    isauth::Bool
+    reactive::Bool
+    egress::Union{Nothing,Function}
+    ingress::Union{Nothing,Function}
+    router::Router
+    socket::AbstractSocket
+    mark::UInt64
+    msg_from::Dict{String,Float64} # subtract from now and consider minimum ts of unsent msg
+    ackdf::DataFrame
+    probe::Bool
+    process::Visor.Process
+    Twin(uid::RbURL, r::Router, s=FLOAT) = new(
+        uid,
+        missing,
+        Dict(), # handler
+        false,
+        false,
+        nothing,
+        nothing,
+        r,
+        s,
+        0,
+        Dict(), # msg_from
+        load_pubsub_received(r, uid), # ackdf
+        false
+    )
+end
+
+Base.:(==)(a::Twin, b::Twin) = tid(a) === tid(b)
+
+"twin unique identifier"
+tid(twin::Twin) = twin.uid.id
+
+cid(twin::Twin) = cid(twin.uid)
+
+nodeurl(rb::Twin) = nodeurl(rb.uid)
+
+path(twin::Twin) = "$(isdefined(twin, :process) ? twin.process.supervisor.supervisor : ":"):$(tid(twin))"
+
+hasname(twin::Twin) = hasname(twin.uid)
+
+# TODO: to be called iszmqdealer
+iszmq(twin::Twin) = isa(twin.socket, ZDealer)
+
+#=
+    offline!(twin)
+
+Unbind the ZMQ socket from the twin.
+=#
+function offline!(twin)
+    @debug "[$twin] closing: going offline"
+    twin.socket = Float()
+    # Remove from address2twin
+    filter!(((k, v),) -> twin != v, twin.router.address2twin)
+    return nothing
+end
+
+function Base.isopen(twin::Twin)
+    if isrepl(twin.uid)
+        return isdefined(twin, :process) && !istaskdone(twin.process.task)
+    else
+        return isopen(twin.socket)
+    end
+end
+
+notreactive(twin) = twin.reactive === false
+
+Base.wait(twin::Twin) = isdefined(twin, :process) ? wait(twin.process.task) : nothing
+
+isconnected(twin::Twin) = isopen(twin.socket)
+
+protocol(twin::Twin) = twin.uid.protocol
+
+Base.show(io::IO, r::Router) = print(io, "$(r.id)")
+Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
+
+msg_dataframe() = DataFrame(
+    ptr=UInt[], ts=UInt[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
+)
+mutable struct RouterCollector <: Prometheus.Collector
+    router::Router
+    function RouterCollector(
+        router::Router;
+        registry::Union{Prometheus.CollectorRegistry,Nothing}=Prometheus.DEFAULT_REGISTRY
+    )
+        coll = new(router)
+        if registry !== nothing
+            # ignore already registered error
+            try
+                Prometheus.register(registry, coll)
+            catch
+            end
+        end
+        return coll
+    end
+end
+
+function Prometheus.metric_names(::RouterCollector)
+    return (
+        "broker_websocket_connections",
+    )
+end
+
+function Prometheus.collect!(metrics::Vector, rc::RouterCollector)
+    connected_clients = 0
+    for tw in values(rc.router.id_twin)
+        if isopen(tw)
+            connected_clients += 1
+        end
+    end
+
+    push!(
+        metrics,
+        Prometheus.Metric(
+            "gauge",
+            "broker_websocket_connections",
+            "Total number of WebSocket connections",
+            Prometheus.Sample(nothing, nothing, nothing, connected_clients)))
+
+    return metrics
+end

@@ -1,135 +1,138 @@
-using DataFrames
-
 include("../utils.jl")
 
-df = DataFrame(name=["trento", "belluno"], score=[10, 50])
-bdf = DataFrame(x=1:10, y=1:10)
+using Dates
 
-mutable struct TestBag
-    noarg_message_received::Bool
-    msg_received::Int
-    df::Union{Nothing,DataFrame}
-    bdf::Union{Nothing,DataFrame}
-    num::Number
-    TestBag() = new(false, 0, nothing, nothing)
-end
+foo(ctx, rb, x) = ctx[tid(rb)] = x
 
-function inspect(bag::TestBag, rb)
-    bag.noarg_message_received = true
-end
-
-function consume(bag::TestBag, rb, data::Number)
-    bag.msg_received += 1
-
-    @debug "consume recv: $data" _group = :test
-    bag.num = data
-end
-
-function consume(bag::TestBag, rb, data)
-    bag.msg_received += 1
-
-    if names(data) == ["x", "y"]
-        @debug "recv bdf" _group = :test
-        bag.bdf = data
-    else
-        @debug "recv df" _group = :test
-        bag.df = data
-    end
-end
-
-
-function publish_workflow(pub, sub1, sub2, sub3, isfirst=false)
-    waittime = 0.8
-    my_topic = "consume"
-    noarg_topic = "noarg_topic"
-
-    testbag = TestBag()
-
-    publisher = connect(pub)
-
-    sub1 = connect(sub1)
-
-    inject(sub1, testbag)
-
-    subscribe(sub1, my_topic, consume)
-    reactive(sub1)
-
-    sub2 = connect(sub2)
-    inject(sub2, testbag)
-
-    subscribe(sub2, my_topic, consume)
-    subscribe(sub2, noarg_topic, inspect)
-    reactive(sub2)
-
-    sub3 = connect(sub3)
-    inject(sub3, testbag)
-    subscribe(sub3, my_topic, consume, from=LastReceived())
-    reactive(sub3)
-
-    #sleep(1)
-    publish(publisher, my_topic, 2)
-    publish(publisher, my_topic, df)
-    publish(publisher, my_topic, bdf)
-    # publish with no args
-    try
-        publish(publisher, noarg_topic)
-    catch e
-        @test false
-    end
-
-    sleep(waittime)
-    unsubscribe(sub1, my_topic) # by name
-    unsubscribe(sub2, consume) # by function object
-
-    # removing a not registerd interest throws an error
-    try
-        unsubscribe(sub1, my_topic)
-        @test false
-    catch e
-        @debug "[remove interest]: $e" _group = :test
-        @test isa(e, Rembus.RembusError)
-        @test e.code === Rembus.STS_GENERIC_ERROR
-    end
-
-    if isfirst
-        @info "testbag.msg_received $(testbag.msg_received) === 9"
-    else
-        @test testbag.msg_received === 9
-        @test testbag.bdf == bdf
-        @test testbag.df == df
-    end
-
-    for cli in [publisher, sub1, sub2, sub3]
-        close(cli)
-    end
-
-    if isfirst
-        @info "testbag.noarg_message_received $(testbag.noarg_message_received) === true"
-    else
-        @test testbag.noarg_message_received === true
-    end
-end
-
-function run()
-    # send 4 pubsub messages
-    publish_workflow("pub", "tcp://:8001/sub1", "tcp://:8001/sub2", "sub3", true)
-    @info "starting real test"
-    for sub1 in ["tcp://:8001/sub1", "zmq://:8002/sub1"]
-        for sub2 in ["tcp://:8001/sub2", "zmq://:8002/sub2"]
-            for sub3 in ["sub3", "zmq://:8002/sub3"]
-                for publisher in ["pub", "zmq://:8002/pub"]
-                    @debug "test_publish endpoints: $sub1, $sub2, $sub3, $publisher, " _group = :test
-                    # send a grand total of 64 pubsub messages
-                    publish_workflow(publisher, sub1, sub2, sub3)
-                end
-            end
+function wait_message(fn, max_wait=10)
+    wtime = 0.1
+    t = 0
+    while t < max_wait
+        t += wtime
+        sleep(wtime)
+        if fn()
+            return true
         end
     end
+    return false
 end
 
-execute(run, "test_publish")
+function run(pub_url, sub_url)
+    ctx = Dict()
 
-# expect 68 messages published (received and stored by broker)
-# the mark of sub1 and sub3 is 67 because they not subscribed to
-# noarg_topic.
-verify_counters(total=68, components=Dict("sub2" => 68, "sub1" => 68, "sub3" => 68))
+    sub = connect(sub_url)
+
+    # Test empty probed messages
+    @test isempty(Rembus.probe_inspect(sub))
+
+    @info "[$sub_url] socket: $(sub.socket)"
+    @test isnothing(subscribe(sub, foo, Dates.CompoundPeriod(Day(1), Minute(1))))
+    inject(sub, ctx)
+    reactive(sub, Rembus.Now())
+
+    pub = connect(pub_url)
+    val = 1
+
+    Rembus.reset_probe!(sub)
+    Rembus.reset_probe!(pub)
+
+    publish(pub, "foo", val, qos=QOS2)
+
+    @test wait_message() do
+        haskey(ctx, tid(sub)) && ctx[tid(sub)] == val
+    end
+    sleep(0.1)
+    unsubscribe(sub, foo)
+
+    # This message is not delivered to sub because sub unsubscribed.
+    publish(pub, "foo", 2 * val)
+
+    @test wait_message() do
+        haskey(ctx, tid(sub)) && ctx[tid(sub)] == val
+    end
+
+    Rembus.unprobe!(sub)
+
+    shutdown(sub)
+    shutdown(pub)
+    sub_messages = Rembus.probe_inspect(sub)
+    @info "[$sub] PROBE: $sub_messages"
+    Rembus.probe_pprint(sub)
+    Rembus.probe_pprint(pub)
+    @test sub_messages[1].direction === Rembus.pktin
+    @test isa(sub_messages[1].msg, Rembus.PubSubMsg)
+    @test sub_messages[2].direction === Rembus.pktout
+    @test isa(sub_messages[2].msg, Rembus.AckMsg)
+
+    index = isa(sub_messages[3].msg, Rembus.Ack2Msg) ? 3 : 4
+    @test sub_messages[index].direction === Rembus.pktin
+    @test isa(sub_messages[index].msg, Rembus.Ack2Msg)
+
+    return ctx
+end
+
+@info "[test_publish] start"
+try
+    #pub_url = "tcp://:8011/pub"
+    #sub_url = "tcp://:8011/sub"
+    #pub_url = "ws://:8010/pub"
+    #sub_url = "ws://:8010/sub"
+    #pub_url = "zmq://:8012/pub"
+    #sub_url = "zmq://:8012/sub"
+
+    rb = broker(ws=8010, tcp=8011, zmq=8012, prometheus=7071, name="publish")
+    @test Rembus.islistening(rb, wait=10)
+    for pub_url in [
+        "tcp://127.0.0.1:8011/publish_pub",
+        "ws://127.0.0.1:8010/publish_pub"
+    ]
+        for sub_url in [
+            "tcp://127.0.0.1:8011/publish_tcpsub",
+            "ws://127.0.0.1:8010/publish_wssub",
+            "zmq://127.0.0.1:8012/publish_zmqsub"
+        ]
+            ctx = run(pub_url, sub_url)
+            url = Rembus.RbURL(sub_url)
+            @test ctx[tid(url)] == 1
+        end
+    end
+
+    shutdown(rb)
+    if Base.Sys.iswindows()
+        @info "Windows platform detected: skipping test_https"
+    else
+        # create keystore
+        test_keystore = "/tmp/keystore"
+        script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
+        ENV["REMBUS_KEYSTORE"] = test_keystore
+        ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
+        try
+            Base.run(`$script -k $test_keystore`)
+            rb = broker(secure=true, ws=6010, tcp=6011, zmq=6012, name="publish")
+            @test Rembus.islistening(rb, wait=10)
+            for pub_url in [
+                "tls://127.0.0.1:6011/publish_pub",
+                "wss://127.0.0.1:6010/publish_pub"
+            ]
+                for sub_url in [
+                    "tls://127.0.0.1:6011/publish_tcpsub",
+                    "wss://127.0.0.1:6010/publish_wssub"
+                ]
+                    ctx = run(pub_url, sub_url)
+                    url = Rembus.RbURL(sub_url)
+                    @test ctx[tid(url)] == 1
+                end
+            end
+        finally
+            delete!(ENV, "REMBUS_KEYSTORE")
+            delete!(ENV, "HTTP_CA_BUNDLE")
+            rm(test_keystore, recursive=true, force=true)
+        end
+    end
+catch e
+    @error "[test_publish] error: $e"
+    @test false
+finally
+    shutdown()
+end
+@info "[test_publish] end"

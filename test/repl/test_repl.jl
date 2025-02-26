@@ -1,7 +1,11 @@
 
 include("../utils.jl")
 
-Rembus.repl_log()
+function repl_log()
+    ConsoleLogger(stdout, Info, meta_formatter=Rembus.repl_metafmt) |> global_logger
+end
+
+repl_log()
 @info "this is an info message"
 
 Base.isinteractive() = true
@@ -12,6 +16,8 @@ end
 
 myservice(x) = x + 1
 myservice(x, y) = x + y
+
+younger() = true
 
 function myservice(ctx::TestCtx, rb, x)
     ctx.count += 1
@@ -26,8 +32,12 @@ end
 function run()
     ctx = TestCtx(0)
 
-    sub = tryconnect("repl_sub")
-    expose(sub, myservice)
+    server1 = connect("repl_server1")
+    expose(server1, younger)
+
+    server2 = connect("repl_server2")
+    expose(server2, myservice)
+
 
     cli = connect()
     res = rpc(cli, "myservice", 1)
@@ -35,7 +45,7 @@ function run()
     res = rpc(cli, "myservice", [1, 2])
     @test res == 3
 
-    inject(sub, ctx)
+    inject(server2, ctx)
     res = rpc(cli, "myservice", 1)
     @test res == 3
     @test ctx.count == 1
@@ -44,8 +54,20 @@ function run()
     @test res == 6
     @test ctx.count == 2
 
-    close(sub)
-    close(cli)
+    try
+        rpc(cli, "myservice", [3, 2, 1])
+    catch e
+        @info "[test_repl] expected error: $e"
+    end
+
+    try
+        rpc(cli, "younger", [1])
+    catch e
+        @info "[test_repl] expected error: $e"
+    end
+
+    shutdown(server2)
+    shutdown(cli)
 end
 
-execute(run, "test_repl")
+execute(run, "repl")

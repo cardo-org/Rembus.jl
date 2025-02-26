@@ -10,7 +10,6 @@ mutable struct TestBag
 end
 
 function add_one(add_one_arg)
-    @atest add_one_arg == request_arg
     add_one_arg + 1
 end
 
@@ -26,37 +25,30 @@ end
 
 function rpc_method(bag, rb, rpc_method_arg)
     bag.rpc_method_invoked = true
-
-    # expect rpc_method_arg equals to request arg
-    @atest rpc_method_arg == request_arg
 end
 
 function run(request_url, subscriber_url, exposer_url)
 
     connect("")
-    @test true
 
-    # anonymous component
-    # anonymous_twin_receiver returns because isempty(payload) returns true
-    rb = tryconnect("tcp://:8001")
-    sleep(0.1)
+    rb = connect("tcp://:8001")
+    @test isopen(rb)
     close(rb)
 
     bag = TestBag(false)
     client = connect(request_url)
 
     try
-        rpc(client, rpc_topic, raise=true)
+        rpc(client, rpc_topic)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodNotFound)
-        @test e.cid === client.client.id
         @test e.topic === rpc_topic
     end
 
-    implementor = tryconnect(exposer_url)
+    implementor = connect(exposer_url)
     expose(implementor, rpc_topic, add_one)
-    subscriber = tryconnect(subscriber_url)
+    subscriber = connect(subscriber_url)
     inject(subscriber, bag)
     reactive(subscriber)
     subscribe(subscriber, rpc_topic, rpc_method)
@@ -64,32 +56,28 @@ function run(request_url, subscriber_url, exposer_url)
     res = rpc(client, rpc_topic, request_arg)
     @test res == 2
 
-    res = direct(client, "test_request_impl", rpc_topic, request_arg)
+    res = direct(client, "request_impl", rpc_topic, request_arg)
     @test res == 2
 
     try
-        res = direct(client, "test_request_impl", "unknow_service", request_arg)
+        res = direct(client, "request_impl", "unknow_service", request_arg)
     catch e
         @test isa(e, Rembus.RpcMethodNotFound)
-        @test e.cid === "test_request"
         @test e.topic === "unknow_service"
     end
-
     try
         res = direct(client, "wrong_target", rpc_topic, request_arg)
     catch e
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_TARGET_NOT_FOUND
-        @test e.cid === "test_request"
         @test e.topic === rpc_topic
     end
 
     try
-        res = rpc(implementor, rpc_topic, raise=true)
+        res = rpc(implementor, rpc_topic)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodLoopback)
-        @test e.cid === implementor.client.id
         @test e.topic === rpc_topic
     end
 
@@ -99,7 +87,6 @@ function run(request_url, subscriber_url, exposer_url)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodException)
-        @test e.cid === client.client.id
         @test e.topic === rpc_topic
     end
 
@@ -109,28 +96,23 @@ function run(request_url, subscriber_url, exposer_url)
         @test 0 == 1
     catch e
         @test isa(e, Rembus.RpcMethodException)
-        @test e.cid === client.client.id
         @test e.topic === rpc_topic
     end
 
     close(implementor)
-    sleep(0.1)
-
     try
-        res = direct(client, "test_request_impl", rpc_topic, request_arg)
+        res = direct(client, "request_impl", rpc_topic, request_arg)
     catch e
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_TARGET_DOWN
-        @test e.cid === "test_request"
         @test e.topic === rpc_topic
     end
 
     try
-        res = rpc(client, rpc_topic, timeout=2)
-        @test 0 == 1
+        res = rpc(client, rpc_topic)
+        @test false
     catch e
         if isa(e, Rembus.RpcMethodUnavailable)
-            @test e.cid === client.client.id
             @test e.topic === rpc_topic
         else
             @warn "unexpected exception: $e"
@@ -140,28 +122,24 @@ function run(request_url, subscriber_url, exposer_url)
 
     @test bag.rpc_method_invoked === true
 
-    implementor = tryconnect(exposer_url)
+    implementor = connect(exposer_url)
     unexpose(implementor, rpc_method)
-
-    for cli in [implementor, client, subscriber]
-        close(cli)
+    for rb in [implementor, client, subscriber]
+        close(rb)
     end
 end
 
-
 function run()
-    Rembus.CONFIG.ws_ping_interval = 0
-    Rembus.CONFIG.zmq_ping_interval = 0
-    #run("zmq://:8002/test_request", "zmq://:8002/test_request_sub", "zmq://:8002/test_request_impl")
-    for exposer_url in ["zmq://:8002/test_request_impl", "test_request_impl"]
-        for subscriber_url in ["zmq://:8002/test_request_sub", "test_request_sub"]
-            for request_url in ["zmq://:8002/test_request", "test_request"]
-                @debug "rpc endpoints: $exposer_url, $subscriber_url, $request_url" _group = :test
+    Rembus.ws_ping_interval!(0)
+    Rembus.zmq_ping_interval!(0)
+    for exposer_url in ["zmq://:8002/request_impl", "request_impl"]
+        for subscriber_url in ["zmq://:8002/request_sub", "request_sub"]
+            for request_url in ["zmq://:8002/request_client", "request_client"]
+                @debug "rpc endpoints: $exposer_url, $subscriber_url, $request_url"
                 run(request_url, subscriber_url, exposer_url)
-                testsummary()
             end
         end
     end
 end
 
-execute(run, "test_request_api")
+execute(run, "request")

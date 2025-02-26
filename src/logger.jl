@@ -1,9 +1,6 @@
 struct RembusLogger <: AbstractLogger
     io::IO
-end
-
-function repl_log()
-    ConsoleLogger(stdout, Info, meta_formatter=repl_metafmt) |> global_logger
+    level::String
 end
 
 function repl_metafmt(level::LogLevel, _module, group, id, file, line)
@@ -14,12 +11,14 @@ function repl_metafmt(level::LogLevel, _module, group, id, file, line)
     return color, prefix, suffix
 end
 
-function logging()
-    if CONFIG.log_destination === "stdout"
-        rlogger = RembusLogger(stdout)
+function logging(level)
+    cfg = getcfg()
+    log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
+    if log_destination === "stdout"
+        rlogger = RembusLogger(stdout, level)
         rlogger |> global_logger
     else
-        rlogger = RembusLogger(open(CONFIG.log_destination, "a+"))
+        rlogger = RembusLogger(open(log_destination, "a+"), level)
         rlogger |> global_logger
     end
 
@@ -39,9 +38,11 @@ function Logging.shouldlog(
 )
     if _module === HTTP.Servers
         level >= Logging.Warn
-    elseif CONFIG.log_level == "error"
+    elseif logger.level == "error"
+        level >= Logging.Error
+    elseif logger.level == "warn"
         level >= Logging.Warn
-    elseif CONFIG.log_level == "debug" && (_module === Rembus || _module === Visor)
+    elseif logger.level == "debug" && (_module === Rembus || _module === Visor)
         level >= Logging.Debug
     else
         level >= Logging.Info

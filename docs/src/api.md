@@ -18,7 +18,7 @@ Rembus API functions:
 - [publish](#publish)
 - [reactive](#reactive)
 - [unreactive](#unreactive)
-- [forever](#forever)
+- [wait](#wait)
 - [inject](#inject)
 - [close](#close)
 - [shutdown](#shutdown)
@@ -123,7 +123,7 @@ connect()
 
 subscribe(rb, mytopic)
 
-forever() # or until Ctrl-C 
+wait() # or until Ctrl-C 
 ```
 
 By default `subscribe` will consume messages published after the component connect
@@ -136,7 +136,7 @@ connect("myname")
 
 subscribe(rb, mytopic, from=LastReceived())
 
-forever() # or until Ctrl-C
+wait() # or until Ctrl-C
 ```
 
 > **NOTE** By design messages are not persisted until a component declares
@@ -192,7 +192,7 @@ reactive(rb)
 
 Reactiveness is a property of a component and is applied to all subscribed topics.
 
-The [`forever`](#forever) function starts the loop that listen for published messages and by default the reactive mode is enabled.
+The [`wait`](#wait) function starts the loop that listen for published messages and by default the reactive mode is enabled.
 
 ## unreactive
 
@@ -202,11 +202,11 @@ Stop receiving published messages.
 unreactive(rb)
 ```
 
-## forever
+## wait
 
 Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods. Wait forever for rpc requests or pub/sub messages.
 
-By default `forever` enable component reactiveness, see [reactive](#reactive).
+By default `wait` enable component reactiveness, see [reactive](#reactive).
 
 ## inject
 
@@ -261,7 +261,7 @@ subscribe(rb, add_metric)
 # rpc(rb, "fetch_metrics")
 expose(rb, fetch_metrics)
 
-forever()
+wait()
 ```
 
 ## close

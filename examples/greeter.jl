@@ -6,4 +6,4 @@ end
 
 @component "greater"
 @expose say_hello
-@forever
+@wait

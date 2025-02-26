@@ -23,7 +23,7 @@ end
 function start_server()
     rb = server()
     expose(rb, my_service)
-    forever(rb)
+    wait(rb)
 end
 
 start_server()
@@ -83,11 +83,11 @@ The `component` object if useful for:
 - serving only authenticated components;
 - storing component session state into `session(component)` dictionary;
 
-`forever` is the final step: the server starts and waits for connection requests
+`wait` is the final step: the server starts and waits for connection requests
 from clients:
 
 ```julia
-Rembus.forever(rb)
+Rembus.wait(rb)
 ```
 
 ### The Client

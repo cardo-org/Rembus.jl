@@ -7,4 +7,4 @@ url = isempty(ARGS) ? string(uuid4()) : ARGS[1]
 rb = component(url)
 subscribe(rb, "a/*/c", consume, reactive=true)
 
-forever(rb)
+wait(rb)

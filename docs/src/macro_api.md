@@ -16,7 +16,7 @@ The following macros comprise the API and enable Julia to be supercharged with t
 - [@publish](#publish)
 - [@reactive](#reactive)
 - [@unreactive](#reactive)
-- [@forever](#forever)
+- [@wait](#wait)
 - [@inject](#inject)
 - [@rpc_timeout](#rpc_timeout)
 - [@shutdown](#shutdown)
@@ -124,7 +124,7 @@ end
 
 @subscribe mytopic
 
-forever() # or until Ctrl-C 
+wait() # or until Ctrl-C 
 ```
 
 By default `@subscribe` will consume messages published after the component connect
@@ -137,7 +137,7 @@ For receiving messages when the component was offline it is mandatory to set a c
 
 @subscribe mytopic before_now
 
-forever() # or until Ctrl-C
+wait() # or until Ctrl-C
 ```
 
 > **NOTE** By design messages are not persisted until a component declares
@@ -179,12 +179,12 @@ Stop receiving published messages.
 @unreactive
 ```
 
-## forever
+## wait
 
 Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods.
 Wait forever for rpc requests or pub/sub messages.
 
-By default `@forever` enable component reactiveness, see [@reactive](#reactive).
+By default `@wait` enable component reactiveness, see [@reactive](#reactive).
 
 ## inject
 
@@ -239,7 +239,7 @@ end
 # @rpc fetch_metrics()
 @expose fetch_metrics
 
-forever()
+wait()
 ```
 
 ## rpc_timeout

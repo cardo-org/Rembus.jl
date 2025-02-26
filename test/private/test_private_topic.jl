@@ -1,5 +1,3 @@
-#using JSON3
-
 include("../utils.jl")
 
 mutable struct TestHolder
@@ -15,8 +13,9 @@ function private_service(bag, rb, n)
     return n + 1
 end
 
-function another_service()
-end
+another_service() = nothing
+
+another_topic() = nothing
 
 function run(authorized_component)
     bag = TestHolder()
@@ -24,13 +23,15 @@ function run(authorized_component)
     priv_topic = "foo"
     priv_service = "private_service"
     another_priv_topic = "bar"
-    myproducer = "myproducer"
-    myconsumer = "myconsumer"
-    myunauth = "myunauth"
+    myproducer = "private_topic_myproducer"
+    myconsumer = "private_topic_myconsumer"
+    myunauth = "private_topic_myunauth"
 
-    rb = tryconnect(authorized_component)
+    rb = connect(authorized_component)
 
-    authorize(rb, myconsumer, priv_topic)
+    #res = fetch(authorize(rb, myconsumer, priv_topic))
+    res = authorize(rb, myconsumer, priv_topic)
+    @test isnothing(res)
 
     private_topic(rb, priv_topic)
     private_topic(rb, another_priv_topic)
@@ -42,11 +43,15 @@ function run(authorized_component)
 
     producer = connect(myproducer)
 
+    cfg = get_private_topics(rb)
+    @test_throws RembusError get_private_topics(producer)
+
     sleep(0.1)
     try
         # authenticating again is considered a protocol error
         # the connection get closed
         Rembus.authenticate(producer)
+        @test false
     catch e
         @info "[$producer] expected error: $e"
     end
@@ -59,7 +64,7 @@ function run(authorized_component)
     try
         private_topic(producer, another_priv_topic)
     catch e
-        @debug "expected error: $e" _group = :test
+        @info "[test_private_topic] expected error: $e"
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
@@ -70,21 +75,25 @@ function run(authorized_component)
         inject(c, bag)
     end
 
+    @info "[test_private_topic] subscribe with no authorization"
     try
         subscribe(unauth_consumer, priv_topic, consume)
         reactive(unauth_consumer)
+        @test false
     catch e
-        @debug "expected error: $e" _group = :test
+        @info "[test_private_topic] expected error: $e"
         @test isa(e, Rembus.RembusError)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
 
     @test_throws RembusError unsubscribe(unauth_consumer, priv_topic)
+
     @test_throws RembusError expose(unauth_consumer, priv_topic, consume)
 
     subscribe(consumer, priv_topic, consume)
     expose(consumer, private_service)
     expose(rb, another_service)
+    subscribe(rb, another_topic)
 
     reactive(consumer)
 
@@ -100,8 +109,22 @@ function run(authorized_component)
 
     # topic not exposed by component
     @test_throws RembusError unexpose(consumer, another_service)
+    @test_throws RembusError unsubscribe(consumer, another_topic)
 
     unexpose(consumer, priv_service)
+
+    for cmd in [
+        Rembus.BROKER_CONFIG_CMD,
+        Rembus.LOAD_CONFIG_CMD,
+        Rembus.SAVE_CONFIG_CMD,
+        Rembus.SAVE_CONFIG_CMD,
+        Rembus.ENABLE_DEBUG_CMD,
+        Rembus.DISABLE_DEBUG_CMD,
+    ]
+        Rembus.admin(rb, Dict(Rembus.COMMAND => cmd))
+    end
+
+    @test_throws RembusError Rembus.admin(rb, Dict(Rembus.COMMAND => "unknown command"))
 
     unauthorize(rb, myproducer, priv_topic)
 
@@ -127,21 +150,36 @@ function run(authorized_component)
         @test e.code === Rembus.STS_GENERIC_ERROR
     end
 
+    @test_throws RembusError Rembus.broker_shutdown(producer)
+
+    for cmd in [
+        Rembus.BROKER_CONFIG_CMD,
+        Rembus.LOAD_CONFIG_CMD,
+        Rembus.SAVE_CONFIG_CMD,
+        Rembus.SAVE_CONFIG_CMD,
+        Rembus.ENABLE_DEBUG_CMD,
+        Rembus.DISABLE_DEBUG_CMD,
+    ]
+        @test_throws RembusError Rembus.admin(
+            producer, Dict(Rembus.COMMAND => cmd)
+        )
+    end
+
     # execute a shutdown
-    @info "shutdown request"
     Rembus.broker_shutdown(rb)
-    sleep(2)
+    Visor.dump()
 
     for c in [rb, producer, consumer, unauth_consumer]
-        close(c)
+        shutdown(c)
+        @info "[$c] SHUTTED DOWN"
     end
+
     @test bag.msg_received === 1
 end
 
-authorized_component = "test_private"
+broker_name = "private_topic"
+authorized_component = "private_topic_component"
 
-setup() = set_admin(authorized_component)
+setup() = set_admin(broker_name, authorized_component)
 
-execute(() -> run(authorized_component), "test_private_topic", setup=setup)
-
-rm(Rembus.broker_dir(BROKER_NAME), recursive=true, force=true)
+execute(() -> run(authorized_component), broker_name, setup=setup)

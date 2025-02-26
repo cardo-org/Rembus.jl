@@ -1,10 +1,14 @@
 include("../utils.jl")
 
+broker_name = "register_authenticated"
 pin = "11223344"
-node = "authenticated_node"
 
 function init(pin)
-    broker_dir = Rembus.broker_dir(BROKER_NAME)
+    broker_dir = Rembus.broker_dir(broker_name)
+    if !isdir(broker_dir)
+        mkpath(broker_dir)
+    end
+
     df = DataFrame(pin=String[pin])
     if !isdir(broker_dir)
         mkdir(broker_dir)
@@ -13,14 +17,48 @@ function init(pin)
 end
 
 function run()
-    register(node, pin)
+    for node in [
+        "register_authenticated_node",
+        "zmq://:8002/register_authenticated_zmqnode"
+    ]
+        reg(node)
+    end
 end
 
-try
-    execute(run, "test_register_authenticated", mode="authenticated", setup=() -> init(pin))
-    @test true
-catch e
-    @error "[test_register_authenticated]: $e"
-    @test false
-finally
+function reg(url)
+    node = Rembus.RbURL(url)
+    private_key = joinpath(Rembus.rembus_dir(), tid(node), ".secret")
+    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(tid(node)).rsa.pem")
+
+    rm(private_key, force=true)
+    rm(public_key, force=true)
+
+    register(url, pin)
+
+    @test isfile(private_key)
+    @test isfile(public_key)
+
+    try
+        register(url, pin)
+        @test false
+    catch e
+        @info "expected error: $e"
+        @test true
+    end
+    rb = connect(node)
+
+    result = rpc(rb, "version")
+    @info "[test_register_authenticated] response: $result"
+
+    unregister(rb)
+
 end
+
+execute(
+    run,
+    broker_name,
+    ws=8000,
+    zmq=8002,
+    authenticated=true,
+    setup=() -> init(pin)
+)
