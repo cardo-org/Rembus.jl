@@ -18,8 +18,7 @@ The following macros comprise the API and enable Julia to be supercharged with t
 - [@unreactive](#reactive)
 - [@wait](#wait)
 - [@inject](#inject)
-- [@rpc_timeout](#rpc_timeout)
-- [@shutdown](#shutdown)
+- [@wait](#wait)
 
 ## component
 
@@ -137,7 +136,7 @@ For receiving messages when the component was offline it is mandatory to set a c
 
 @subscribe mytopic before_now
 
-wait() # or until Ctrl-C
+@wait # or until Ctrl-C
 ```
 
 > **NOTE** By design messages are not persisted until a component declares
@@ -239,25 +238,14 @@ end
 # @rpc fetch_metrics()
 @expose fetch_metrics
 
-wait()
+@wait
 ```
 
-## rpc_timeout
-
-Set the maximum wait time for [@rpc](#rpc) requests.
-
-```julia
-@rpc_timeout value_in_seconds
-```
-
-By default the timeout is set to 5 seconds and may be changed using `REMBUS_TIMEOUT` 
-environment variable.
-
-## shutdown
+## wait
 
 Close the network connection and shutdown the supervised process associated with the
 component.   
 
 ```julia
-@shutdown
+@wait
 ```

@@ -8,7 +8,11 @@
 
 ### Changed
 
-- Renamed macro @wait to @wait
+- Renamed function/macro forever(rb)/@forever to wait(rb)/@wait
+
+### Removed
+
+- macro `@rpc_timeout` is superseded by `Rembus.request_timeout!(newval)`
 
 ## 0.5.0 [2024-11-25]
 

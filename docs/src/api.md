@@ -119,11 +119,11 @@ function mytopic(x, y)
     @info "consuming x=$x and y=$y"
 end
 
-connect()
+rb = connect()
 
 subscribe(rb, mytopic)
 
-wait() # or until Ctrl-C 
+wait(rb) # or until Ctrl-C 
 ```
 
 By default `subscribe` will consume messages published after the component connect
@@ -132,11 +132,11 @@ to the broker, messages sent previously are lost.
 For receiving messages when the component was offline it is mandatory to set a component name and to declare interest in old messages with the `from` argument set to `LastReceived()`:
 
 ```julia
-connect("myname")
+rb = connect("myname")
 
 subscribe(rb, mytopic, from=LastReceived())
 
-wait() # or until Ctrl-C
+wait(rb) # or until Ctrl-C
 ```
 
 > **NOTE** By design messages are not persisted until a component declares
@@ -192,7 +192,7 @@ reactive(rb)
 
 Reactiveness is a property of a component and is applied to all subscribed topics.
 
-The [`wait`](#wait) function starts the loop that listen for published messages and by default the reactive mode is enabled.
+It is worth noting that the [`wait`](#wait) function enables the reactive mode.
 
 ## unreactive
 
@@ -261,26 +261,23 @@ subscribe(rb, add_metric)
 # rpc(rb, "fetch_metrics")
 expose(rb, fetch_metrics)
 
-wait()
+wait(rb)
 ```
 
 ## close
 
-Close the network connection.
+Close the network connections associated with the `rb` handle and terminate the supervised processes related to the handle.
 
 ```julia
 close(rb)
 ```
 
-> NOTE: `close` applies to connections setup by [`connect`](#connect) api.
-
 ## shutdown
 
-Close the network connection and shutdown the supervised process associated with the
-component.
+Terminate all the active supervised processes:
 
 ```julia
-shutdown(rb)
+shutdown()
 ```
 
-> NOTE: `shutdown` applies to connections setup by [`component`](#component) api.
+The method `shutdown(rb)` is equivalent to `close(rb)`.

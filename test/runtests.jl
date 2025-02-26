@@ -15,6 +15,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "policies_cases" begin
             include("unit/test_policies_cases.jl")
         end
+        @time @safetestset "cbor" begin
+            include("unit/test_cbor.jl")
+        end
     end
     if GROUP == "all" || GROUP == "twin"
         @time @safetestset "socket_send" begin
