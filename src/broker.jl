@@ -1446,6 +1446,7 @@ function command_line(default_name="broker")
     return parse_args(s)
 end
 
+# TODO: rename broker_reset
 function caronte_reset(broker_name="broker")
     rm(messages_dir(broker_name), force=true, recursive=true)
     bdir = broker_dir(broker_name)

@@ -78,9 +78,9 @@ export SmallInteger
 export QOS0, QOS1, QOS2
 export LastReceived, Now
 
-# The permitted mode of connection.
+# Available modes of connection.
 # if mode is authenticated then anonymous modes are not permitted.
-# if mode is anonymous then authenticated mode is available.
+# if mode is anonymous all connection modes are available.
 @enum ConnectionMode anonymous authenticated
 
 @enum NodeType socket zdealer zrouter loopback
