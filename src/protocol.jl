@@ -195,10 +195,6 @@ function id()
     UInt128(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
 end
 
-isresponse(msg::RembusMsg) = false
-isresponse(msg::ResMsg) = true
-isresponse(msg::AckMsg) = true
-
 function response_timeout(twin, msg::RembusMsg)
     if haskey(twin.socket.direct, msg.id)
         condition = twin.socket.direct[msg.id].future

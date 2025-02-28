@@ -17,6 +17,10 @@ function run()
         end
     end
     @test length(metrics) == 1
+
+    # Do no throw because the already register error is catched.
+    Rembus.RouterCollector(repl.router)
+
     close(rb)
 end
 

@@ -609,7 +609,7 @@ function serve_zmq(pd, router, port)
         @async zmq_broker_read_task(router)
         for msg in pd.inbox
             if isshutdown(msg)
-                return
+                break
             end
         end
     finally
@@ -767,11 +767,6 @@ function start_broker(;
     plugin=nothing,
     context=missing
 )
-    p = from("$name.broker")
-    if p !== nothing
-        return p.args[1]
-    end
-
     router = Router{Twin}(name, plugin, context)
     if authenticated
         router.mode = Rembus.authenticated

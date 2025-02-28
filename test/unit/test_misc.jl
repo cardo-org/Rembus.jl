@@ -16,7 +16,7 @@ using TestItems
     @test msg2.topic === "test_topic"
     @test msg2.twin === twin2
 
-    @test !isopen(twin)
+    @test !isopen(twin.socket)
     @test wait(twin) === nothing
     @test !Rembus.isconnectionerror(twin.socket, ErrorException("something nasty"))
 end
@@ -150,4 +150,9 @@ end
     # reset log to default
     set_preferences!(Rembus, "log_destination" => "stdout", force=true)
     Rembus.logging("info")
+end
+
+@testitem "node" begin
+    node = Rembus.Node("ws://myhost:8765/mycid")
+    @test node.protocol === :ws
 end
