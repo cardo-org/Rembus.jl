@@ -337,7 +337,7 @@ function component(
     secure=false
 )
     if ismissing(name)
-        nodeurl = @load_preference("cid")
+        nodeurl = cid()
         name = RbURL(nodeurl).id
     end
 
@@ -349,7 +349,7 @@ function component(
     return bind(router)
 end
 
-component() = component(@load_preference("cid"))
+component() = component(cid())
 
 function component(
     url::AbstractString;
@@ -391,7 +391,11 @@ function component(url::RbURL, router::Router)
     try
         !do_connect(twin)
     catch e
-        @error "[$twin] connect: $e"
+        if isa(e, HTTP.Exceptions.ConnectError)
+            @error "[$twin]: $(e.error.ex)"
+        else
+            @error "[$twin] connect: $e"
+        end
         down_handler(twin)
     finally
     end

@@ -417,7 +417,7 @@ mutable struct Settings
 
         overwrite_connection = get(cfg, "overwrite_connection", true)
         stacktrace = get(cfg, "stacktrace", false)
-        cid = get(cfg, "cid", "")
+        cid = get(cfg, "cid", get(ENV, "REMBUS_CID", ""))
 
         connection_mode = string_to_enum(get(cfg, "connection_mode", "anonymous"))
         connection_retry_period = get(cfg, "connection_retry_period", 2.0)

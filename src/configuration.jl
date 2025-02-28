@@ -11,6 +11,8 @@ function cid!(url)
     set_preferences!(Rembus, "cid" => url, force=true)
 end
 
+cid() = get(getcfg(), "cid", get(ENV, "REMBUS_CID", ""))
+
 function default_rembus_dir()
     if Sys.iswindows()
         home = get(ENV, "USERPROFILE", ".")
@@ -29,9 +31,9 @@ function rembus_dir!(new_dir::AbstractString)
     set_preferences!(Rembus, "rembus_dir" => new_dir, force=true)
 end
 
-function init_log(level="info")
+function init_log(level=nothing)
     if !haskey(ENV, "JULIA_DEBUG")
-        logging(level)
+        isnothing(level) ? logging("warn") : logging(level)
     end
 end
 

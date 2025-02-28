@@ -95,15 +95,17 @@ include("api.jl")
 include("http.jl")
 
 function __init__()
+    init_log(load_preference(Rembus, "log_level"))
     Visor.setroot(intensity=3)
     atexit(shutdown)
 end
 
 @setup_workload begin
-    rembus_dir!("/tmp/rembus_compile")
-    Rembus.zmq_ping_interval!(0)
-    Rembus.ws_ping_interval!(0)
-    Rembus.request_timeout!(20)
+    warn!()
+    ENV["REMBUS_DIR"] = "/tmp/rembus_compile"
+    ENV["REMBUS_TIMEOUT"] = "20"
+    ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
+    ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     @compile_workload begin
         rb = start_broker(
             authenticated=false,
@@ -117,7 +119,6 @@ end
         include("precompile.jl")
         shutdown()
     end
-    rembus_dir!(default_rembus_dir())
 end
 
 end

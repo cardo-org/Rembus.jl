@@ -135,7 +135,6 @@ end
     @test isfile(logfile)
 
     # reset log to default
-    rm(logfile)
     set_preferences!(Rembus, "log_destination" => "stdout", force=true)
     Rembus.logging("info")
 end

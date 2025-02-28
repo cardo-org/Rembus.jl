@@ -65,7 +65,6 @@ end
 foo(df) = df
 
 function pool()
-    Rembus.cid!("policies_component")
     df = DataFrame(:a => 1:3)
     server = connect("server")
     expose(server, foo)
