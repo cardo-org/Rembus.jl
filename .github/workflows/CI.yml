@@ -34,6 +34,10 @@ jobs:
           - x64
     steps:
       - uses: actions/checkout@v4
+      - name: Install ssh-keygen on Windows
+        if: runner.os == 'Windows'
+        run: choco install openssh
+        shell: cmd
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
@@ -45,10 +49,6 @@ jobs:
       - uses: codecov/codecov-action@v5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      - name: Install ssh-keygen on Windows
-        if: runner.os == 'Windows'
-        run: choco install openssh
-        shell: cmd
 
   push_to_registry:
     name: Push Docker image to Docker Hub
