@@ -62,8 +62,8 @@ end
 end
 
 @testitem "get_router" begin
-    r1 = Rembus.get_router(8000, 8001, 8002, 9000, false, "myrouter")
-    r2 = Rembus.get_router(8000, 8001, 8002, 9000, false, "myrouter")
+    r1 = Rembus.get_router("myrouter", 8000, 8001, 8002, 9000, false)
+    r2 = Rembus.get_router("myrouter", 8000, 8001, 8002, 9000, false)
     @test r1 === r2
 
     Rembus.uptime(r1)
@@ -118,6 +118,19 @@ end
     @test isnothing(Rembus.set_policy(router, :round_robin))
     @test isnothing(Rembus.set_policy(router, :less_busy))
     @test_throws ErrorException Rembus.set_policy(router, :invalid_policy)
+end
+
+@testitem "topic_auth_storage" begin
+    router = Rembus.get_router("myrouter", 8000)
+    cfg = Dict("mytopic" => Dict("mycid" => true))
+    router.topic_auth = cfg
+    Rembus.save_topic_auth_table(router)
+
+    router.topic_auth = Dict()
+    Rembus.load_topic_auth_table(router)
+    @test router.topic_auth == cfg
+
+    shutdown()
 end
 
 @testitem "log_to_file" begin

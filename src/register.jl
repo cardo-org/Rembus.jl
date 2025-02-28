@@ -185,7 +185,7 @@ function register_node(router, msg)
         if !(msg.cid in router.component_owner.component)
             push!(router.component_owner, [tenant, msg.cid])
         end
-        save_token_app(router, router.component_owner)
+        save_tenant_component(router, router.component_owner)
     end
     return ResMsg(msg.id, sts, reason)
 end
@@ -206,7 +206,7 @@ function unregister_node(router, twin, msg)
     else
         remove_pubkey(router, msg.cid)
         deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
-        save_token_app(router, router.component_owner)
+        save_tenant_component(router, router.component_owner)
     end
     response = ResMsg(msg.id, sts, reason)
     put!(twin.process.inbox, response)

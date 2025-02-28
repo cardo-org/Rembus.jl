@@ -341,7 +341,7 @@ function component(
         name = RbURL(nodeurl).id
     end
 
-    router = get_router(ws, tcp, zmq, nothing, false, name, secure)
+    router = get_router(name, ws, tcp, zmq, nothing, false, secure)
     set_policy(router, policy)
     for url in urls
         component(url, router)
@@ -372,7 +372,7 @@ function component(
     if ismissing(name)
         name = tid(url)
     end
-    router = start_broker(name=name, ws=ws, tcp=tcp, zmq=zmq)
+    router = get_router(name, ws, tcp, zmq, nothing, false)
     return component(url, router)
 end
 
@@ -408,7 +408,7 @@ function connect(url::RbURL; name=missing)
         name = url.id
     end
 
-    router = start_broker(name=name)
+    router = get_router(name)
     twin = bind(router, url)
     try
         !do_connect(twin)

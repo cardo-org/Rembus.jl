@@ -671,12 +671,12 @@ const TRANSPORT_TCP::Int = 9001
 const TRANSPORT_ZMQ::Int = 9002
 
 function get_router(
-    ws,
-    tcp,
-    zmq,
-    prometheus,
-    authenticated,
     name,
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    prometheus=nothing,
+    authenticated=false,
     secure=false,
     tsk=broker_task
 )
@@ -712,7 +712,7 @@ function broker(;
     secure=false,
     authenticated=false
 )
-    router = get_router(ws, tcp, zmq, prometheus, authenticated, name, secure)
+    router = get_router(name, ws, tcp, zmq, prometheus, authenticated, secure)
     # Return a floating twin.
     return bind(router)
 end
@@ -726,7 +726,7 @@ function server(;
     authenticated=false,
     secure=false
 )
-    router = get_router(ws, tcp, zmq, prometheus, authenticated, name, secure, server_task)
+    router = get_router(name, ws, tcp, zmq, prometheus, authenticated, secure, server_task)
     # Return a floating twin.
     return bind(router)
 end

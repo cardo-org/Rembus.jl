@@ -23,32 +23,6 @@ function load_tenants(router)
 end
 
 #=
-    load_servers(router)
-
-Load from disk the servers to connect.
-=#
-function load_servers(router)
-    fn = joinpath(broker_dir(router), "servers.json")
-    if isfile(fn)
-        content = read(fn, String)
-        components = JSON3.read(content, Set{String})
-        for cmp in components
-            add_node(router, cmp)
-        end
-    else
-        router.servers = Set()
-    end
-
-end
-
-function save_servers(router)
-    fn = joinpath(broker_dir(router), "servers.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(router.servers))
-    end
-end
-
-#=
     save_tenants(router, tenants::AbstractString)
 
 Save the tenants table.
@@ -79,7 +53,7 @@ function load_tenant_component(router)
 end
 
 #=
-    save_tenant_component(df)
+    save_tenant_component(router, df)
 
 Save the tenant_component table.
 =#
@@ -106,18 +80,6 @@ function load_token_app(router)
         end
     end
     return DataFrame(tenant=String[], component=String[])
-end
-
-#=
-    save_token_app(df)
-
-Save the component_owner table.
-=#
-function save_token_app(router, df)
-    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    open(fn, "w") do f
-        write(f, arraytable(df))
-    end
 end
 
 broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
@@ -387,7 +349,6 @@ function save_configuration(router::Router)
         save_topic_auth_table(router)
         save_admins(router)
         save_twins(router)
-        save_servers(router)
         save_marks(router)
     end
 end
@@ -401,7 +362,6 @@ function load_configuration(router)
         load_admins(router)
         router.owners = load_tenants(router)
         router.component_owner = load_tenant_component(router)
-        load_servers(router)
         load_marks(router)
     end
 

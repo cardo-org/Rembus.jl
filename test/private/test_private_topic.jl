@@ -171,7 +171,6 @@ function run(authorized_component)
 
     for c in [rb, producer, consumer, unauth_consumer]
         shutdown(c)
-        @info "[$c] SHUTTED DOWN"
     end
 
     @test bag.msg_received === 1
