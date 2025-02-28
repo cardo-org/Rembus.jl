@@ -7,6 +7,44 @@ function copy_from(fn, msg)
     return result
 end
 
+function spliturl(url::String)
+    baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
+    baseuri = URI(baseurl)
+    uri = URI(url)
+    props = queryparams(uri)
+
+    host = uri.host
+    if host == ""
+        host = baseuri.host
+    end
+
+    portstr = uri.port
+    if portstr == ""
+        portstr = baseuri.port
+    end
+
+    port = parse(UInt16, portstr)
+
+    proto = uri.scheme
+    if proto == ""
+        name = uri.path
+        protocol = Symbol(baseuri.scheme)
+    elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
+        name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
+        protocol = Symbol(proto)
+    else
+        error("wrong url $url: unknown protocol $proto")
+    end
+    if isempty(name)
+        name = string(uuid4())
+        hasname = false
+    else
+        hasname = true
+    end
+    return (name, hasname, protocol, host, port, props)
+end
+
+
 #=
 The from keyword of the subscribe methods may assume the values:
   * Now() subscribes for messages received from now on;

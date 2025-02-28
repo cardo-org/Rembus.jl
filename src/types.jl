@@ -112,11 +112,7 @@ struct RpcMethodException <: RembusException
     reason::String
 end
 
-@enum NodeStatus up down
-
-# REED: Router Eligible End Device
-# ED: End Device
-@enum DeviceType ed reed router
+@enum NodeStatus up down unknown
 
 # Available modes of connection.
 # if mode is authenticated then anonymous modes are not permitted.
@@ -148,40 +144,8 @@ mutable struct RbURL
         end
     end
     function RbURL(url::String)
-        baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
-        baseuri = URI(baseurl)
-        uri = URI(url)
-        props = queryparams(uri)
-
-        host = uri.host
-        if host == ""
-            host = baseuri.host
-        end
-
-        portstr = uri.port
-        if portstr == ""
-            portstr = baseuri.port
-        end
-
-        port = parse(UInt16, portstr)
-
-        proto = uri.scheme
-        if proto == ""
-            name = uri.path
-            protocol = Symbol(baseuri.scheme)
-        elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
-            name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
-            protocol = Symbol(proto)
-        else
-            error("wrong url $url: unknown protocol $proto")
-        end
-        if isempty(name)
-            name = string(uuid4())
-            hasname = false
-        else
-            hasname = true
-        end
-        return new(name, hasname, protocol, host, port, props)
+        (cid, hasname, protocol, host, port, props) = spliturl(url)
+        new(cid, hasname, protocol, host, port, props)
     end
 end
 
@@ -222,6 +186,11 @@ struct Node
     host::String  # hostname or ip address
     port::UInt16  # listening port
     status::NodeStatus
+    Node(cid, proto, host, port, sts) = new(cid, proto, host, port, sts)
+    function Node(url)
+        (cid, _, protocol, host, port, _) = spliturl(url)
+        new(cid, protocol, host, port, unknown)
+    end
 end
 
 function nodes(cid::String, source_address::String, portmap::Dict)
@@ -463,9 +432,11 @@ mutable struct Settings
     end
 end
 
+abstract type AbstractRouter end
+
 abstract type AbstractTwin end
 
-mutable struct Router{T<:AbstractTwin}
+mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id::String
     eid::UInt64 # ephemeral unique id
     settings::Settings
@@ -475,7 +446,7 @@ mutable struct Router{T<:AbstractTwin}
     metrics::Union{Nothing,RembusMetrics}
     msg_df::DataFrame
     mcounter::UInt64
-    network::Set{Node}
+    network::Vector{Node}
     start_ts::Float64
     servers::Set{String}
     listeners::Dict{Symbol,Listener} # protocol => listener status
@@ -508,7 +479,7 @@ mutable struct Router{T<:AbstractTwin}
         nothing,
         msg_dataframe(),
         0,
-        Set(),
+        [],
         NaN, # start_ts
         Set(),
         Dict(),
@@ -534,7 +505,7 @@ mutable struct Twin <: AbstractTwin
     reactive::Bool
     egress::Union{Nothing,Function}
     ingress::Union{Nothing,Function}
-    router::Router
+    router::AbstractRouter
     socket::AbstractSocket
     mark::UInt64
     msg_from::Dict{String,Float64} # subtract from now and consider minimum ts of unsent msg

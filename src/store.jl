@@ -101,11 +101,11 @@ function load_token_app(router)
         json_data = open(fn, "r") do f
             JSON3.read(f)
         end
-
-        return DataFrame(json_data)
-    else
-        return DataFrame(tenant=String[], component=String[])
+        if !isempty(json_data)
+            return DataFrame(json_data)
+        end
     end
+    return DataFrame(tenant=String[], component=String[])
 end
 
 #=

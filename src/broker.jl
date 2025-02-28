@@ -402,7 +402,6 @@ function router_task(self, router, ready, implementor_rule)
 
     try
         init(router)
-        #@async leader_task(router)
         put!(ready, true)
         for msg in self.inbox
             @debug "[broker] recv: $msg"

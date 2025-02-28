@@ -101,17 +101,23 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "security"
-        #        @time @safetestset "custom_login" begin
-        #            include("security/test_custom_login.jl")
-        #        end
         @time @safetestset "challenge" begin
             include("security/test_challenge.jl")
         end
         @time @safetestset "authenticated" begin
             include("security/test_authenticated.jl")
         end
+        @time @safetestset "register" begin
+            include("security/test_register.jl")
+        end
         @time @safetestset "register_authenticated" begin
             include("security/test_register_authenticated.jl")
+        end
+        @time @safetestset "register_multiple_users" begin
+            include("security/test_register_multiple_users.jl")
+        end
+        @time @safetestset "register_multitenancy" begin
+            include("security/test_register_multitenancy.jl")
         end
     end
     if GROUP == "all" || GROUP == "tcp"

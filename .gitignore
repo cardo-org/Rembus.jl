@@ -3,6 +3,7 @@
 lcov.info
 *.jl.mem
 *.sav
+*.old
 *.fdb_latexmk
 *.gz
 /docs/Manifest.toml

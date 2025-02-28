@@ -16,3 +16,6 @@ coverage:
 
 ignore:
   - "src/precompile.jl"
+  - "src/cbor.jl"
+  - "src/encode.jl"
+  - "src/decode.jl"

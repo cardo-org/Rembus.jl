@@ -16,7 +16,7 @@ function rsa_private_key(cid::AbstractString)
 end
 
 function ecdsa_private_key(cid::AbstractString)
-    file = "$(pkfile(cid)).tmp"
+    file = "$(pkfile(cid, create_dir=true)).tmp"
     cmd = `ssh-keygen -f $file -t ecdsa -m PEM -b 256 -N ''`
     Base.run(cmd)
 
@@ -74,7 +74,7 @@ function register(
         if isa(response, Exception)
             throw(response)
         elseif (response.status != STS_SUCCESS)
-            rembuserror(code=response.status, reason=response.data)
+            rembuserror(code=response.status, reason=response_data(response))
         end
         # finally save the key
         mv("$(kfile).tmp", kfile)
@@ -171,27 +171,23 @@ function register_node(router, msg)
         tenant = msg.tenant
     end
 
-    try
-        token = get_token(router, tenant, msg.id)
-        if token === nothing
-            sts = STS_GENERIC_ERROR
-            reason = "wrong tenant/pin"
-        elseif isregistered(router, msg.cid)
-            sts = STS_NAME_ALREADY_TAKEN
-            reason = "name $(msg.cid) not available for registration"
-        else
-            kdir = keys_dir(router)
-            mkpath(kdir)
-            save_pubkey(router, msg.cid, msg.pubkey, msg.type)
-            if !(msg.cid in router.component_owner.component)
-                push!(router.component_owner, [tenant, msg.cid])
-            end
-            save_token_app(router, router.component_owner)
+    token = get_token(router, tenant, msg.id)
+    if token === nothing
+        sts = STS_GENERIC_ERROR
+        reason = "wrong tenant/pin"
+    elseif isregistered(router, msg.cid)
+        sts = STS_NAME_ALREADY_TAKEN
+        reason = "name $(msg.cid) not available for registration"
+    else
+        kdir = keys_dir(router)
+        mkpath(kdir)
+        save_pubkey(router, msg.cid, msg.pubkey, msg.type)
+        if !(msg.cid in router.component_owner.component)
+            push!(router.component_owner, [tenant, msg.cid])
         end
-        return ResMsg(msg.id, sts, reason)
-    catch e
-        @error "register: $e"
+        save_token_app(router, router.component_owner)
     end
+    return ResMsg(msg.id, sts, reason)
 end
 
 #=
