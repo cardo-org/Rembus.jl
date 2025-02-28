@@ -6,7 +6,7 @@ using Logging
 using Rembus
 using Test
 
-Rembus.rembus_dir!("/tmp/rembus")
+Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
 Rembus.request_timeout!(20)
 
 # default ca certificate name

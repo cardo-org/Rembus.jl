@@ -38,7 +38,7 @@ end
 
     comp = "component1"
     bro = "test_router"
-    Rembus.rembus_dir!("/tmp/rembus")
+    Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
     dir = joinpath(Rembus.rembus_dir(), bro, comp)
     @info "creating dir $dir"
     mkpath(dir)
