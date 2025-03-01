@@ -35,7 +35,7 @@ testcase(false)
 if Base.Sys.iswindows()
     @info "Windows platform detected: skipping test_https"
 else
-    test_keystore = "/tmp/keystore"
+    test_keystore = joinpath(tempdir(), "keystore")
     script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
     ENV["REMBUS_KEYSTORE"] = test_keystore
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)

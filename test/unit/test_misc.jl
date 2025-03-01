@@ -135,7 +135,7 @@ end
 
 @testitem "log_to_file" begin
     using Preferences
-    logfile = "/tmp/test.log"
+    logfile = joinpath(tempdir(), "test.log")
     set_preferences!(Rembus, "log_destination" => logfile, force=true)
 
     # init log
