@@ -103,7 +103,7 @@ function unreactive(twin::Twin)
     return send_msg(twin, msg) |> fetch
 end
 
-function publish(twin::Twin, topic::AbstractString, data=[]; qos=QOS0)
+function publish(twin::Twin, topic::AbstractString, data...; qos=QOS0)
     isopen(twin) || error("connection down")
     msg = PubSubMsg(twin, topic, data, qos)
     return publish_msg(twin, msg)
@@ -112,7 +112,7 @@ end
 function rpc(
     twin::Twin,
     topic::AbstractString,
-    data=[]
+    data...
 )
     isopen(twin) || error("connection down")
     return fetch(fpc(twin, topic, data))
@@ -122,7 +122,7 @@ function direct(
     twin::Twin,
     target::AbstractString,
     topic::AbstractString,
-    data=[]
+    data...
 )
     isopen(twin) || error("connection down")
     return fetch(fdc(twin, target, topic, data))
@@ -331,12 +331,12 @@ macro publish(topic, qos::Symbol=:QOS0)
 end
 
 function publish_expr(topic, qos)
-    ext = :(publish(component(), t, [], qos=q))
+    ext = :(publish(Rembus.Rembus.singleton(), t))
     fn = string(topic.args[1])
     ext.args[3] = fn
     args = topic.args[2:end]
-    ext.args[4].args = args
-    ext.args[5].args[2] = qos
+    append!(ext.args, args)
+    push!(ext.args, Expr(:kw, :qos, qos))
     return ext
 end
 
@@ -388,11 +388,11 @@ macro rpc(topic)
 end
 
 function rpc_expr(topic)
-    ext = :(rpc(component(), t, []))
+    ext = :(rpc(Rembus.singleton(), t))
     fn = string(topic.args[1])
     ext.args[3] = fn
     args = topic.args[2:end]
-    ext.args[4].args = args
+    append!(ext.args, args)
     return ext
 end
 
@@ -400,13 +400,13 @@ fnname(fn::Expr) = fn.args[1].args[1]
 fnname(fn::Symbol) = fn
 
 function expose_expr(fn)
-    ext = :(expose(component(), t))
+    ext = :(expose(Rembus.singleton(), t))
     ext.args[3] = fnname(fn)
     return ext
 end
 
 function subscribe_expr(fn, from)
-    ext = :(subscribe(component(), t, from))
+    ext = :(subscribe(Rembus.singleton(), t, from))
     ext.args[3] = fnname(fn)
     ext.args[4] = from.args[2]
     return ext
@@ -480,7 +480,7 @@ end
 The methods of `fn` function is no more available to rpc clients.
 """
 macro unexpose(fn)
-    ext = :(unexpose(component(), t))
+    ext = :(unexpose(Rembus.singleton(), t))
     ext.args[3] = fn
     quote
         $(esc(ext))
@@ -547,7 +547,7 @@ end
 `mytopic`'s methods stop to handle messages published to topic `mytopic`.
 """
 macro unsubscribe(fn)
-    ext = :(unsubscribe(component(), t))
+    ext = :(unsubscribe(Rembus.singleton(), t))
     ext.args[3] = fn
     quote
         $(esc(ext))
@@ -561,7 +561,7 @@ end
 The subscribed methods start to handle published messages.
 """
 macro reactive(from::Expr=:(from = Rembus.LastReceived()))
-    ext = :(reactive(component(), from))
+    ext = :(reactive(Rembus.singleton(), from))
     ext.args[3] = from.args[2]
     quote
         $(esc(ext))
@@ -575,7 +575,7 @@ end
 The subscribed methods stop to handle published messages.
 """
 macro unreactive()
-    ext = :(unreactive(component()))
+    ext = :(unreactive(Rembus.singleton()))
     quote
         $(esc(ext))
         nothing
@@ -613,7 +613,7 @@ Using `@inject` to set a `container` object means that if some component
 
 """
 macro inject(ctx)
-    ext = :(inject(component(), ctx))
+    ext = :(inject(Rembus.singleton(), ctx))
     ext.args[3] = ctx
     quote
         $(esc(ext))

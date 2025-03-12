@@ -33,16 +33,13 @@ function run()
         srv = start_server()
         sleep(2)
         rb = connect()
-        result = rpc(rb, "rpc_service", [1, 2])
+        result = rpc(rb, "rpc_service", 1, 2)
         @test result == 3
         result = rpc(rb, "rpc_service", 1)
         @test result == 1
 
         inject(srv)
         result = rpc(rb, "rpc_service", 1)
-        @test result == 1
-
-        result = rpc(rb, "rpc_service", [1])
         @test result == 1
 
         shutdown(rb)

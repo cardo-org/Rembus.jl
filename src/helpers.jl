@@ -272,8 +272,9 @@ end
 Return the subscribed pubsub topics of the twin
 =#
 function twin_topics(twin::Twin)
+    router = latest_downstream(twin.router)
     topics = []
-    for (k, v) in twin.router.topic_interests
+    for (k, v) in router.topic_interests
         if twin in v
             push!(topics, k)
         end
@@ -294,7 +295,8 @@ end
 
 function from_memory_messages(twin::Twin)
     #@debug "[$twin] in-memory messages df:\n$(twin.router.msg_df)"
-    send_messages(twin, twin.router.msg_df)
+    router = latest_downstream(twin.router)
+    send_messages(twin, router.msg_df)
 end
 
 file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)

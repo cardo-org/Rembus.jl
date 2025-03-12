@@ -49,14 +49,16 @@ end
         rm(fn)
     end
 
-    twin = Rembus.Twin(Rembus.RbURL(comp), router)
-
+    url = Rembus.RbURL(comp)
+    twin = Rembus.Twin(url, router)
     msg = Rembus.PubSubMsg(twin, "topic", "data", QOS2)
+    twin.ackdf = Rembus.load_pubsub_received(router, url)
     Rembus.add_pubsub_id(twin, msg)
     Rembus.detach(twin)
 
     # reload the acks file
-    twin2 = Rembus.Twin(Rembus.RbURL(comp), router)
+    twin2 = Rembus.Twin(url, router)
+    twin2.ackdf = Rembus.load_pubsub_received(router, url)
     @test nrow(twin2.ackdf) == 1
     @test twin.ackdf[1, :] == twin2.ackdf[1, :]
 end

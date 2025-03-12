@@ -2,13 +2,16 @@ set_twin(router, id, twin) = router.id_twin[id] = twin
 
 function start_twin(twin::Twin)
     router = twin.router
+    while !isnothing(router.downstream)
+        router = router.downstream
+    end
+
     id = tid(twin)
     spec = process(id, twin_task, args=(twin,))
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
-    ##router.id_twin[id] = twin
-    set_twin(router, id, twin)
 
+    router.id_twin[id] = twin
     #router.twin_initialize(router.shared, twin)
     return twin
 end
@@ -352,6 +355,14 @@ function component(
         component(url, router)
     end
     return bind(router)
+end
+
+function singleton()
+    if isempty(cid())
+        cid!(string(uuid4()))
+    end
+
+    return component()
 end
 
 component() = component(cid())
@@ -765,9 +776,9 @@ router_isauthenticated(router) = router.mode === authenticated
 #=
 Check if twin has the privilege to execute a command.
 =#
-function command_permitted(twin)
+function command_permitted(router, twin)
     res = true
-    if router_isauthenticated(twin.router)
+    if router_isauthenticated(router)
         res = isauthenticated(twin)
     end
 
@@ -781,7 +792,7 @@ end
 
 function pubsub_msg(router, msg)
     twin = msg.twin
-    if !command_permitted(twin) || !isauthorized(router, twin, msg.topic)
+    if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
         return false
     else
@@ -839,7 +850,7 @@ end
 function admin_msg(router, msg)
     twin = msg.twin
 
-    if !command_permitted(twin)
+    if !command_permitted(router, twin)
         @debug "[$router] command $msg not permitted to [$twin]"
         return false
     end
@@ -865,7 +876,7 @@ end
 
 function rpc_request(router, msg, implementor_rule)
     twin = msg.twin
-    if !command_permitted(twin) || !isauthorized(router, twin, msg.topic)
+    if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
         put!(twin.process.inbox, m)
     elseif msg.target !== nothing

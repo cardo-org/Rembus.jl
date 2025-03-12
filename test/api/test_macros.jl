@@ -1,5 +1,7 @@
 include("../utils.jl")
 
+Rembus.info!()
+
 mytopic(ctx, rb, k, v) = ctx[k] = v
 
 myservice(ctx, rb, x, y) = x + y
@@ -29,13 +31,13 @@ function run()
 
     @reactive
 
-    publish(rb, "mytopic", [key, value])
-    publish(rb, "zoo", (1, 2, 3))
+    publish(rb, "mytopic", key, value)
+    publish(rb, "zoo", 1, 2, 3)
 
-    result = rpc(rb, "myservice", [1, 1])
+    result = rpc(rb, "myservice", 1, 1)
     @test result == 2
 
-    @test rpc(rb, "bar", [10, 1]) == 10 - 1
+    @test rpc(rb, "bar", 10, 1) == 10 - 1
 
     check_sentinel(ctx, sentinel=key)
 

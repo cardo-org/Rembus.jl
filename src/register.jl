@@ -203,7 +203,7 @@ function unregister_node(router, msg)
     sts = STS_SUCCESS
     reason = nothing
 
-    if !command_permitted(twin) || !twin.isauth
+    if !command_permitted(router, twin) || !twin.isauth
         sts = STS_GENERIC_ERROR
         reason = "invalid operation"
     else

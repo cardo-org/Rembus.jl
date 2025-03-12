@@ -92,11 +92,12 @@ end
 keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "keys")
 keys_dir(name::AbstractString) = joinpath(rembus_dir(), name, "keys")
 
-function messages_dir(r::Router)
+function messages_dir(r::AbstractRouter)
+    r = latest_downstream(r)
     return joinpath(r.settings.rembus_dir, r.process.supervisor.id, "messages")
 end
 
-messages_dir(t::Twin) = messages_dir(t.router)
+messages_dir(t::Twin) = messages_dir(latest_downstream(t.router))
 
 function messages_dir(broker::AbstractString)
     return joinpath(rembus_dir(), broker, "messages")
@@ -257,8 +258,9 @@ Load the persisted twin configuration from disk.
 =#
 function load_twin(twin::Twin)
     @debug "[$twin] loading configuration"
+    router = latest_downstream(twin.router)
     twinid = tid(twin)
-    fn = joinpath(broker_dir(twin.router), "twins", "$twinid.json")
+    fn = joinpath(broker_dir(router), "twins", "$twinid.json")
     if isfile(fn)
         content = read(fn, String)
         cfg = JSON3.read(content, Dict, allow_inf=true)
@@ -270,7 +272,7 @@ function load_twin(twin::Twin)
         topicsdict = cfg["subscribers"]
         twin.msg_from = topicsdict
 
-        topic_interests = twin.router.topic_interests
+        topic_interests = router.topic_interests
         for topic in keys(topicsdict)
             if haskey(topic_interests, topic)
                 push!(topic_interests[topic], twin)
@@ -282,7 +284,7 @@ function load_twin(twin::Twin)
 
     if haskey(cfg, "exposers")
         topics = cfg["exposers"]
-        topic_impls = twin.router.topic_impls
+        topic_impls = router.topic_impls
         for topic in topics
             if haskey(topic_impls, topic)
                 push!(topic_impls[topic], twin)

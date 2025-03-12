@@ -437,6 +437,8 @@ abstract type AbstractRouter end
 abstract type AbstractTwin end
 
 mutable struct Router{T<:AbstractTwin} <: AbstractRouter
+    upstream::Union{Nothing,AbstractRouter}
+    downstream::Union{Nothing,Rembus.AbstractRouter}
     id::String
     eid::UInt64 # ephemeral unique id
     settings::Settings
@@ -470,6 +472,8 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     owners::DataFrame
     component_owner::DataFrame
     Router{T}(name, plugin=nothing, context=missing) where {T<:AbstractTwin} = new{T}(
+        nothing,
+        nothing,
         name,
         rand(Xoshiro(time_ns()), UInt64),
         Settings(),
@@ -497,6 +501,19 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     )
 end
 
+function upstream!(router, upstream_router)
+    router.upstream = upstream_router
+    upstream_router.downstream = router
+end
+
+function latest_downstream(router)
+    while !isnothing(router.downstream)
+        router = router.downstream
+    end
+
+    return router
+end
+
 mutable struct Twin <: AbstractTwin
     uid::RbURL
     shared::Any
@@ -509,8 +526,8 @@ mutable struct Twin <: AbstractTwin
     socket::AbstractSocket
     mark::UInt64
     msg_from::Dict{String,Float64} # subtract from now and consider minimum ts of unsent msg
-    ackdf::DataFrame
     probe::Bool
+    ackdf::DataFrame
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
         uid,
@@ -524,7 +541,6 @@ mutable struct Twin <: AbstractTwin
         s,
         0,
         Dict(), # msg_from
-        load_pubsub_received(r, uid), # ackdf
         false
     )
 end

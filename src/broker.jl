@@ -4,10 +4,18 @@ end
 
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
+
+        df = load_pubsub_received(router, url)
+
         if haskey(router.id_twin, tid(url))
             twin = router.id_twin[tid(url)]
         else
+            while !isnothing(router.upstream)
+                router = router.upstream
+            end
+
             twin = Twin(url, router)
+            twin.ackdf = df
             load_twin(twin)
         end
 

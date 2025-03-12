@@ -61,14 +61,14 @@ function run(admin_component)
     cli = connect(producer)
     publish(cli, "foo", 1)
     publish(cli, "bar", 2)
-    publish(cli, "bar", [1, 2])
+    publish(cli, "bar", 1, 2)
     publish(cli, my_private_topic, 3)
 
     clizmq = connect(producerzmq)
     publish(clizmq, "foo", 1)
 
     # generate a broker error log
-    publish(cli, "bar", [1, 2, 3])
+    publish(cli, "bar", 1, 2, 3)
 
     sleep(0.5)
     for c in [cli, clizmq, admin_sub, user_sub, user_subzmq]

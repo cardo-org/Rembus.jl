@@ -42,7 +42,7 @@ function run()
     cli = connect()
     res = rpc(cli, "myservice", 1)
     @test res == 2
-    res = rpc(cli, "myservice", [1, 2])
+    res = rpc(cli, "myservice", 1, 2)
     @test res == 3
 
     inject(server2, ctx)
@@ -50,12 +50,12 @@ function run()
     @test res == 3
     @test ctx.count == 1
 
-    res = rpc(cli, "myservice", [3, 2])
+    res = rpc(cli, "myservice", 3, 2)
     @test res == 6
     @test ctx.count == 2
 
     try
-        rpc(cli, "myservice", [3, 2, 1])
+        rpc(cli, "myservice", 3, 2, 1)
     catch e
         @info "[test_repl] expected error: $e"
     end

@@ -14,11 +14,11 @@ function run()
     for url in ["tcp://127.0.0.1:8001/dataframe_c1"]
         rb = connect(url)
         # HEADER_LEN2
-        response = rpc(rb, "myservice", (df1, df2))
+        response = rpc(rb, "myservice", df1, df2)
         @test response == [df1, df2]
 
         # HEADER_LEN4
-        response = rpc(rb, "myservice", (df2, df3))
+        response = rpc(rb, "myservice", df2, df3)
         @test response == [df2, df3]
     end
 
