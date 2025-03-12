@@ -1,10 +1,14 @@
+set_twin(router, id, twin) = router.id_twin[id] = twin
+
 function start_twin(twin::Twin)
     router = twin.router
     id = tid(twin)
     spec = process(id, twin_task, args=(twin,))
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
-    router.id_twin[id] = twin
+    ##router.id_twin[id] = twin
+    set_twin(router, id, twin)
+
     #router.twin_initialize(router.shared, twin)
     return twin
 end
@@ -21,7 +25,7 @@ function zmq_ping(twin::Twin)
         @debug "[$twin] zmq ping ($(typeof(twin.socket)))"
         if iszmq(twin)
             if isopen(twin.socket)
-                send_msg(twin, PingMsg(twin.uid.id)) |> fetch
+                send_msg(twin, PingMsg(twin, twin.uid.id)) |> fetch
             end
             if twin.router.settings.zmq_ping_interval > 0
                 Timer(tmr -> zmq_ping(twin), twin.router.settings.zmq_ping_interval)
@@ -29,7 +33,7 @@ function zmq_ping(twin::Twin)
         end
     catch e
         @warn "[$(cid(twin))]: pong not received ($e)"
-        dumperror(twin.router, e)
+        dumperror(e)
     end
 
     return nothing
@@ -77,14 +81,14 @@ function attestate(twin, response)
         plain = encode([Vector{UInt8}(response_data(response)), cid])
         hash = MbedTLS.digest(MD_SHA256, plain)
         signature = sign(ctx, MD_SHA256, hash, MersenneTwister(0))
-        return Attestation(cid, signature, meta)
+        return Attestation(twin, cid, signature, meta)
     catch e
         if isa(e, MbedTLS.MbedException)
             # try with a plain secret
             secret = readline(file)
             plain = encode([Vector{UInt8}(response_data(response)), secret])
             hash = MbedTLS.digest(MD_SHA256, plain)
-            return Attestation(cid, hash, meta)
+            return Attestation(twin, cid, hash, meta)
         end
     end
 end
@@ -176,7 +180,8 @@ function already_received(twin, msg)
     findfirst(==(msg.id), twin.ackdf.id) !== nothing
 end
 
-function remove_message(twin, msg)
+function remove_message(msg)
+    twin = msg.twin
     idx = findfirst(==(msg.id), twin.ackdf.id)
     if idx !== nothing
         deleteat!(twin.ackdf, idx)
@@ -187,7 +192,7 @@ function zmq_receive(twin::Twin)
     while true
         try
             msg = zmq_load(twin, twin.socket.sock)
-            twin = eval_message(twin, msg)
+            put!(twin.router.process.inbox, msg)
         catch e
             if isa(e, EOFError) && !isopen(twin.socket)
                 # Assume that an EOFError is thrown only when a zmq socket
@@ -195,7 +200,7 @@ function zmq_receive(twin::Twin)
                 break
             else
                 @error "[$twin] zmq_receive: $e"
-                dumperror(twin.router, e)
+                dumperror(e)
             end
         end
     end
@@ -296,7 +301,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
         end
     catch e
         notify(isconnected, e, error=true)
-        dumperror(twin.router, e)
+        dumperror(e)
     end
 end
 
@@ -341,7 +346,7 @@ function component(
         name = RbURL(nodeurl).id
     end
 
-    router = get_router(name, ws, tcp, zmq, nothing, false, secure)
+    router = get_router(name=name, ws=ws, tcp=tcp, zmq=zmq, secure=secure)
     set_policy(router, policy)
     for url in urls
         component(url, router)
@@ -372,19 +377,19 @@ function component(
     if ismissing(name)
         name = tid(url)
     end
-    router = get_router(name, ws, tcp, zmq, nothing, false)
+    router = get_router(name=name, ws=ws, tcp=tcp, zmq=zmq)
     return component(url, router)
 end
 
 function component(
     url::AbstractString,
-    router::Router
+    router::AbstractRouter
 )
     uid = RbURL(url)
     return component(uid, router)
 end
 
-function component(url::RbURL, router::Router)
+function component(url::RbURL, router::AbstractRouter)
     twin = bind(router, url)
     down_handler = (twin) -> @async reconnect(twin)
     twin.handler[HR_CONN_DOWN] = down_handler
@@ -408,7 +413,7 @@ function connect(url::RbURL; name=missing)
         name = url.id
     end
 
-    router = get_router(name)
+    router = get_router(name=name)
     twin = bind(router, url)
     try
         !do_connect(twin)
@@ -552,20 +557,13 @@ end
 Update twin identity parameters.
 =#
 function setidentity(router, twin, msg; isauth=false)
-    uid = RbURL(msg.cid)
-    if haskey(router.id_twin, tid(uid))
-        namedtwin = router.id_twin[tid(uid)]
-    else
-        namedtwin = Twin(uid, router)
-        start_twin(namedtwin)
-    end
-
-    namedtwin.socket = twin.socket
-    namedtwin.handler = twin.handler
-    namedtwin.isauth = isauth
-    twin.socket = Float()
-    destroy_twin(twin, router)
-    return namedtwin
+    delete!(router.id_twin, tid(twin))
+    twin.uid = RbURL(msg.cid)
+    router.id_twin[tid(twin)] = twin
+    setname(twin.process, tid(twin))
+    twin.isauth = isauth
+    load_twin(twin)
+    return nothing
 end
 
 function verify_signature(twin, msg)
@@ -664,7 +662,7 @@ function attestation(router, twin, msg, authenticate=true)
             login(router, twin, msg)
         end
 
-        twin = setidentity(router, twin, msg, isauth=authenticate)
+        setidentity(router, twin, msg, isauth=authenticate)
         reason = get_topics(router, twin)
         @debug "[$twin] exported topics: $reason"
     catch e
@@ -672,7 +670,7 @@ function attestation(router, twin, msg, authenticate=true)
         sts = STS_GENERIC_ERROR
         reason = isa(e, ErrorException) ? e.msg : string(e)
     end
-    transport_send(twin, ResMsg(msg.id, sts, reason))
+    transport_send(twin, ResMsg(twin, msg.id, sts, reason))
 
     if haskey(twin.handler, "att")
         twin.handler["att"](sts)
@@ -690,13 +688,15 @@ function attestation(router, twin, msg, authenticate=true)
             )
         end
     else
+        # TODO: check if needed.
+        sleep(0.5)
         detach(twin)
     end
 
-    return twin
+    return nothing
 end
 
-function receiver_exception(router, twin, e)
+function receiver_exception(twin, e)
     if haskey(twin.handler, HR_CONN_DOWN)
         twin.handler[HR_CONN_DOWN](twin)
     end
@@ -711,6 +711,10 @@ function receiver_exception(router, twin, e)
     end
 end
 
+function remove_twin(router, twin)
+    delete!(router.id_twin, tid(twin))
+end
+
 #=
     destroy_twin(twin, router)
 
@@ -723,7 +727,8 @@ function destroy_twin(twin, router)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
-    delete!(router.id_twin, tid(twin))
+    #delete!(router.id_twin, tid(twin))
+    remove_twin(router, twin)
     return nothing
 end
 
@@ -755,35 +760,61 @@ Return true if the component is authenticated.
 """
 isauthenticated(twin::Twin) = twin.isauth
 
-function commands_permitted(twin)
-    if twin.router.mode === authenticated
-        return isauthenticated(twin)
+router_isauthenticated(router) = router.mode === authenticated
+
+#=
+Check if twin has the privilege to execute a command.
+=#
+function command_permitted(twin)
+    res = true
+    if router_isauthenticated(twin.router)
+        res = isauthenticated(twin)
     end
-    return true
+
+    if !res
+        @debug "[$twin]: [$msg] not authorized"
+        close(twin.socket)
+    end
+
+    return res
 end
 
-function pubsub_msg(router, twin, msg)
-    if !isauthorized(router, twin, msg.topic)
+function pubsub_msg(router, msg)
+    twin = msg.twin
+    if !command_permitted(twin) || !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
+        return false
     else
         if msg.flags > QOS0
-            put!(twin.process.inbox, AckMsg(msg.id))
+            put!(twin.process.inbox, AckMsg(twin, msg.id))
         end
         if msg.flags == QOS2
             if already_received(twin, msg)
                 @info "[$twin] skipping already received message $msg"
-                return nothing
+                return true
             else
                 add_pubsub_id(twin, msg)
             end
         end
-        put!(router.process.inbox, msg)
+        if router.settings.save_messages
+            msg.counter = save_message(router, msg)
+        end
+        # Publish to interested twins.
+        broadcast_msg(router, msg)
+        # Relay to subscribers of this broker.
+        local_subscribers(router, msg.twin, msg)
+        if router.metrics !== nothing
+            counter = Prometheus.labels(router.metrics.pub, (msg.topic,))
+            Prometheus.inc(counter)
+        end
     end
-    return nothing
+
+    return true
 end
 
-function ack_msg(twin::Twin, msg)
-    @debug "[$twin] ack_msg: $msg"
+function ack_msg(msg)
+    @debug "[$(msg.twin)] ack_msg: $msg"
+    twin = msg.twin
     msgid = msg.id
     sock = twin.socket
     if haskey(sock.out, msgid)
@@ -793,7 +824,7 @@ function ack_msg(twin::Twin, msg)
             # send the ACK2 message to the component
             put!(
                 twin.process.inbox,
-                Ack2Msg(msgid)
+                Ack2Msg(twin, msgid)
             )
         end
         if !isready(sock.out[msgid].future)
@@ -805,7 +836,14 @@ function ack_msg(twin::Twin, msg)
     return nothing
 end
 
-function admin_msg(router, twin, msg)
+function admin_msg(router, msg)
+    twin = msg.twin
+
+    if !command_permitted(twin)
+        @debug "[$router] command $msg not permitted to [$twin]"
+        return false
+    end
+
     admin_res = admin_command(router, twin, msg)
     if isa(admin_res, EnableReactiveMsg)
         startup(
@@ -817,21 +855,17 @@ function admin_msg(router, twin, msg)
                 restart=:temporary
             )
         )
-        response = ResMsg(msg.id, STS_SUCCESS, nothing)
+        response = ResMsg(twin, msg.id, STS_SUCCESS, nothing)
         put!(twin.process.inbox, response)
     else
         put!(twin.process.inbox, admin_res)
     end
-    return nothing
+    return true
 end
 
-function rpc_request(router, twin, msg::RpcReqMsg)
-    return _rpc_request(router, twin, msg, TYPE_RPC)
-end
-
-function _rpc_request(router, twin, msg, mtype)
-
-    if !isauthorized(router, twin, msg.topic)
+function rpc_request(router, msg, implementor_rule)
+    twin = msg.twin
+    if !command_permitted(twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
         put!(twin.process.inbox, m)
     elseif msg.target !== nothing
@@ -842,10 +876,20 @@ function _rpc_request(router, twin, msg, mtype)
                 m = ResMsg(msg, STS_TARGET_DOWN, msg.target)
                 put!(twin.process.inbox, m)
             else
-                if target_twin === twin
-                    put!(router.process.inbox, msg)
+                if target_twin == twin
+                    local_fn(router, twin, msg)
                 else
-                    put!(target_twin.process.inbox, msg)
+                    # check if remote expose the topic
+                    if haskey(router.topic_impls, msg.topic)
+                        put!(target_twin.process.inbox, msg)
+                    else
+                        put!(
+                            twin.process.inbox,
+                            ResMsg(
+                                msg, STS_METHOD_NOT_FOUND, "$(msg.topic): method unknown"
+                            )
+                        )
+                    end
                 end
             end
         else
@@ -855,62 +899,14 @@ function _rpc_request(router, twin, msg, mtype)
         end
     else
         # msg is routable, get it to router
-        @debug "[$twin] to router: $msg"
-        put!(router.process.inbox, msg)
+        @debug "[$twin] to router $(typeof(router)): $msg"
+        if local_fn(router, twin, msg)
+        elseif implementor_rule(twin.uid)
+            find_implementor(router, msg)
+        end
     end
 
     return msg
-end
-
-function rpc_response(router, twin, msg)
-    @debug "[$twin] rpc_response: $msg"
-    if haskey(twin.socket.out, msg.id)
-        request = twin.socket.out[msg.id].request
-        if msg.status == STS_CHALLENGE
-            return resend_attestate(twin, msg)
-        elseif isnothing(request) || isa(request, Attestation)
-            @debug "[$twin] attestation ok: $msg"
-            put!(twin.socket.out[CONNECTION_ID].future, msg)
-        else
-            msg.twin = twin.socket.out[msg.id].request.twin
-            msg.reqdata = request
-            put!(router.process.inbox, msg)
-            elapsed = time() - twin.socket.out[msg.id].sending_ts
-            if router.metrics !== nothing
-                @debug "[$twin] $(msg.reqdata.topic) elapsed=$elapsed secs"
-                h = Prometheus.labels(router.metrics.rpc, (msg.reqdata.topic,))
-                Prometheus.observe(h, elapsed)
-            end
-        end
-        close(twin.socket.out[msg.id].timer)
-        delete!(twin.socket.out, msg.id)
-    elseif msg.status == STS_CHALLENGE
-        resend_attestate(twin, msg)
-    else
-        @debug "[$twin] unexpected response: $msg"
-    end
-end
-
-function command(router::Router, twin, msg)
-    if commands_permitted(twin)
-        if isa(msg, Unregister)
-            unregister_node(router, twin, msg)
-        elseif isa(msg, AdminReqMsg)
-            admin_msg(router, twin, msg)
-        elseif isa(msg, RpcReqMsg)
-            rpc_request(router, twin, msg)
-        elseif isa(msg, PubSubMsg)
-            pubsub_msg(router, twin, msg)
-        elseif isa(msg, AckMsg)
-            ack_msg(twin, msg)
-        elseif isa(msg, Ack2Msg)
-            # Remove from the cache of already received messages.
-            remove_message(twin, msg)
-        end
-    else
-        @debug "[$twin]: [$msg] not authorized"
-        close(twin.socket)
-    end
 end
 
 function messages_files(node, from_msg)
@@ -969,13 +965,13 @@ until the original challenge is resolved with an Attestation.
 function await_attestation(twin, socket, msg)
     future = Distributed.Future()
     t = Timer(twin.router.settings.request_timeout) do _t
-        put!(future, ResMsg(msg.id, STS_GENERIC_ERROR, nothing))
+        put!(future, ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing))
     end
 
     twin.handler["att"] = (sts) -> put!(future, sts)
     sts = fetch(future)
     close(t)
-    transport_send(socket, ResMsg(msg.id, sts, nothing))
+    transport_send(socket, ResMsg(twin, msg.id, sts, nothing))
 end
 
 function challenge(router, twin, msgid)
@@ -989,80 +985,7 @@ function challenge(router, twin, msgid)
         challenge_val = rand(RandomDevice(), UInt8, 4)
     end
     twin.handler["challenge"] = (twin) -> challenge_val
-    return ResMsg(msgid, STS_CHALLENGE, challenge_val)
-end
-
-#=
-Parse the message and invoke the actions related to the message type.
-=#
-function eval_message(twin, msg, id=UInt8[])
-    target_twin = twin
-    twin.probe && probe_add(twin, msg, pktin)
-    router = twin.router
-    @debug "[$twin] eval_message: $msg"
-    if isa(msg, IdentityMsg)
-        url = RbURL(msg.cid)
-        twin_id = tid(url)
-        @debug "[$twin] auth identity: $msg"
-        if haskey(twin.handler, "challenge")
-            @debug "[$twin] challenge active"
-            # Await Attestation
-            @async await_attestation(twin, twin.socket, msg)
-        elseif isempty(msg.cid)
-            response = ResMsg(msg.id, STS_GENERIC_ERROR, "empty cid")
-            transport_send(twin, response)
-        elseif haskey(router.id_twin, twin_id) && isconnected(router.id_twin[twin_id])
-            @warn "[$(path(twin))] a component with id [$twin_id] is already connected"
-            response = ResMsg(msg.id, STS_GENERIC_ERROR, "already connected")
-            transport_send(twin, response)
-        elseif key_file(router, twin_id) !== nothing || router.mode === authenticated
-            # cid is registered, send the challenge
-            # TODO: save wsport into session
-            response = challenge(router, twin, msg.id)
-            transport_send(twin, response)
-        else
-            target_twin = attestation(router, twin, msg, false)
-        end
-        #@mlog("[ZMQ][$twin] -> $response")
-        ### callbacks(twin)
-    elseif isa(msg, PingMsg)
-        if (twin.uid.id != msg.cid)
-            # broker restarted
-            # start the authentication flow if cid is registered
-            @debug "lost connection to broker: restarting $(msg.cid)"
-            if key_file(router, msg.cid) !== nothing
-                # check if challenge was already sent
-                if !haskey(twin.handler, "challenge")
-                    response = challenge(router, twin, msg.id)
-                    transport_send(twin, response)
-                end
-            else
-                target_twin = attestation(router, twin, msg, false)
-            end
-        else
-            if isa(twin.socket, ZRouter)
-                pong(twin.socket, msg.id, id)
-            end
-        end
-    elseif isa(msg, Register)
-        if !hasname(twin)
-            @debug "[$twin] registering"
-            response = register_node(router, msg)
-            transport_send(twin, response)
-        end
-    elseif isa(msg, Attestation)
-        if !hasname(twin)
-            target_twin = attestation(router, twin, msg)
-        end
-    elseif isa(msg, Close)
-        offline!(twin)
-    elseif isa(msg, ResMsg)
-        sendto_origin(twin, msg) || rpc_response(router, twin, msg)
-    else
-        command(router, twin, msg)
-    end
-
-    return target_twin
+    return ResMsg(twin, msgid, STS_CHALLENGE, challenge_val)
 end
 
 #=
@@ -1071,8 +994,7 @@ end
 Receive messages from the client socket (ws or tcp).
 =#
 function twin_receiver(twin)
-    router = twin.router
-    @debug "[$twin] anonymous client is connected"
+    @debug "[$twin] client is connected"
     try
         ws = twin.socket.sock
         while isopen(ws)
@@ -1084,14 +1006,11 @@ function twin_receiver(twin)
             end
             msg::RembusMsg = broker_parse(twin, payload)
             @debug "[$(path(twin))] twin_receiver << $msg"
-            target_twin = eval_message(twin, msg)
-            if target_twin !== twin
-                return target_twin
-            end
+            put!(twin.router.process.inbox, msg)
         end
     catch e
-        receiver_exception(router, twin, e)
-        dumperror(twin.router, e)
+        receiver_exception(twin, e)
+        dumperror(e)
     finally
         end_receiver(twin)
     end
@@ -1100,13 +1019,7 @@ function twin_receiver(twin)
 end
 
 
-#=
-Entry point of a new connection request from a node.
-=#
-function client_receiver(router::Router, socket)
-    twin = bind(router, RbURL())
-    twin.socket = socket
-    @debug "[$twin] anonymous client connected"
+function challenge_if_auth(router, twin)
     if router.mode === authenticated
         chl = challenge(router, twin, CONNECTION_ID)
         transport_send(twin, chl)
@@ -1118,19 +1031,41 @@ function client_receiver(router::Router, socket)
             end
         end
     end
-    # ws/tcp socket receiver task
-    target_twin = twin_receiver(twin)
-    if !isnothing(target_twin)
-        twin_receiver(target_twin)
-    end
+end
 
+function if_authenticated(router, twin_id)
+    return key_file(router, twin_id) !== nothing || router.mode === authenticated
+end
+
+#=
+Entry point of a new connection request from a node.
+=#
+function client_receiver(router::AbstractRouter, socket)
+    twin = bind(router, RbURL())
+    twin.socket = socket
+    @debug "[$twin] anonymous client connected"
+    challenge_if_auth(router, twin)
+    # ws/tcp socket receiver task
+    twin_receiver(twin)
     return nothing
+end
+
+function client_receiver(twin::Twin)
+    @debug "[$twin] name client connected"
+    twin_receiver(twin)
+    return nothing
+end
+
+
+function ws_server!(router::Router, server)
+    router.ws_server = server
 end
 
 function listener(proc, port, router, sslconfig)
     IP = "0.0.0.0"
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), port))
-    router.ws_server = server
+    # router.ws_server = server
+    ws_server!(router, server)
     proto = (sslconfig === nothing) ? "ws" : "wss"
     @info "$(proc.supervisor) listening at port $proto:$port"
 

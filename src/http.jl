@@ -98,7 +98,7 @@ function http_publish(router::Router, req::HTTP.Request)
         twin = bind(router, RbURL(cid))
 
         msg = PubSubMsg(twin, topic, content)
-        pubsub_msg(router, twin, msg)
+        pubsub_msg(router, msg)
         Visor.shutdown(twin.process)
         cleanup(twin, router)
         return HTTP.Response(200, [])

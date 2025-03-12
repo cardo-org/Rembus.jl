@@ -107,12 +107,13 @@ end
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     @compile_workload begin
-        rb = start_broker(
-            authenticated=false,
+        rb = get_router(
+            name="broker",
             ws=8000,
             tcp=8001,
             zmq=8002,
             http=9000,
+            authenticated=false,
         )
         yield()
         islistening(rb, wait=20)

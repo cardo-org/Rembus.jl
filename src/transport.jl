@@ -112,30 +112,30 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         status = decode_internal(io, Val(TYPE_0))
         # Do not decode dataframe, just pass through the broker.
-        return ResMsg(bytes2id(id), status, io, flags)
+        return ResMsg(twin, bytes2id(id), status, io, flags)
     elseif ptype == TYPE_ACK
         id = decode_internal(io, Val(TYPE_2))
-        return AckMsg(bytes2id(id))
+        return AckMsg(twin, bytes2id(id))
     elseif ptype == TYPE_ACK2
         id = decode_internal(io, Val(TYPE_2))
-        return Ack2Msg(bytes2id(id))
+        return Ack2Msg(twin, bytes2id(id))
     elseif ptype == TYPE_REGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         tenant = decode_internal(io)
         pubkey = decode_internal(io)
         type = decode_internal(io)
-        return Register(bytes2id(id), cid, tenant, pubkey, type)
+        return Register(twin, bytes2id(id), cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        return Unregister(bytes2id(id), cid)
+        return Unregister(twin, bytes2id(id), cid)
     elseif ptype == TYPE_ATTESTATION
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
         meta = decode_internal(io)
-        return Attestation(bytes2id(id), cid, signature, meta)
+        return Attestation(twin, bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")
 end
@@ -337,42 +337,42 @@ function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
         status = pkt.header[3]
         data = pkt.data
         if isbroker
-            return ResMsg(mid, status, data, flags)
+            return ResMsg(twin, mid, status, data, flags)
         else
-            return ResMsg(mid, status, dataframe_if_tagvalue(decode(data)), flags)
+            return ResMsg(twin, mid, status, dataframe_if_tagvalue(decode(data)), flags)
         end
     elseif ptype == TYPE_ACK
         mid = bytes2id(pkt.header[2])
-        return AckMsg(mid)
+        return AckMsg(twin, mid)
     elseif ptype == TYPE_ACK2
         mid = bytes2id(pkt.header[2])
-        return Ack2Msg(mid)
+        return Ack2Msg(twin, mid)
     elseif ptype == TYPE_REGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         tenant = pkt.header[4]
         type = pkt.header[5]
         pubkey::Vector{UInt8} = pkt.data
-        return Register(mid, cid, tenant, pubkey, type)
+        return Register(twin, mid, cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
-        return Unregister(mid, cid)
+        return Unregister(twin, mid, cid)
     elseif ptype == TYPE_ATTESTATION
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         meta = pkt.header[4]
         signature::Vector{UInt8} = pkt.data
-        return Attestation(mid, cid, signature, meta)
+        return Attestation(twin, mid, cid, signature, meta)
     elseif ptype == TYPE_PING
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         @debug "ping from [$cid]"
-        return PingMsg(mid, cid)
+        return PingMsg(twin, mid, cid)
         #    elseif ptype == TYPE_REMOVE
         #        return Remove()
     elseif ptype == TYPE_CLOSE
-        return Close()
+        return Close(twin)
     end
     error("unknown rembus packet type $ptype")
 end
@@ -400,7 +400,9 @@ function bytes2zid(buff::Vector{UInt8})
     UInt128(read(IOBuffer(buff[2:end]), UInt32))
 end
 
-function transport_send(twin, msg)
+transport_send(::Float, ::RembusMsg) = true
+
+function transport_send(twin::Twin, msg)
     twin.probe && probe_add(twin, msg, pktout)
     return transport_send(twin.socket, msg)
 end

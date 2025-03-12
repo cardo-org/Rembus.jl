@@ -62,8 +62,8 @@ end
 end
 
 @testitem "get_router" begin
-    r1 = Rembus.get_router("myrouter", 8000, 8001, 8002, 9000, false)
-    r2 = Rembus.get_router("myrouter", 8000, 8001, 8002, 9000, false)
+    r1 = Rembus.get_router(name="myrouter", ws=8000, tcp=8001, zmq=8002, prometheus=9000)
+    r2 = Rembus.get_router(name="myrouter", ws=8000, tcp=8001, zmq=8002, prometheus=9000)
     @test r1 === r2
 
     Rembus.uptime(r1)
@@ -102,7 +102,7 @@ end
     router.settings.stacktrace = true
 
     e = ErrorException("test error")
-    Rembus.dumperror(router, e)
+    Rembus.dumperror(e)
 end
 
 @testitem "string_to_enum" begin
@@ -121,7 +121,7 @@ end
 end
 
 @testitem "topic_auth_storage" begin
-    router = Rembus.get_router("myrouter", 8000)
+    router = Rembus.get_router(name="myrouter", http=8000)
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
     Rembus.save_topic_auth_table(router)

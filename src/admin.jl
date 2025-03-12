@@ -176,7 +176,7 @@ end
 
 function admin_command(router::Router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
-        return ResMsg(msg.id, STS_GENERIC_ERROR, nothing)
+        return ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing)
     end
 
     sts = STS_SUCCESS
@@ -338,5 +338,5 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
         sts = STS_UNKNOWN_ADMIN_CMD
     end
 
-    return ResMsg(msg.id, sts, data)
+    return ResMsg(twin, msg.id, sts, data)
 end

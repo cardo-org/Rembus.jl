@@ -8,6 +8,7 @@ function bind(router::Router, url=RbURL(protocol=:repl))
             twin = router.id_twin[tid(url)]
         else
             twin = Twin(url, router)
+            load_twin(twin)
         end
 
         if !isdefined(twin, :process) || istaskdone(twin.process.task)
@@ -273,34 +274,48 @@ end
 
 Broadcast the `topic` data `msg` to all interested clients.
 =#
-function broadcast_msg(router::Router, msg::RembusMsg)
+function broadcast_msg(router::Router, msg::PubSubMsg)
     authtwins = Set{Twin}()
-    if isa(msg, PubSubMsg)
-        # The interest * (subscribe to all topics) is enabled
-        # only for pubsub messages and not for rpc methods.
-        topic = msg.topic
-        twins = get(router.topic_interests, "*", Set{Twin}())
-        # Broadcast to twins that are admins and to twins that are authorized to
-        # subscribe to topic.
-        for twin in twins
-            if tid(twin) in router.admins
-                push!(authtwins, twin)
-            elseif haskey(router.topic_auth, topic)
-                if haskey(router.topic_auth[topic], tid(twin))
-                    # It is a private topic, check if twin is authorized.
-                    push!(authtwins, twin)
-                end
-            else
-                # It is a public topic, all twins may be broadcasted.
+    # The interest * (subscribe to all topics) is enabled
+    # only for pubsub messages and not for rpc methods.
+    topic = msg.topic
+    twins = get(router.topic_interests, "*", Set{Twin}())
+    # Broadcast to twins that are admins and to twins that are authorized to
+    # subscribe to topic.
+    for twin in twins
+        if tid(twin) in router.admins
+            push!(authtwins, twin)
+        elseif haskey(router.topic_auth, topic)
+            if haskey(router.topic_auth[topic], tid(twin))
+                # It is a private topic, check if twin is authorized.
                 push!(authtwins, twin)
             end
+        else
+            # It is a public topic, all twins may be broadcasted.
+            push!(authtwins, twin)
         end
-    elseif isdefined(msg, :reqdata)
+    end
+
+    union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
+    for tw in authtwins
+        # Do not publish back to the receiver channel and to unreactive components.
+        if tw !== msg.twin || notreactive(tw)
+            @debug "[$router] broadcasting $msg to $tw"
+            put!(tw.process.inbox, msg)
+        end
+    end
+
+    return nothing
+end
+
+function broadcast_msg(router::Router, msg::ResMsg)
+    authtwins = Set{Twin}()
+    if isdefined(msg, :reqdata)
         topic = msg.reqdata.topic
         msg = PubSubMsg(msg.twin, topic, msg.reqdata.data)
-        #    else
-        #        @debug "no broadcast for [$msg]: request data not available or server method"
-        #        return nothing
+    else
+        @debug "[$router] no broadcast for [$msg]: request data not available or admin command"
+        return nothing
     end
 
     union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
@@ -378,19 +393,51 @@ end
 Send a ResMsg message back to requestor.
 =#
 function respond(router::Router, msg::ResMsg)
-    put!(msg.twin.process.inbox, msg)
+    if !sendto_origin(msg.twin, msg)
+        put!(msg.twin.process.inbox, msg)
+        if msg.status != STS_SUCCESS
+            return
+        end
 
-    if msg.status != STS_SUCCESS
-        return
+        # broadcast to all interested twins
+        broadcast_msg(router, msg)
     end
-
-    # broadcast to all interested twins
-    broadcast_msg(router, msg)
 
     return nothing
 end
 
 respond(::Router, msg::RembusMsg, twin) = put!(twin.process.inbox, msg)
+
+function rpc_response(router, msg)
+    twin = msg.twin
+    @debug "[$twin] rpc_response: $msg"
+    if haskey(twin.socket.out, msg.id)
+        request = twin.socket.out[msg.id].request
+        if msg.status == STS_CHALLENGE
+            return resend_attestate(twin, msg)
+        elseif isnothing(request) || isa(request, Attestation)
+            @debug "[$twin] attestation ok: $msg"
+            put!(twin.socket.out[CONNECTION_ID].future, msg)
+        else
+            msg.twin = twin.socket.out[msg.id].request.twin
+            msg.reqdata = request
+            respond(router, msg)
+            elapsed = time() - twin.socket.out[msg.id].sending_ts
+            if router.metrics !== nothing
+                @debug "[$twin] $(msg.reqdata.topic) elapsed=$elapsed secs"
+                h = Prometheus.labels(router.metrics.rpc, (msg.reqdata.topic,))
+                Prometheus.observe(h, elapsed)
+            end
+        end
+        close(twin.socket.out[msg.id].timer)
+        delete!(twin.socket.out, msg.id)
+    elseif msg.status == STS_CHALLENGE
+        resend_attestate(twin, msg)
+    else
+        @debug "[$twin] unexpected response: $msg"
+    end
+end
+
 
 #=
     broker_task(self, router)
@@ -404,35 +451,85 @@ function router_task(self, router, ready, implementor_rule)
         init(router)
         put!(ready, true)
         for msg in self.inbox
-            @debug "[broker] recv: $msg"
+            @debug "[$router:broker] recv: $msg"
             !isshutdown(msg) || break
+            probe_add(msg, pktin)
             if isa(msg, PubSubMsg)
-                if router.settings.save_messages
-                    msg.counter = save_message(router, msg)
-                end
-                # Publish to interested twins.
-                broadcast_msg(router, msg)
-                # Relay to subscribers of this broker.
-                local_subscribers(router, msg.twin, msg)
-                if router.metrics !== nothing
-                    counter = Prometheus.labels(router.metrics.pub, (msg.topic,))
-                    Prometheus.inc(counter)
-                end
+                pubsub_msg(router, msg) || continue
             elseif isa(msg, RpcReqMsg)
-                if local_fn(router, msg.twin, msg)
-                elseif implementor_rule(msg.twin.uid)
-                    find_implementor(router, msg)
-                end
+                rpc_request(router, msg, implementor_rule)
             elseif isa(msg, ResMsg)
                 # A result from an exposer.
-                respond(router, msg)
+                sendto_origin(msg.twin, msg) || rpc_response(router, msg)
             elseif isa(msg, AdminReqMsg)
-                admin_broadcast(router, msg.twin, msg)
+                admin_msg(router, msg)
+            elseif isa(msg, IdentityMsg)
+                twin = msg.twin
+                url = RbURL(msg.cid)
+                twin_id = tid(url)
+                @debug "[$twin] auth identity: $msg"
+                if haskey(twin.handler, "challenge")
+                    @debug "[$twin] challenge active"
+                    # Await Attestation
+                    @async await_attestation(twin, twin.socket, msg)
+                elseif isempty(msg.cid)
+                    response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "empty cid")
+                    transport_send(twin, response)
+                elseif isconnected(router, twin_id)
+                    @warn "[$(path(twin))] a component with id [$twin_id] is already connected"
+                    response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "already connected")
+                    transport_send(twin, response)
+                elseif if_authenticated(router, twin_id)
+                    # cid is registered, send the challenge
+                    # TODO: save wsport into session
+                    response = challenge(router, twin, msg.id)
+                    transport_send(twin, response)
+                else
+                    attestation(router, twin, msg, false)
+                end
+                ### callbacks(twin)
+            elseif isa(msg, PingMsg)
+                twin = msg.twin
+                if (twin.uid.id != msg.cid)
+                    # broker restarted
+                    # start the authentication flow if cid is registered
+                    @debug "lost connection to broker: restarting $(msg.cid)"
+                    if key_file(router, msg.cid) !== nothing
+                        # check if challenge was already sent
+                        if !haskey(twin.handler, "challenge")
+                            response = challenge(router, twin, msg.id)
+                            transport_send(twin, response)
+                        end
+                    else
+                        attestation(router, twin, msg, false)
+                    end
+                else
+                    if isa(twin.socket, ZRouter)
+                        pong(twin.socket, msg.id, id)
+                    end
+                end
+            elseif isa(msg, Register)
+                twin = msg.twin
+                if !hasname(twin)
+                    @debug "[$twin] registering"
+                    response = register_node(router, msg)
+                    transport_send(twin, response)
+                end
+            elseif isa(msg, Unregister)
+                unregister_node(router, msg)
+            elseif isa(msg, Attestation)
+                if !hasname(msg.twin)
+                    attestation(router, msg.twin, msg)
+                end
+            elseif isa(msg, Close)
+                offline!(msg.twin)
+            elseif isa(msg, AckMsg)
+                ack_msg(msg)
+            elseif isa(msg, Ack2Msg)
+                # Remove from the cache of already received messages.
+                remove_message(msg)
             end
         end
-        #    catch e
-        #        @error "[broker] error: $e"
-        #        rethrow()
     finally
         if broker_isnamed(router)
             save_configuration(router)
@@ -479,7 +576,7 @@ function find_implementor(router, msg)
                 "$topic: method unavailable"
             )
             put!(msg.twin.process.inbox, resmsg)
-        elseif target === msg.twin
+        elseif target == msg.twin
             @warn "[$target]: loopback detected"
             resmsg = ResMsg(
                 msg,
@@ -534,7 +631,7 @@ function serve_ws(td, router, port, issecure=false)
         end
 
         listener(td, port, router, sslconfig)
-        router.listeners[:ws].status = on
+        listener_status!(router, :ws, on)
         for msg in td.inbox
             if isshutdown(msg)
                 break
@@ -542,7 +639,7 @@ function serve_ws(td, router, port, issecure=false)
         end
     finally
         @debug "[serve_ws] closed"
-        router.listeners[:ws].status = off
+        listener_status!(router, :ws, off)
         setphase(td, :terminate)
         isdefined(router, :ws_server) && close(router.ws_server)
     end
@@ -589,10 +686,7 @@ function zmq_broker_read(router::Router)
 
     # TODO: remove 2nd argument
     msg::RembusMsg = zmq_parse(twin, pkt, true)
-    target_twin = eval_message(twin, msg, id)
-    if target_twin !== twin
-        router.address2twin[id] = target_twin
-    end
+    put!(twin.router.process.inbox, msg)
 end
 
 function serve_zmq(pd, router, port)
@@ -670,27 +764,37 @@ const TRANSPORT_WS::Int = 9000
 const TRANSPORT_TCP::Int = 9001
 const TRANSPORT_ZMQ::Int = 9002
 
-function get_router(
-    name,
+function get_router(;
+    name=cid(),
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
+    http=nothing,
     prometheus=nothing,
     authenticated=false,
     secure=false,
     tsk=broker_task
 )
-    process = from("$name.broker")
-    if process === nothing
-        router = start_broker(
+    broker_process = from("$name.broker")
+    if broker_process === nothing
+        router = Router{Twin}(name, nothing, missing)
+        if authenticated
+            router.mode = Rembus.authenticated
+        end
+        ready = Channel()
+        bp = process("broker", tsk, args=(router, ready))
+        router.process = bp
+
+        start_broker(
+            router,
             secure=secure,
             name=name,
-            authenticated=authenticated,
-            ws=ws, tcp=tcp, zmq=zmq, prometheus=prometheus,
-            acceptor=tsk
+            ws=ws, tcp=tcp, zmq=zmq, http=http, prometheus=prometheus,
+            ready=ready
         )
+        take!(ready)
     else
-        router = process.args[1]
+        router = broker_process.args[1]
     end
 
     return router
@@ -712,7 +816,15 @@ function broker(;
     secure=false,
     authenticated=false
 )
-    router = get_router(name, ws, tcp, zmq, prometheus, authenticated, secure)
+    router = get_router(
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        prometheus=prometheus,
+        authenticated=authenticated,
+        secure=secure
+    )
     # Return a floating twin.
     return bind(router)
 end
@@ -726,7 +838,16 @@ function server(;
     authenticated=false,
     secure=false
 )
-    router = get_router(name, ws, tcp, zmq, prometheus, authenticated, secure, server_task)
+    router = get_router(
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        prometheus=prometheus,
+        authenticated=authenticated,
+        secure=secure,
+        tsk=server_task
+    )
     # Return a floating twin.
     return bind(router)
 end
@@ -754,8 +875,9 @@ Return immediately when `wait` is false, otherwise blocks until shutdown is requ
 
 Overwrite command line arguments if args is not empty.
 """
-function start_broker(;
-    acceptor=broker_task,
+function start_broker(
+    router;
+    ready,
     secure=false,
     ws=nothing,
     tcp=nothing,
@@ -763,21 +885,11 @@ function start_broker(;
     http=nothing,
     prometheus=nothing,
     name="broker",
-    authenticated=false,
-    plugin=nothing,
-    context=missing
 )
-    router = Router{Twin}(name, plugin, context)
-    if authenticated
-        router.mode = Rembus.authenticated
-    end
-    ready = Channel()
-    bp = process("broker", acceptor, args=(router, ready))
     tasks = [
-        bp,
+        router.process,
         supervisor("twins", terminateif=:shutdown)
     ]
-    router.process = bp
 
     if prometheus !== nothing
         registry = Prometheus.CollectorRegistry()
@@ -789,7 +901,7 @@ function start_broker(;
     end
 
     if http !== nothing
-        router.listeners[:http] = Listener(http)
+        set_listener(router, :http, http)
         push!(
             tasks,
             process(
@@ -802,7 +914,7 @@ function start_broker(;
     end
 
     if tcp !== nothing
-        router.listeners[:tcp] = Listener(tcp)
+        set_listener(router, :tcp, tcp)
         push!(
             tasks,
             process(
@@ -816,7 +928,7 @@ function start_broker(;
     end
 
     if zmq !== nothing
-        router.listeners[:zmq] = Listener(zmq)
+        set_listener(router, :zmq, zmq)
         push!(
             tasks,
             process(
@@ -829,7 +941,7 @@ function start_broker(;
     end
 
     if ws !== nothing
-        router.listeners[:ws] = Listener(ws)
+        set_listener(router, :ws, ws)
         push!(
             tasks,
             process(
@@ -846,9 +958,15 @@ function start_broker(;
         wait=false,
         intensity=2
     )
-    # Wait that broker task is up and running.
-    take!(ready)
     return router
+end
+
+function set_listener(router::Router, proto, port)
+    router.listeners[proto] = Listener(port)
+end
+
+function listener_status!(router::Router, proto, status::ListenerStatus)
+    router.listeners[proto].status = status
 end
 
 function set_plugin(twin::Twin, plugin, context=missing)

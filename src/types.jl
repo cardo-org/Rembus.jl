@@ -512,7 +512,7 @@ mutable struct Twin <: AbstractTwin
     ackdf::DataFrame
     probe::Bool
     process::Visor.Process
-    Twin(uid::RbURL, r::Router, s=FLOAT) = new(
+    Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
         uid,
         missing,
         Dict(), # handler
@@ -530,6 +530,8 @@ mutable struct Twin <: AbstractTwin
 end
 
 Base.:(==)(a::Twin, b::Twin) = tid(a) === tid(b)
+
+Base.hash(t::Twin) = hash(tid(t))
 
 "twin unique identifier"
 tid(twin::Twin) = twin.uid.id
@@ -571,6 +573,10 @@ notreactive(twin) = twin.reactive === false
 Base.wait(twin::Twin) = isdefined(twin, :process) ? wait(twin.process.task) : nothing
 
 isconnected(twin::Twin) = isopen(twin.socket)
+
+function isconnected(router, twin_id)
+    return haskey(router.id_twin, twin_id) && isconnected(router.id_twin[twin_id])
+end
 
 protocol(twin::Twin) = twin.uid.protocol
 

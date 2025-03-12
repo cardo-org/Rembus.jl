@@ -9,7 +9,7 @@ end
 
 function send_attestation()
     rb = connect()
-    msg = Rembus.Attestation("cid", UInt8[0x1, 0x2, 0x3], Dict())
+    msg = Rembus.Attestation(rb, "cid", UInt8[0x1, 0x2, 0x3], Dict())
     res_future = Rembus.send_msg(rb, msg)
     @test_throws RembusError fetch(res_future)
 end

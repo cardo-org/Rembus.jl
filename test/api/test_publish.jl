@@ -2,7 +2,9 @@ include("../utils.jl")
 
 using Dates
 
-foo(ctx, rb, x) = ctx[tid(rb)] = x
+function foo(ctx, rb, x)
+    ctx[tid(rb)] = x
+end
 
 function wait_message(fn, max_wait=10)
     wtime = 0.1
@@ -35,7 +37,6 @@ function run(pub_url, sub_url)
 
     Rembus.reset_probe!(sub)
     Rembus.reset_probe!(pub)
-
     publish(pub, "foo", val, qos=QOS2)
 
     @test wait_message() do
@@ -83,7 +84,7 @@ try
     rb = broker(ws=8010, tcp=8011, zmq=8012, prometheus=7071, name="publish")
     @test Rembus.islistening(rb, wait=10)
     for pub_url in [
-        "tcp://127.0.0.1:8011/publish_pub",
+        "tcp://127.0.0.1:8011/publish_tcppub",
         "ws://127.0.0.1:8010/publish_pub"
     ]
         for sub_url in [
@@ -102,7 +103,7 @@ try
         @info "Windows platform detected: skipping test_https"
     else
         # create keystore
-        test_keystore = "/tmp/keystore"
+        test_keystore = joinpath(tempdir(), "keystore")
         script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
         ENV["REMBUS_KEYSTORE"] = test_keystore
         ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)

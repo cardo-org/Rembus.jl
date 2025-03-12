@@ -83,14 +83,14 @@ function load_token_app(router)
 end
 
 broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
-broker_dir(name::AbstractString) = joinpath(@load_preference("rembus_dir"), name)
+broker_dir(name::AbstractString) = joinpath(rembus_dir(), name)
 
 function keystore_dir()
-    return get(ENV, "REMBUS_KEYSTORE", joinpath(@load_preference("rembus_dir"), "keystore"))
+    return get(ENV, "REMBUS_KEYSTORE", joinpath(rembus_dir(), "keystore"))
 end
 
 keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "keys")
-keys_dir(name::AbstractString) = joinpath(@load_preference("rembus_dir"), name, "keys")
+keys_dir(name::AbstractString) = joinpath(rembus_dir(), name, "keys")
 
 function messages_dir(r::Router)
     return joinpath(r.settings.rembus_dir, r.process.supervisor.id, "messages")
@@ -99,7 +99,7 @@ end
 messages_dir(t::Twin) = messages_dir(t.router)
 
 function messages_dir(broker::AbstractString)
-    return joinpath(@load_preference("rembus_dir"), broker, "messages")
+    return joinpath(rembus_dir(), broker, "messages")
 end
 
 function fullname(basename::AbstractString)
@@ -120,10 +120,10 @@ function key_base(router::Router, cid::AbstractString)
 end
 
 function key_base(broker_name::AbstractString, cid::AbstractString)
-    return joinpath(@load_preference("rembus_dir"), broker_name, "keys", cid)
+    return joinpath(rembus_dir(), broker_name, "keys", cid)
 end
 
-function key_file(router::Router, cid::AbstractString)
+function key_file(router::AbstractRouter, cid::AbstractString)
     basename = key_base(router, cid)
     return fullname(basename)
 end
@@ -251,89 +251,108 @@ function load_admins(router)
 end
 
 #=
-    load_twins(router)
+    load_twin(twin)
 
-Instantiates twins that subscribed to one or more topics.
+Load the persisted twin configuration from disk.
 =#
-function load_twins(router)
-    @debug "loading subscribers table"
-    fn = joinpath(broker_dir(router), "subscribers.json")
+function load_twin(twin::Twin)
+    @debug "[$twin] loading configuration"
+    twinid = tid(twin)
+    fn = joinpath(broker_dir(twin.router), "twins", "$twinid.json")
     if isfile(fn)
         content = read(fn, String)
-        twin_topicsdict = JSON3.read(content, Dict, allow_inf=true)
+        cfg = JSON3.read(content, Dict, allow_inf=true)
     else
-        twin_topicsdict = Dict()
+        cfg = Dict()
     end
 
-    twins = Dict()
-    for (cid, topicsdict) in twin_topicsdict
-        twin = bind(router, RbURL(cid))
+    if haskey(cfg, "subscribers")
+        topicsdict = cfg["subscribers"]
         twin.msg_from = topicsdict
 
+        topic_interests = twin.router.topic_interests
         for topic in keys(topicsdict)
-            if haskey(twins, topic)
-                push!(twins[topic], twin)
+            if haskey(topic_interests, topic)
+                push!(topic_interests[topic], twin)
             else
-                twins[topic] = Set([twin])
+                topic_interests[topic] = Set([twin])
             end
         end
     end
 
-    for (topic, twins) in twins
-        router.topic_interests[topic] = twins
-    end
-end
-
-function save_marks(router)
-    @debug "saving twin marks"
-    fn = joinpath(broker_dir(router), "twins.json")
-    twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
-    for twin in values(router.id_twin)
-        # save only named twins, anonymous twin cannot be msg_from
-        if hasname(twin)
-            twin_mark[tid(twin)] = twin.mark
-        end
-    end
-    JSON3.write(fn, twin_mark)
-end
-
-function load_marks(router)
-    @debug "loading twin marks"
-    fn = joinpath(broker_dir(router), "twins.json")
-    if isfile(fn)
-        content = read(fn, String)
-        twinid_mark = JSON3.read(content, Dict{String,UInt64})
-        router.mcounter = pop!(twinid_mark, "__counter__")
-        for (id, mark) in twinid_mark
-            if haskey(router.id_twin, id)
-                router.id_twin[id].mark = mark
+    if haskey(cfg, "exposers")
+        topics = cfg["exposers"]
+        topic_impls = twin.router.topic_impls
+        for topic in topics
+            if haskey(topic_impls, topic)
+                push!(topic_impls[topic], twin)
+            else
+                topic_impls[topic] = Set([twin])
             end
         end
+    end
+
+    if haskey(cfg, "mark")
+        twin.mark = cfg["mark"]
     end
 end
 
 #=
-    save_twins(router)
+Persist router configuration.
 
-Persist twins to storage.
-
-Save twins configuration only if twin has a name.
-
-Persist undelivered messages if they are queued in memory.
+at the moment the only persisted value is the pubsub message counter.
 =#
-function save_twins(router)
-    @debug "saving subscribers table"
-    twin_cfg = Dict{String,Dict{String,Float64}}()
-    for (twin_id, twin) in router.id_twin
-        if hasname(twin)
-            # TODO: finalizer callback
-            #router.twin_finalize(router.shared, twin)
-            twin_cfg[twin_id] = twin.msg_from
+function save_router_config(router)
+    @debug "saving twin marks"
+    fn = joinpath(broker_dir(router), "router.json")
+    twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
+    JSON3.write(fn, twin_mark)
+end
+
+function load_router_config(router)
+    @debug "loading twin marks"
+    fn = joinpath(broker_dir(router), "router.json")
+    if isfile(fn)
+        content = read(fn, String)
+        twinid_mark = JSON3.read(content, Dict{String,UInt64})
+        router.mcounter = pop!(twinid_mark, "__counter__")
+    end
+end
+
+function exposed_topics(twin::Twin)
+    router = twin.router
+
+    topics = []
+
+    for (topic, twins) in router.topic_impls
+        if twin in twins
+            push!(topics, topic)
         end
     end
-    fn = joinpath(broker_dir(router), "subscribers.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(twin_cfg, allow_inf=true))
+
+    return topics
+end
+
+function save_twin(twin::Twin)
+    @debug "[$twin] saving methods configuration"
+    router = twin.router
+    twinid = tid(twin)
+    twin_cfg = Dict()
+
+    if hasname(twin) && haskey(router.id_twin, twinid) && !isrepl(twin.uid)
+        twin_cfg["subscribers"] = twin.msg_from
+        twin_cfg["exposers"] = exposed_topics(twin)
+        twin_cfg["mark"] = twin.mark
+
+        dir = joinpath(broker_dir(router), "twins")
+        if !isdir(dir)
+            mkpath(dir)
+        end
+
+        fn = joinpath(dir, "$twinid.json")
+        open(fn, "w") do io
+            write(io, JSON3.write(twin_cfg, allow_inf=true))
+        end
     end
 end
 
@@ -348,21 +367,23 @@ function save_configuration(router::Router)
         save_impl_table(router)
         save_topic_auth_table(router)
         save_admins(router)
-        save_twins(router)
-        save_marks(router)
+
+        for twin in values(router.id_twin)
+            save_twin(twin)
+        end
+        save_router_config(router)
     end
 end
 
 function load_configuration(router)
     callback_or(router, :load_configuration) do
         @debug "[$router] loading configuration from $(broker_dir(router))"
-        load_twins(router)
         load_impl_table(router)
         load_topic_auth_table(router)
         load_admins(router)
         router.owners = load_tenants(router)
         router.component_owner = load_tenant_component(router)
-        load_marks(router)
+        load_router_config(router)
     end
 
     router.start_ts = time()

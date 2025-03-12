@@ -329,6 +329,13 @@ function reset_probe!(twin::Twin)
     probe!(twin)
 end
 
+function probe_add(msg::RembusMsg, dir::InOut)
+    if isdefined(msg, :twin)
+        twin = msg.twin
+        twin.probe && probe_add(twin, msg, dir)
+    end
+end
+
 function probe_add(twin::Twin, msg::RembusMsg, dir::InOut)
     key = path(twin)
     if !haskey(probeCollector, key)

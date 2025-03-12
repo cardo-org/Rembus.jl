@@ -158,7 +158,6 @@ else
         execute(() -> wrong_keys(cid), broker_name, secure=true, tcp=8001, ws=8000)
 
         private_fn = Rembus.pkfile(cid)
-        @info "******** PRIVATE: $private_fn"
         rm(private_fn)
         execute(() -> missing_keys(cid), broker_name, secure=true, tcp=8001, ws=8000)
 

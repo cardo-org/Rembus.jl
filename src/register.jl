@@ -68,7 +68,7 @@ function register(
         value = parse(Int, pin, base=16)
         msgid = id() & 0xffffffffffffffffffffffff00000000 + value
 
-        msg = Register(msgid, cmp.id, tenant, pubkey, scheme)
+        msg = Register(twin, msgid, cmp.id, tenant, pubkey, scheme)
         futresponse = send_msg(twin, msg)
         response = fetch(futresponse.future)
         if isa(response, Exception)
@@ -106,7 +106,7 @@ function unregister(twin::Twin)
     cid = twin.uid.id
     @debug "unregistering $cid"
 
-    msg = Unregister(cid)
+    msg = Unregister(twin, cid)
     futresponse = send_msg(twin, msg)
     response = fetch(futresponse.future)
     if isa(response, RembusTimeout)
@@ -160,7 +160,9 @@ function register_node(router, msg)
     @debug "registering pubkey of $(msg.cid), id: $(msg.id), tenant: $(msg.tenant)"
 
     if !isenabled(router, msg.tenant)
-        return ResMsg(msg.id, STS_GENERIC_ERROR, "tenant [$(msg.tenant)] not enabled")
+        return ResMsg(
+            msg.twin, msg.id, STS_GENERIC_ERROR, "tenant [$(msg.tenant)] not enabled"
+        )
     end
 
     sts = STS_SUCCESS
@@ -187,7 +189,7 @@ function register_node(router, msg)
         end
         save_tenant_component(router, router.component_owner)
     end
-    return ResMsg(msg.id, sts, reason)
+    return ResMsg(msg.twin, msg.id, sts, reason)
 end
 
 #=
@@ -195,12 +197,13 @@ end
 
 Unregister a component.
 =#
-function unregister_node(router, twin, msg)
+function unregister_node(router, msg)
     @debug "[$twin] unregistering $(msg.cid), isauth: $(twin.isauth)"
+    twin = msg.twin
     sts = STS_SUCCESS
     reason = nothing
 
-    if !twin.isauth
+    if !command_permitted(twin) || !twin.isauth
         sts = STS_GENERIC_ERROR
         reason = "invalid operation"
     else
@@ -208,7 +211,7 @@ function unregister_node(router, twin, msg)
         deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
         save_tenant_component(router, router.component_owner)
     end
-    response = ResMsg(msg.id, sts, reason)
+    response = ResMsg(twin, msg.id, sts, reason)
     put!(twin.process.inbox, response)
 
     return nothing

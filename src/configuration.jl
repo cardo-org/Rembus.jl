@@ -1,6 +1,6 @@
 
-function dumperror(router, e)
-    if router.settings.stacktrace
+function dumperror(e)
+    if get(getcfg(), "stacktrace", false)
         showerror(stdout, e, catch_backtrace())
     end
 end
@@ -58,6 +58,11 @@ function string_to_enum(connection_mode)
     else
         error("invalid connection_mode [$connection_mode]")
     end
+end
+
+function request_timeout()
+    cfg = getcfg()
+    get(cfg, "request_timeout", get(ENV, "REMBUS_TIMEOUT", "5"))
 end
 
 function request_timeout!(newval)

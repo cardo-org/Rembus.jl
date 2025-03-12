@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-function Rembus.transport_send(socket, msg::Rembus.Ack2Msg)
+function Rembus.transport_send(socket::Rembus.WS, msg::Rembus.Ack2Msg)
     return true
 end
 
@@ -62,7 +62,7 @@ try
     sub_url = "ws://127.0.0.1:8010/sub"
 
     Rembus.request_timeout!(20)
-    rb = broker(ws=8010)
+    rb = broker(ws=8010, name="already_received")
     run(pub_url, sub_url)
 catch e
     @error "[already_received] error: $e"

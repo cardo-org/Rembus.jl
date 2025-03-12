@@ -14,8 +14,9 @@ abstract type RembusTopicMsg <: RembusMsg end
 struct PingMsg <: RembusMsg
     id::UInt128
     cid::String
-    PingMsg(id::UInt128, cid::String) = new(id, cid)
-    PingMsg(cid::String) = new(id(), cid)
+    twin::Twin
+    PingMsg(twin::Twin, id::UInt128, cid::String) = new(id, cid, twin)
+    PingMsg(twin::Twin, cid::String) = new(id(), cid, twin)
 end
 
 Base.show(io::IO, m::PingMsg) = show(io, "PING|$(m.id)|$(m.cid)")
@@ -108,12 +109,14 @@ struct EnableReactiveMsg <: RembusMsg
 end
 
 struct AckMsg <: RembusMsg
+    twin::Twin
     id::UInt128
 end
 
 Base.show(io::IO, m::AckMsg) = show(io, "ACK|$(m.id)")
 
 struct Ack2Msg <: RembusMsg
+    twin::Twin
     id::UInt128
 end
 
@@ -127,7 +130,9 @@ mutable struct ResMsg{T} <: RembusMsg
     twin::Twin
     reqdata::Any
 
-    ResMsg(id::UInt128, status, data, flags=0x0) = new{typeof(data)}(id, status, data, flags)
+    ResMsg(
+        twin::Twin, id::UInt128, status, data, flags=0x0
+    ) = new{typeof(data)}(id, status, data, flags, twin)
 
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
         return new{typeof(data)}(req.id, status, data, flags)
@@ -146,12 +151,14 @@ struct Register <: RembusMsg
     tenant::Union{Nothing,String}
     pubkey::Vector{UInt8}
     type::UInt8
+    twin::Twin
     Register(
+        twin::Twin,
         msgid::UInt128,
         cid::AbstractString,
         tenant::Union{Nothing,AbstractString},
         pubkey::Vector{UInt8},
-        type::UInt8) = new(msgid, cid, tenant, pubkey, type)
+        type::UInt8) = new(msgid, cid, tenant, pubkey, type, twin)
 end
 
 Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)|$(m.tenant)")
@@ -159,8 +166,9 @@ Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)|$(m.tenant)")
 struct Unregister <: RembusMsg
     id::UInt128
     cid::String # client name
-    Unregister(cid::String) = new(id(), cid)
-    Unregister(msgid::UInt128, cid::String) = new(msgid, cid)
+    twin::Twin
+    Unregister(twin::Twin, cid::String) = new(id(), cid, twin)
+    Unregister(twin::Twin, msgid::UInt128, cid::String) = new(msgid, cid, twin)
 end
 
 Base.show(io::IO, m::Unregister) = show(io, "UNREG|$(m.id)|$(m.cid)")
@@ -170,16 +178,17 @@ struct Attestation <: RembusMsg
     cid::String # client name
     signature::Vector{UInt8}
     meta::Dict
+    twin::Twin
     function Attestation(
-        cid::AbstractString, signature::Vector{UInt8}, meta::Dict
+        twin::Twin, cid::AbstractString, signature::Vector{UInt8}, meta::Dict
     )
-        return new(CONNECTION_ID, cid, signature, meta)
+        return new(CONNECTION_ID, cid, signature, meta, twin)
     end
 
     function Attestation(
-        msgid::UInt128, cid::AbstractString, signature::Vector{UInt8}, meta::Dict
+        twin::Twin, msgid::UInt128, cid::AbstractString, signature::Vector{UInt8}, meta::Dict
     )
-        return new(msgid, cid, signature, meta)
+        return new(msgid, cid, signature, meta, twin)
     end
 end
 
@@ -188,6 +197,9 @@ Base.show(io::IO, m::Attestation) = show(io, "ATT|$(m.id)|$(m.cid)")
 # Message for notifying the broker that the component is closing the socket.
 # Apply to ZeroMQ protocol.
 struct Close <: RembusMsg
+    twin::Twin
+    Close() = new()
+    Close(twin) = new(twin)
 end
 
 function id()

@@ -9,6 +9,11 @@ using Test
 Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
 Rembus.request_timeout!(20)
 
+atexit() do
+    fn = joinpath(@__DIR__, "..", "LocalPreferences.toml")
+    rm(fn, force=true)
+end
+
 # default ca certificate name
 const REMBUS_CA = "rembus-ca.crt"
 
@@ -61,7 +66,7 @@ macro broker(init, secure, ws, tcp, zmq, http, name, reset, authenticated, log)
                 fn()
             end
 
-            Rembus.start_broker(
+            Rembus.get_router(
                 secure=$(esc(secure)),
                 ws=$(esc(ws)),
                 tcp=$(esc(tcp)),

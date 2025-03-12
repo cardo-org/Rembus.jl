@@ -77,7 +77,7 @@ try
 
     set_preferences!(Rembus, "db_max_messages" => 2)
     Rembus.request_timeout!(20)
-    rb = broker(ws=8010)
+    rb = broker(ws=8010, name="saved_messages")
     produce(pub_url)
     consume(sub_url)
 catch e

@@ -29,7 +29,6 @@ function run(authorized_component)
 
     rb = connect(authorized_component)
 
-    #res = fetch(authorize(rb, myconsumer, priv_topic))
     res = authorize(rb, myconsumer, priv_topic)
     @test isnothing(res)
 
@@ -130,6 +129,7 @@ function run(authorized_component)
 
     public_topic(rb, priv_topic)
     subscribe(unauth_consumer, priv_topic, consume)
+    unsubscribe(unauth_consumer, priv_topic)
 
     # producer is not authorized
     try
