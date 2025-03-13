@@ -1,14 +1,19 @@
 # Changelog
 
-## 0.6.0 [2025-02-26]
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## 1.0.0 [Unreleased]
 
 ### Added
 
-- Prometheus integration
+- Prometheus integration.
 
 ### Changed
 
-- Renamed function/macro forever(rb)/@forever to wait(rb)/@wait
+- Renamed function/macro forever(rb)/@forever to wait(rb)/@wait.
+
+- `rpc`, `direct` and `publish` accepts varargs instead of a Vector of arguments.
 
 ### Removed
 

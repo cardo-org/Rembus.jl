@@ -4,6 +4,8 @@ broker_name = "zmq_resend_attestate"
 pin = "11223344"
 node_url = "zmq://:8012/zmq_resend_attestate_node"
 
+#Rembus.debug!()
+
 function init(pin)
     broker_dir = Rembus.broker_dir(broker_name)
     if !isdir(broker_dir)
@@ -20,7 +22,7 @@ end
 
 @info "[zmq_resend_attestate] start"
 try
-    Rembus.zmq_ping_interval!(20)
+    Rembus.zmq_ping_interval!(3)
     Rembus.challenge_timeout!(2)
 
     init(pin)
@@ -46,11 +48,9 @@ try
     shutdown(rb)
     sleep(1)
     @info "[zmq_resend_attestate] zmq_ping_interval:$(rb.router.settings.zmq_ping_interval)"
-    Rembus.zmq_ping(auth_node)
-    Rembus.zmq_ping(named_node)
 
     rb = broker(zmq=8012, name=broker_name)
-    sleep(1)
+    sleep(3)
     Rembus.probe_pprint(auth_node)
 catch e
     @error "[zmq_resend_attestate] error: $e"

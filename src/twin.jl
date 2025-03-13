@@ -1,16 +1,11 @@
-set_twin(router, id, twin) = router.id_twin[id] = twin
-
-function start_twin(twin::Twin)
-    router = twin.router
-    while !isnothing(router.downstream)
-        router = router.downstream
-    end
-
+#=
+Start the twin process and add to the router id_twin map.
+=#
+function start_twin(router::Router, twin::Twin)
     id = tid(twin)
     spec = process(id, twin_task, args=(twin,))
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
-
     router.id_twin[id] = twin
     #router.twin_initialize(router.shared, twin)
     return twin
@@ -25,13 +20,14 @@ Required by ZeroMQ socket.
 =#
 function zmq_ping(twin::Twin)
     try
-        @debug "[$twin] zmq ping ($(typeof(twin.socket)))"
+        @debug "[$twin] zmq ping"
         if iszmq(twin)
+            router = last_downstream(twin.router)
             if isopen(twin.socket)
                 send_msg(twin, PingMsg(twin, twin.uid.id)) |> fetch
             end
-            if twin.router.settings.zmq_ping_interval > 0
-                Timer(tmr -> zmq_ping(twin), twin.router.settings.zmq_ping_interval)
+            if router.settings.zmq_ping_interval > 0
+                Timer(tmr -> zmq_ping(twin), router.settings.zmq_ping_interval)
             end
         end
     catch e
@@ -51,14 +47,14 @@ function pkfile(name; create_dir=false)
     return joinpath(cfgdir, ".secret")
 end
 
-function resend_attestate(twin::Twin, response)
+function resend_attestate(router::Router, twin::Twin, response)
     if !hasname(twin)
         return nothing
     end
-    msg = attestate(twin, response)
+    msg = attestate(router, twin, response)
     put!(twin.process.inbox, msg)
-    if twin.uid.protocol == :zmq && twin.router.settings.zmq_ping_interval > 0
-        Timer(tmr -> zmq_ping(twin), twin.router.settings.zmq_ping_interval)
+    if twin.uid.protocol == :zmq && router.settings.zmq_ping_interval > 0
+        Timer(tmr -> zmq_ping(twin), router.settings.zmq_ping_interval)
     end
 
     return nothing
@@ -71,14 +67,17 @@ function sign(ctx::MbedTLS.PKContext, hash_alg::MbedTLS.MDKind, hash, rng)
     output[1:len]
 end
 
-function attestate(twin, response)
+#=
+Create the Attestation message to be sent by the connecting node.
+=#
+function attestate(router::Router, twin::Twin, response)
     cid = twin.uid.id
     file = pkfile(cid)
     if !isfile(file)
         error("missing/invalid $cid secret")
     end
 
-    meta = Dict(string(proto) => lner.port for (proto, lner) in twin.router.listeners)
+    meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
     try
         ctx = MbedTLS.parse_keyfile(file)
         plain = encode([Vector{UInt8}(response_data(response)), cid])
@@ -109,9 +108,9 @@ end
 A broker with ConnectionMode equal to authenticated send immediately
 a challenge.
 =#
-function await_challenge(twin::Twin)
+function await_challenge(router::Router, twin::Twin)
     @debug "[$twin] awaiting challenge"
-    t = Timer((tim) -> await_challenge_timeout(twin), twin.router.settings.request_timeout)
+    t = Timer((tim) -> await_challenge_timeout(twin), router.settings.request_timeout)
     rf = FutureResponse(nothing, t)
     twin.socket.out[CONNECTION_ID] = rf
     response = fetch(rf.future)
@@ -127,10 +126,11 @@ function await_challenge(twin::Twin)
 end
 
 function keep_alive(twin)
-    twin.router.settings.ws_ping_interval == 0 && return
+    router = last_downstream(twin.router)
+    router.settings.ws_ping_interval == 0 && return
     try
         while true
-            sleep(twin.router.settings.ws_ping_interval)
+            sleep(router.settings.ws_ping_interval)
             (isa(twin.socket, WS) &&
              isopen(twin.socket.sock.io)) ? WebSockets.ping(twin.socket.sock) : break
         end
@@ -165,7 +165,8 @@ Save to file the ids of received Pub/Sub messages
 waitings Ack2 acknowledgements.
 =#
 function save_pubsub_received(twin::Twin)
-    path = acks_file(twin.router, twin.uid.id)
+    router = last_downstream(twin.router)
+    path = acks_file(router, twin.uid.id)
     save_object(path, twin.ackdf)
 end
 
@@ -455,8 +456,8 @@ function close_twin(twin::Twin)
         twin.process.phase = :closing
         shutdown(twin.process)
     end
-
-    delete!(twin.router.id_twin, tid(twin))
+    router = last_downstream(twin.router)
+    delete!(router.id_twin, tid(twin))
     return nothing
 end
 
@@ -491,23 +492,23 @@ component identifier each time the application connect to the broker.
 function do_connect(twin::Twin)
     @debug "[$twin] connect mode: $(twin.router.settings.connection_mode)"
     if !isopen(twin.socket)
-        if twin.router.settings.connection_mode === authenticated
+        router = last_downstream(twin.router)
+        if router.settings.connection_mode === authenticated
             if !hasname(twin)
                 error("anonymous components not allowed")
             end
             transport_connect(twin)
-            await_challenge(twin)
+            await_challenge(router, twin)
         else
             transport_connect(twin)
-            authenticate(twin)
+            authenticate(router, twin)
         end
     end
 
     return isopen(twin.socket)
 end
 
-function update_tables(twin::Twin, exports)
-    router = twin.router
+function update_tables(router::Router, twin::Twin, exports)
     if isnothing(exports)
         return nothing
     end
@@ -530,32 +531,35 @@ function update_tables(twin::Twin, exports)
     return nothing
 end
 
-function authenticate(twin)
+#=
+The connecting node declare its identity to the broker and authenticate if prompted.
+=#
+function authenticate(router::Router, twin::Twin)
     if !hasname(twin) || isa(twin.socket, Float)
         return nothing
     end
 
-    meta = Dict(string(proto) => lner.port for (proto, lner) in twin.router.listeners)
+    meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
     reason = nothing
     msg = IdentityMsg(twin, cid(twin), meta)
-    response = twin_request(twin, msg, twin.router.settings.request_timeout)
+    response = twin_request(twin, msg, router.settings.request_timeout)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)
         close(twin.socket)
         throw(AlreadyConnected(tid(twin)))
     elseif (response.status == STS_CHALLENGE)
-        msg = attestate(twin, response)
-        response = twin_request(twin, msg, twin.router.settings.request_timeout)
+        msg = attestate(router, twin, response)
+        response = twin_request(twin, msg, router.settings.request_timeout)
     end
 
     if (response.status != STS_SUCCESS)
         close(twin.socket)
         rembuserror(code=response.status, reason=reason)
     else
-        update_tables(twin, response_data(response))
+        update_tables(router, twin, response_data(response))
         if iszmq(twin)
-            twin.router.settings.zmq_ping_interval > 0 &&
-                Timer(tmr -> zmq_ping(twin), twin.router.settings.zmq_ping_interval)
+            router.settings.zmq_ping_interval > 0 &&
+                Timer(tmr -> zmq_ping(twin), router.settings.zmq_ping_interval)
         end
     end
 
@@ -567,7 +571,7 @@ end
 
 Update twin identity parameters.
 =#
-function setidentity(router, twin, msg; isauth=false)
+function setidentity(router::Router, twin::Twin, msg; isauth=false)
     delete!(router.id_twin, tid(twin))
     twin.uid = RbURL(msg.cid)
     router.id_twin[tid(twin)] = twin
@@ -577,7 +581,7 @@ function setidentity(router, twin, msg; isauth=false)
     return nothing
 end
 
-function verify_signature(twin, msg)
+function verify_signature(router::Router, twin::Twin, msg)
     if !haskey(twin.handler, "challenge")
         error("[$twin] challenge not found")
     end
@@ -585,7 +589,7 @@ function verify_signature(twin, msg)
     fn = pop!(twin.handler, "challenge")
     challenge = fn(twin)
     @debug "verify signature, challenge $challenge"
-    file = pubkey_file(twin.router, msg.cid)
+    file = pubkey_file(router, msg.cid)
     try
         ctx = MbedTLS.parse_public_keyfile(file)
         plain = encode([challenge, msg.cid])
@@ -609,12 +613,12 @@ function verify_signature(twin, msg)
     return true
 end
 
-function login(router, twin, msg)
+function login(router::Router, twin::Twin, msg)
     if isdefined(router.plugin, :login)
         login_fn = getfield(router.plugin, :login)
         login_fn(twin, msg.cid, msg.signature) || error("authentication failed")
     else
-        verify_signature(twin, msg)
+        verify_signature(router, twin, msg)
     end
 
     @debug "[$(msg.cid)] is authenticated"
@@ -664,7 +668,7 @@ Authenticate the client.
 
 If authentication fails then close the websocket.
 =#
-function attestation(router, twin, msg, authenticate=true)
+function attestation(router::Router, twin::Twin, msg, authenticate=true)
     @debug "[$twin] binding cid: $(msg.cid), authenticate: $authenticate"
     sts = STS_SUCCESS
     reason = nothing
@@ -722,7 +726,7 @@ function receiver_exception(twin, e)
     end
 end
 
-function remove_twin(router, twin)
+function remove_twin(router::Router, twin::Twin)
     delete!(router.id_twin, tid(twin))
 end
 
@@ -733,7 +737,7 @@ Remove the twin from the system.
 
 Shutdown the process and remove the twin from the router.
 =#
-function destroy_twin(twin, router)
+function destroy_twin(twin::Twin, router::Router)
     detach(twin)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
@@ -743,12 +747,12 @@ function destroy_twin(twin, router)
     return nothing
 end
 
-function end_receiver(twin)
+function end_receiver(twin::Twin)
     twin.reactive = false
     if hasname(twin)
         detach(twin)
     else
-        destroy_twin(twin, twin.router)
+        destroy_twin(twin, last_downstream(twin.router))
     end
 end
 
@@ -771,12 +775,12 @@ Return true if the component is authenticated.
 """
 isauthenticated(twin::Twin) = twin.isauth
 
-router_isauthenticated(router) = router.mode === authenticated
+router_isauthenticated(router::Router) = router.mode === authenticated
 
 #=
 Check if twin has the privilege to execute a command.
 =#
-function command_permitted(router, twin)
+function command_permitted(router::Router, twin::Twin)
     res = true
     if router_isauthenticated(router)
         res = isauthenticated(twin)
@@ -790,7 +794,7 @@ function command_permitted(router, twin)
     return res
 end
 
-function pubsub_msg(router, msg)
+function pubsub_msg(router::Router, msg)
     twin = msg.twin
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
@@ -847,7 +851,7 @@ function ack_msg(msg)
     return nothing
 end
 
-function admin_msg(router, msg)
+function admin_msg(router::Router, msg)
     twin = msg.twin
 
     if !command_permitted(router, twin)
@@ -874,7 +878,7 @@ function admin_msg(router, msg)
     return true
 end
 
-function rpc_request(router, msg, implementor_rule)
+function rpc_request(router::Router, msg, implementor_rule)
     twin = msg.twin
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
@@ -973,9 +977,9 @@ the broker sent an unsolicited challenge and the client at the same time
 sent an Identity message. In this case the Identity response is delayed
 until the original challenge is resolved with an Attestation.
 =#
-function await_attestation(twin, socket, msg)
+function await_attestation(router::Router, twin::Twin, socket, msg)
     future = Distributed.Future()
-    t = Timer(twin.router.settings.request_timeout) do _t
+    t = Timer(router.settings.request_timeout) do _t
         put!(future, ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing))
     end
 
@@ -985,7 +989,7 @@ function await_attestation(twin, socket, msg)
     transport_send(socket, ResMsg(twin, msg.id, sts, nothing))
 end
 
-function challenge(router, twin, msgid)
+function challenge(router::Router, twin::Twin, msgid)
     #    if haskey(twin.handler, "challenge")
     #        challenge_val = twin.handler["challenge"](twin)
     #    else
@@ -1004,7 +1008,7 @@ end
 
 Receive messages from the client socket (ws or tcp).
 =#
-function twin_receiver(twin)
+function twin_receiver(twin::Twin)
     @debug "[$twin] client is connected"
     try
         ws = twin.socket.sock
@@ -1030,7 +1034,7 @@ function twin_receiver(twin)
 end
 
 
-function challenge_if_auth(router, twin)
+function challenge_if_auth(router::Router, twin::Twin)
     if router.mode === authenticated
         chl = challenge(router, twin, CONNECTION_ID)
         transport_send(twin, chl)
@@ -1044,14 +1048,14 @@ function challenge_if_auth(router, twin)
     end
 end
 
-function if_authenticated(router, twin_id)
+function if_authenticated(router::Router, twin_id)
     return key_file(router, twin_id) !== nothing || router.mode === authenticated
 end
 
 #=
 Entry point of a new connection request from a node.
 =#
-function client_receiver(router::AbstractRouter, socket)
+function client_receiver(router::Router, socket)
     twin = bind(router, RbURL())
     twin.socket = socket
     @debug "[$twin] anonymous client connected"
@@ -1061,18 +1065,11 @@ function client_receiver(router::AbstractRouter, socket)
     return nothing
 end
 
-function client_receiver(twin::Twin)
-    @debug "[$twin] name client connected"
-    twin_receiver(twin)
-    return nothing
-end
-
-
 function ws_server!(router::Router, server)
     router.ws_server = server
 end
 
-function listener(proc, port, router, sslconfig)
+function listener(proc, port, router::Router, sslconfig)
     IP = "0.0.0.0"
     server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), port))
     # router.ws_server = server

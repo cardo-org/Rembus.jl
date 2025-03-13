@@ -93,11 +93,11 @@ keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "
 keys_dir(name::AbstractString) = joinpath(rembus_dir(), name, "keys")
 
 function messages_dir(r::AbstractRouter)
-    r = latest_downstream(r)
+    r = last_downstream(r)
     return joinpath(r.settings.rembus_dir, r.process.supervisor.id, "messages")
 end
 
-messages_dir(t::Twin) = messages_dir(latest_downstream(t.router))
+messages_dir(t::Twin) = messages_dir(last_downstream(t.router))
 
 function messages_dir(broker::AbstractString)
     return joinpath(rembus_dir(), broker, "messages")
@@ -146,7 +146,7 @@ function save_table(router, router_tbl, filename)
     end
 end
 
-function save_impl_table(router)
+function save_impl_table(router::Router)
     @debug "saving exposers table"
     save_table(router, router.topic_impls, "exposers.json")
 end
@@ -258,7 +258,7 @@ Load the persisted twin configuration from disk.
 =#
 function load_twin(twin::Twin)
     @debug "[$twin] loading configuration"
-    router = latest_downstream(twin.router)
+    router = last_downstream(twin.router)
     twinid = tid(twin)
     fn = joinpath(broker_dir(router), "twins", "$twinid.json")
     if isfile(fn)
@@ -321,11 +321,8 @@ function load_router_config(router)
     end
 end
 
-function exposed_topics(twin::Twin)
-    router = twin.router
-
+function exposed_topics(router::Router, twin::Twin)
     topics = []
-
     for (topic, twins) in router.topic_impls
         if twin in twins
             push!(topics, topic)
@@ -335,15 +332,14 @@ function exposed_topics(twin::Twin)
     return topics
 end
 
-function save_twin(twin::Twin)
+function save_twin(router::Router, twin::Twin)
     @debug "[$twin] saving methods configuration"
-    router = twin.router
     twinid = tid(twin)
     twin_cfg = Dict()
 
     if hasname(twin) && haskey(router.id_twin, twinid) && !isrepl(twin.uid)
         twin_cfg["subscribers"] = twin.msg_from
-        twin_cfg["exposers"] = exposed_topics(twin)
+        twin_cfg["exposers"] = exposed_topics(router, twin)
         twin_cfg["mark"] = twin.mark
 
         dir = joinpath(broker_dir(router), "twins")
@@ -371,7 +367,7 @@ function save_configuration(router::Router)
         save_admins(router)
 
         for twin in values(router.id_twin)
-            save_twin(twin)
+            save_twin(router, twin)
         end
         save_router_config(router)
     end

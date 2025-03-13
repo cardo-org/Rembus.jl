@@ -233,13 +233,17 @@ function Base.fetch(response::FutureResponse)
         throw(res)
     end
     if res.status !== STS_SUCCESS
-        topic = nothing
-        if isa(response.request, RembusTopicMsg)
-            topic = response.request.topic
+        if res.status == STS_CHALLENGE
+            resend_attestate(last_downstream(res.twin.router), res.twin, res)
+        else
+            topic = nothing
+            if isa(response.request, RembusTopicMsg)
+                topic = response.request.topic
+            end
+            rembuserror(
+                code=res.status, topic=topic, reason=response_data(res)
+            )
         end
-        rembuserror(
-            code=res.status, topic=topic, reason=response_data(res)
-        )
     elseif isa(res.data, IOBuffer)
         # data is an IOBuffer if transport is websocket or tcp
         return dataframe_if_tagvalue(decode(res.data))
@@ -249,7 +253,8 @@ function Base.fetch(response::FutureResponse)
 end
 
 function send_msg(twin, msg)
-    timer = Timer(twin.router.settings.request_timeout) do tmr
+    router = last_downstream(twin.router)
+    timer = Timer(router.settings.request_timeout) do tmr
         if haskey(twin.socket.direct, msg.id)
             put!(twin.socket.direct[msg.id].future, RembusTimeout("$msg timeout"))
             delete!(twin.socket.direct, msg.id)

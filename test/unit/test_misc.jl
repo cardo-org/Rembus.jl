@@ -99,12 +99,10 @@ end
 end
 
 @testitem "showerror" begin
-    ENV["REMBUS_DEBUG"] = "1"
-    router = Rembus.Router{Rembus.Twin}("test_router")
-    router.settings.stacktrace = true
-
+    Rembus.stacktrace!()
     e = ErrorException("test error")
     Rembus.dumperror(e)
+    Rembus.stacktrace!(false)
 end
 
 @testitem "string_to_enum" begin
@@ -157,4 +155,9 @@ end
 @testitem "node" begin
     node = Rembus.Node("ws://myhost:8765/mycid")
     @test node.protocol === :ws
+end
+
+@testitem "request_timeout" begin
+    ENV["REMBUS_TIMEOUT"] = "10"
+    @test Rembus.request_timeout() == 10
 end

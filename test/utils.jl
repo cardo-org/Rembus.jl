@@ -6,6 +6,15 @@ using Logging
 using Rembus
 using Test
 
+mutable struct Proxy <: Rembus.AbstractRouter
+    downstream::Union{Nothing,Rembus.AbstractRouter}
+    upstream::Union{Nothing,Rembus.AbstractRouter}
+    process::Visor.Process
+    function Proxy()
+        return new(nothing, nothing)
+    end
+end
+
 Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
 Rembus.request_timeout!(20)
 
@@ -17,12 +26,22 @@ end
 # default ca certificate name
 const REMBUS_CA = "rembus-ca.crt"
 
-results = []
+function proxy_task(self, router)
+    for msg in self.inbox
+        #@debug "[proxy] recv: $msg"
+        !isshutdown(msg) || break
 
-function modify_env(var, value)
-    current_val = get(ENV, var, nothing)
-    ENV[var] = value
-    return current_val
+        # route to downstream broker
+        put!(router.downstream.process.inbox, msg)
+    end
+end
+
+function start_proxy(supervisor_name, downstream_router)
+    proxy = Proxy()
+    Rembus.upstream!(downstream_router, proxy)
+    sv = from(supervisor_name)
+    proxy.process = process("proxy", proxy_task, args=(proxy,))
+    startup(sv, proxy.process)
 end
 
 """
@@ -54,29 +73,30 @@ function check_sentinel(ctx; sentinel=missing, max_wait=10)
     return sts
 end
 
-macro broker(init, secure, ws, tcp, zmq, http, name, reset, authenticated, log)
-    quote
-        running = get(ENV, "BROKER_RUNNING", "0") !== "0"
-        if !running
-            if $(esc(reset))
-                Rembus.broker_reset($(esc(name)))
-            end
-            fn = $(esc(init))
-            if fn !== nothing
-                fn()
-            end
-
-            Rembus.get_router(
-                secure=$(esc(secure)),
-                ws=$(esc(ws)),
-                tcp=$(esc(tcp)),
-                zmq=$(esc(zmq)),
-                http=$(esc(http)),
-                name=$(esc(name)),
-                authenticated=$(esc(authenticated)),
-            )
+function run_broker(init, secure, ws, tcp, zmq, http, name, reset, authenticated)
+    router = nothing
+    if get(ENV, "BROKER_RUNNING", "0") == "0"
+        if reset
+            Rembus.broker_reset(name)
         end
+        if init !== nothing
+            init()
+        end
+
+        router = Rembus.get_router(
+            secure=secure,
+            ws=ws,
+            tcp=tcp,
+            zmq=zmq,
+            http=http,
+            name=name,
+            authenticated=authenticated,
+        )
+
+        start_proxy(name, router)
     end
+
+    return router
 end
 
 function execute(
@@ -92,7 +112,7 @@ function execute(
     http=nothing,
     secure=false,
 )
-    router = @broker setup secure ws tcp zmq http testname reset authenticated log
+    router = run_broker(setup, secure, ws, tcp, zmq, http, testname, reset, authenticated)
 
     if !isnothing(router)
         Rembus.islistening(

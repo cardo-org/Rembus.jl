@@ -77,7 +77,6 @@ export QOS0,
     @wait
 
 include("constants.jl")
-include("configuration.jl")
 include("types.jl")
 include("protocol.jl")
 include("helpers.jl")

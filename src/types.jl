@@ -506,9 +506,17 @@ function upstream!(router, upstream_router)
     upstream_router.downstream = router
 end
 
-function latest_downstream(router)
+function last_downstream(router)
     while !isnothing(router.downstream)
         router = router.downstream
+    end
+
+    return router
+end
+
+function first_upstream(router)
+    while !isnothing(router.upstream)
+        router = router.upstream
     end
 
     return router
@@ -564,15 +572,16 @@ hasname(twin::Twin) = hasname(twin.uid)
 iszmq(twin::Twin) = isa(twin.socket, ZDealer)
 
 #=
-    offline!(twin)
+    offline!(router, twin)
 
 Unbind the ZMQ socket from the twin.
 =#
-function offline!(twin)
+function offline!(router::Router, twin::Twin)
     @debug "[$twin] closing: going offline"
     twin.socket = Float()
     # Remove from address2twin
-    filter!(((k, v),) -> twin != v, twin.router.address2twin)
+
+    filter!(((k, v),) -> twin != v, router.address2twin)
     return nothing
 end
 
@@ -590,7 +599,7 @@ Base.wait(twin::Twin) = isdefined(twin, :process) ? wait(twin.process.task) : no
 
 isconnected(twin::Twin) = isopen(twin.socket)
 
-function isconnected(router, twin_id)
+function isconnected(router::Router, twin_id)
     return haskey(router.id_twin, twin_id) && isconnected(router.id_twin[twin_id])
 end
 

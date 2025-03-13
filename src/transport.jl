@@ -411,7 +411,7 @@ message_send(twin, future::FutureResponse) = transport_send(twin, future.request
 
 function message_send(twin, msg)
     if isa(msg, RpcReqMsg) || isa(msg, AdminReqMsg)
-        router = latest_downstream(twin.router)
+        router = last_downstream(twin.router)
         tmr = Timer(router.settings.request_timeout) do tmr
             delete!(twin.socket.out, msg.id)
         end

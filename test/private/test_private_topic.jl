@@ -49,7 +49,7 @@ function run(authorized_component)
     try
         # authenticating again is considered a protocol error
         # the connection get closed
-        Rembus.authenticate(producer)
+        Rembus.authenticate(producer.router, producer)
         @test false
     catch e
         @info "[$producer] expected error: $e"
