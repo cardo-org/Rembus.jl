@@ -480,7 +480,7 @@ function rembus_ca()
 end
 
 """
-    do_connect()
+    do_connect(twin::Twin)
 
 Connect anonymously to the endpoint declared with `REMBUS_BASE_URL` env variable.
 
@@ -490,7 +490,6 @@ A component is considered anonymous when a different and random UUID is used as
 component identifier each time the application connect to the broker.
 """
 function do_connect(twin::Twin)
-    @debug "[$twin] connect mode: $(twin.router.settings.connection_mode)"
     if !isopen(twin.socket)
         router = last_downstream(twin.router)
         if router.settings.connection_mode === authenticated

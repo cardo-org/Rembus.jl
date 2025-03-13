@@ -34,7 +34,7 @@ function test_errors()
     # Connect anonymously and try to send a command.
     rb = connect()
     Rembus.request_timeout!(2)
-    @test_throws RembusTimeout rpc(rb, "version")
+    @test_throws RembusTimeout reactive(rb)
     Rembus.request_timeout!(20)
 
     Rembus.authenticated!()
@@ -65,6 +65,10 @@ function test_errors()
 
     # Anonymous connection is not permitted in authenticated mode.
     @test_throws ErrorException connect()
+
+    # reset the default cid
+    Rembus.cid!("")
+    component()
 
 end
 

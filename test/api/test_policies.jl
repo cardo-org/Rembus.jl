@@ -32,3 +32,4 @@ function run()
 end
 
 execute(run, "policies")
+Rembus.cid!("")
