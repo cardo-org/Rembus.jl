@@ -21,6 +21,12 @@ using TestItems
     @test !Rembus.isconnectionerror(twin.socket, ErrorException("something nasty"))
 end
 
+@testitem "rembus_debug" begin
+    ENV["REMBUS_DEBUG"] = "1"
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    @test router.settings.log_level === Rembus.TRACE_DEBUG
+end
+
 @testitem "cleanup" begin
     router = Rembus.Router{Rembus.Twin}("test_router")
     twin = Rembus.Twin(Rembus.RbURL("component1"), router)

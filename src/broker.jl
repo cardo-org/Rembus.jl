@@ -733,11 +733,6 @@ function serve_tcp(pd, router::Router, port, issecure=false)
     end
 end
 
-const TRANSPORT_DISABLED::Int = 0
-const TRANSPORT_WS::Int = 9000
-const TRANSPORT_TCP::Int = 9001
-const TRANSPORT_ZMQ::Int = 9002
-
 function get_router(;
     name=cid(),
     ws=nothing,
@@ -790,6 +785,10 @@ function broker(;
     secure=false,
     authenticated=false
 )
+    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
+        ws = DEFAULT_WS_PORT
+    end
+
     router = get_router(
         name=name,
         ws=ws,

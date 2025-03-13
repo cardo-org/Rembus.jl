@@ -495,10 +495,9 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
     if msg.flags > QOS0
         msgid = msg.id
-
+        r = last_downstream(msg.twin.router)
         timer = Timer(
-            (tim) -> handle_ack_timeout(tim, socket, msg, msgid),
-            msg.twin.router.settings.ack_timeout
+            (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
         )
 
         ack_cond = FutureResponse(msg, timer)
@@ -529,10 +528,8 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
     data = data2message(msg.data)
     outcome = true
     if msg.flags > QOS0
-        timer = Timer(
-            (tim) -> handle_ack_timeout(tim, z, msg, msg.id),
-            msg.twin.router.settings.ack_timeout
-        )
+        r = last_downstream(msg.twin.router)
+        timer = Timer((t) -> handle_ack_timeout(t, z, msg, msg.id), r.settings.ack_timeout)
         ack_cond = FutureResponse(msg, timer)
         z.out[msg.id] = ack_cond
         header = encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic])

@@ -18,6 +18,8 @@ const SIG_ECDSA = 0x2
 
 const CONNECTION_ID = 0x12345678961deadbeef123456789
 
+const DEFAULT_WS_PORT::Int = 8000
+
 # Keywords for handlers functions related to twin lifecycle events.
 const HR_CHALLENGE = "chnge"
 const HR_CONN_DOWN = "cdown"
