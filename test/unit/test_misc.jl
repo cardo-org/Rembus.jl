@@ -78,6 +78,12 @@ end
     shutdown()
 end
 
+@testitem "default_broker" begin
+    rb = broker()
+    @test Rembus.islistening(rb, wait=10)
+    shutdown()
+end
+
 @testitem "reconnect" begin
     rb = component("misc_component")
     # Give opportunity to retry, the reconnection period is 2 seconds.

@@ -119,9 +119,6 @@ function unregister(twin::Twin)
     rm(pkfile(cid), force=true)
 end
 
-
-isenabled(router, tenant::Nothing) = true
-
 function isenabled(router, tenant_id::AbstractString)
     df = router.owners[(router.owners.tenant.==tenant_id), :]
     if isempty(df)

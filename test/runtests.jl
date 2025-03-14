@@ -142,6 +142,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "http"
+        @time @safetestset "http_authenticated" begin
+            include("http/test_http_authenticated.jl")
+        end
         @time @safetestset "http" begin
             include("http/test_http.jl")
         end

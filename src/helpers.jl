@@ -1,3 +1,20 @@
+
+# COV_EXCL_START
+
+#=
+The from keyword of the subscribe methods may assume the values:
+  * Now() subscribes for messages received from now on;
+  * LastReceived() subscribes for all messages received in the past where node was offline;
+=#
+Now() = 0.0
+LastReceived() = Inf
+
+always_true(uid) = true
+
+isenabled(router, tenant::Nothing) = true
+
+# COV_EXCL_STOP
+
 stacktrace!(enable=true) = set_preferences!(Rembus, "stacktrace" => enable, force=true)
 
 function dumperror(e)
@@ -132,15 +149,6 @@ function spliturl(url::String)
     return (name, hasname, protocol, host, port, props)
 end
 
-
-#=
-The from keyword of the subscribe methods may assume the values:
-  * Now() subscribes for messages received from now on;
-  * LastReceived() subscribes for all messages received in the past where node was offline;
-=#
-Now() = 0.0
-LastReceived() = Inf
-
 function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})
     if isa(msg_from, Real)
         return msg_from
@@ -165,11 +173,14 @@ function secure_config(router)
     )
     MbedTLS.rng!(sslconfig, rng)
 
-    function show_debug(level, filename, number, msg)
-        @show level, filename, number, msg
-    end
+    ## Example code snippet for debugging connection issues.
+    #=
+        function show_debug(level, filename, number, msg)
+            @show level, filename, number, msg
+        end
 
-    MbedTLS.dbg!(sslconfig, show_debug)
+        MbedTLS.dbg!(sslconfig, show_debug)
+    =#
     return sslconfig
 end
 

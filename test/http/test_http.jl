@@ -67,6 +67,12 @@ function run()
         "http://localhost:9000/version",
         ["Authorization" => auth]
     )
+
+    @test_throws HTTP.Exceptions.StatusError HTTP.post(
+        "http://localhost:9000/mytopic",
+        ["Authorization" => auth]
+    )
+
 end
 
 # for coverage runs

@@ -755,7 +755,7 @@ function end_receiver(twin::Twin)
     end
 end
 
-sendto_origin(::Twin, ::FutureResponse) = false
+sendto_origin(::Twin, ::FutureResponse) = false # COV_EXCL_LINE
 
 function sendto_origin(twin, msg)
     if haskey(twin.socket.direct, msg.id)

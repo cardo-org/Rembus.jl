@@ -400,7 +400,11 @@ function bytes2zid(buff::Vector{UInt8})
     UInt128(read(IOBuffer(buff[2:end]), UInt32))
 end
 
+# COV_EXCL_START
 transport_send(::Float, ::RembusMsg) = true
+
+isconnectionerror(::Float, e) = false
+# COV_EXCL_STOP
 
 function transport_send(twin::Twin, msg)
     twin.probe && probe_add(twin, msg, pktout)
@@ -931,8 +935,6 @@ function transport_read(sock)
 end
 
 transport_read(socket::WebSockets.WebSocket) = HTTP.WebSockets.receive(socket)
-
-isconnectionerror(::Float, e) = false
 
 function isconnectionerror(::WS, e)
     isa(e, EOFError) ||

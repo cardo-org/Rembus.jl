@@ -1,7 +1,3 @@
-struct ConnectionDown
-    twin::Twin
-end
-
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
         df = load_pubsub_received(router, url)
@@ -22,12 +18,6 @@ function bind(router::Router, url=RbURL(protocol=:repl))
 
     twin.uid = url
     return twin
-end
-
-function router_ready(router::Router)
-    while isnan(router.start_ts)
-        sleep(0.05)
-    end
 end
 
 function islistening(router::Router; protocol::Vector{Symbol}=[:ws], wait=0)
@@ -519,8 +509,6 @@ function router_task(self, router::Router, ready, implementor_rule)
     end
 end
 
-always_true(uid) = true
-
 function broker_task(self, router::Router, ready)
     router_task(self, router, ready, always_true)
 end
@@ -666,7 +654,6 @@ end
 function serve_zmq(pd, router::Router, port)
     @debug "[serve_zmq] starting"
     try
-        router_ready(router)
         router.zmqcontext = ZMQ.Context()
         router.zmqsocket = Socket(router.zmqcontext, ROUTER)
         ZMQ.bind(router.zmqsocket, "tcp://*:$port")
@@ -690,7 +677,6 @@ function serve_zmq(pd, router::Router, port)
 end
 
 function serve_tcp(pd, router::Router, port, issecure=false)
-    router_ready(router)
     proto = "tcp"
     server = nothing
     try

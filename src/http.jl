@@ -27,28 +27,30 @@ function verify_basic_auth(router, authorization)
 end
 
 function authenticate(router::Router, req::HTTP.Request)
-    auth = HTTP.header(req, "Authorization")
+    auth_header = HTTP.header(req, "Authorization")
+    isauth = false
 
-    if auth !== ""
-        cid = verify_basic_auth(router, auth)
+    if auth_header !== ""
+        cid = verify_basic_auth(router, auth_header)
+        isauth = true
     else
-        if router.settings.connection_mode === authenticated
+        if router.mode === authenticated
             error("anonymous: authentication failed")
         else
             cid = string(uuid4())
         end
     end
 
-    return cid
+    return (cid, isauth)
 end
 
 function authenticate_admin(router::Router, req::HTTP.Request)
-    cid = authenticate(router, req)
+    (cid, isauth) = authenticate(router, req)
     if !(cid in router.admins)
         error("$cid authentication failed")
     end
 
-    return cid
+    return (cid, isauth)
 end
 
 function http_admin_msg(router, twin, msg)
@@ -88,20 +90,24 @@ end
 
 function http_publish(router::Router, req::HTTP.Request)
     try
-        cid = authenticate(router, req)
+        (cid, isauth) = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
         if isempty(req.body)
             content = []
         else
             content = JSON3.read(req.body, Any)
         end
-        twin = bind(router, RbURL(cid))
-
-        msg = PubSubMsg(twin, topic, content)
-        pubsub_msg(router, msg)
-        Visor.shutdown(twin.process)
-        cleanup(twin, router)
-        return HTTP.Response(200, [])
+        if haskey(router.id_twin, cid)
+            error("component $cid not available for publish via http")
+        else
+            twin = bind(router, RbURL(cid))
+            twin.isauth = isauth
+            msg = PubSubMsg(twin, topic, content)
+            pubsub_msg(router, msg)
+            Visor.shutdown(twin.process)
+            cleanup(twin, router)
+            return HTTP.Response(200, [])
+        end
     catch e
         @debug "http::publish: $e"
         return HTTP.Response(403, [])
@@ -110,7 +116,7 @@ end
 
 function http_rpc(router::Router, req::HTTP.Request)
     try
-        cid = authenticate(router, req)
+        (cid, isauth) = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
         if isempty(req.body)
             content = []
@@ -121,6 +127,7 @@ function http_rpc(router::Router, req::HTTP.Request)
             error("component $cid not available for rpc via http")
         else
             twin = bind(router, RbURL(cid))
+            twin.isauth = isauth
             twin.socket = Float()
             fut_response = fpc(twin, topic, content)
             response = fetch(fut_response.future)
@@ -149,9 +156,9 @@ function http_admin_command(
     router::Router, req::HTTP.Request, cmd::Dict, topic="__config__"
 )
     try
-        cid = authenticate_admin(router, req)
+        (cid, isauth) = authenticate_admin(router, req)
         twin = bind(router, RbURL(cid))
-
+        twin.isauth = isauth
         msg = AdminReqMsg(twin, topic, cmd)
         response = http_admin_msg(router, twin, msg)
         Visor.shutdown(twin.process)
@@ -171,17 +178,10 @@ function http_admin_command(
 end
 
 function http_admin_command(router::Router, req::HTTP.Request)
-    try
-        authenticate_admin(router, req)
-        cmd = HTTP.getparams(req)["cmd"]
-        return http_admin_command(
-            router, req, Dict(COMMAND => cmd)
-        )
-    catch e
-        @error "http::admin: $e"
-        return HTTP.Response(403, [])
-    end
-
+    cmd = HTTP.getparams(req)["cmd"]
+    return http_admin_command(
+        router, req, Dict(COMMAND => cmd)
+    )
 end
 
 function http_private_topic(router::Router, req::HTTP.Request)
