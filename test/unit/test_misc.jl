@@ -83,6 +83,11 @@ end
     @test Rembus.islistening(rb, wait=10)
     shutdown()
 end
+@testitem "default_server" begin
+    rb = server()
+    @test Rembus.islistening(rb, wait=10)
+    shutdown()
+end
 
 @testitem "reconnect" begin
     rb = component("misc_component")
