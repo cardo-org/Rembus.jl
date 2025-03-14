@@ -24,6 +24,7 @@ using Printf
 using Prometheus
 using URIs
 using Serialization
+using TaskLocalValues
 using UUIDs
 @reexport using Visor
 using ZMQ

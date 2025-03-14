@@ -305,7 +305,7 @@ Base.isopen(ws::WebSockets.WebSocket) = isopen(ws.io)
 
 Base.isopen(endpoint::AbstractSocket) = isopen(endpoint.sock)
 
-Base.isopen(endpoint::Float) = false
+Base.isopen(endpoint::Float) = false # COV_EXCL_LINE
 
 Base.close(::AbstractSocket) = nothing
 Base.close(endpoint::AbstractPlainSocket) = close(endpoint.sock)
@@ -355,7 +355,6 @@ mutable struct Settings
     log_level::String
     overwrite_connection::Bool
     stacktrace::Bool  # log stacktrace on error
-    cid::String
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
     save_messages::Bool
@@ -386,7 +385,6 @@ mutable struct Settings
 
         overwrite_connection = get(cfg, "overwrite_connection", true)
         stacktrace = get(cfg, "stacktrace", false)
-        cid = get(cfg, "cid", get(ENV, "REMBUS_CID", ""))
 
         connection_mode = string_to_enum(get(cfg, "connection_mode", "anonymous"))
         connection_retry_period = get(cfg, "connection_retry_period", 2.0)
@@ -419,7 +417,6 @@ mutable struct Settings
             log_level,
             overwrite_connection,
             stacktrace,
-            cid,
             connection_retry_period,
             nothing,
             true,

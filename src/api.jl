@@ -1,3 +1,9 @@
+const cid4macro = TaskLocalValue{String}(() -> "") # COV_EXCL_LINE
+
+cid() = cid4macro[]
+
+cid!(name) = cid4macro[] = name
+
 function issuccess(response)
     response = fetch(response.future)
     if response.status !== STS_SUCCESS
@@ -640,7 +646,9 @@ to the broker.
 """
 macro component(name)
     quote
-        component($(esc(name)))
+        cid = $(esc(name))
+        component(cid)
+        cid4macro[] = cid
     end
 end
 

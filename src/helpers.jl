@@ -25,12 +25,6 @@ end
 
 getcfg() = get(Base.get_preferences(), "Rembus", Dict())
 
-function cid!(url)
-    set_preferences!(Rembus, "cid" => url, force=true)
-end
-
-cid() = get(getcfg(), "cid", get(ENV, "REMBUS_CID", ""))
-
 function default_rembus_dir()
     if Sys.iswindows()
         home = get(ENV, "USERPROFILE", ".")
