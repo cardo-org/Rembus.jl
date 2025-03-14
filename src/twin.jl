@@ -332,9 +332,7 @@ end
 """
     component(urls::Vector)
 
-Connect component to remotes defined be `urls` array.
-
-The connection pool is supervised.
+Connect component to nodes defined be `urls` array.
 """
 function component(
     urls::Vector;
@@ -342,15 +340,18 @@ function component(
     tcp=nothing,
     zmq=nothing,
     name=missing,
-    policy=:first_up,
-    secure=false
+    secure=false,
+    authenticated=false,
+    policy="first_up"
 )
     if ismissing(name)
         nodeurl = cid()
         name = RbURL(nodeurl).id
     end
 
-    router = get_router(name=name, ws=ws, tcp=tcp, zmq=zmq, secure=secure)
+    router = get_router(
+        name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
+    )
     set_policy(router, policy)
     for url in urls
         component(url, router)
@@ -369,27 +370,22 @@ end
 component() = component(cid())
 
 function component(
-    url::AbstractString;
-    ws=nothing,
-    tcp=nothing,
-    zmq=nothing,
-    name=missing
-)
-    uid = RbURL(url)
-    return component(uid, ws=ws, tcp=tcp, zmq=zmq, name=name)
-end
-
-function component(
     url::RbURL;
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
-    name=missing
+    name=missing,
+    secure=false,
+    authenticated=false,
+    policy="first_up",
 )
     if ismissing(name)
         name = tid(url)
     end
-    router = get_router(name=name, ws=ws, tcp=tcp, zmq=zmq)
+    router = get_router(
+        name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
+    )
+    set_policy(router, policy)
     return component(url, router)
 end
 

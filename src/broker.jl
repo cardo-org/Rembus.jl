@@ -728,6 +728,7 @@ function get_router(;
     prometheus=nothing,
     authenticated=false,
     secure=false,
+    policy="first_up",
     tsk=broker_task
 )
     broker_process = from("$name.broker")
@@ -736,6 +737,7 @@ function get_router(;
         if authenticated
             router.mode = Rembus.authenticated
         end
+        set_policy(router, policy)
         ready = Channel()
         bp = process("broker", tsk, args=(router, ready))
         router.process = bp
@@ -756,62 +758,6 @@ function get_router(;
 end
 
 """
-    broker(
-        url; name=missing, ws=nothing, tcp=nothing, zmq=nothing"
-    )
-
-Start a broker and return an handle for interacting with the network of nodes.
-"""
-function broker(;
-    name::AbstractString="node",
-    ws=nothing,
-    tcp=nothing,
-    zmq=nothing,
-    prometheus=nothing,
-    secure=false,
-    authenticated=false
-)
-    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
-        ws = DEFAULT_WS_PORT
-    end
-
-    router = get_router(
-        name=name,
-        ws=ws,
-        tcp=tcp,
-        zmq=zmq,
-        prometheus=prometheus,
-        authenticated=authenticated,
-        secure=secure
-    )
-    # Return a floating twin.
-    return bind(router)
-end
-
-function server(;
-    name::AbstractString="node",
-    ws=nothing,
-    tcp=nothing,
-    zmq=nothing,
-    prometheus=nothing,
-    authenticated=false,
-    secure=false
-)
-    router = get_router(
-        name=name,
-        ws=ws,
-        tcp=tcp,
-        zmq=zmq,
-        prometheus=prometheus,
-        authenticated=authenticated,
-        secure=secure,
-        tsk=server_task
-    )
-    # Return a floating twin.
-    return bind(router)
-end
-
-"""
     start_broker(;
         wait=true,
         secure=nothing,
@@ -821,7 +767,6 @@ end
         http=nothing,
         prometheus=nothing,
         name="broker",
-        policy=:first_up,
         authenticated=false,
         reset=nothing,
         plugin=nothing,

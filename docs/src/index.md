@@ -3,15 +3,17 @@
 ```@meta
 CurrentModule = Rembus
 ```
-
 Rembus is a middleware for Pub/Sub and RPC communication styles.
 
-There are two types of processes: Components and Brokers.
+A Rembus node may play one o more roles: 
 
-- A Component connect to a Broker;
-- A Broker dispatch messages between Components;
-- A Component expose RPC services and/or subscribe to Pub/Sub topics;
-- A Component make RPC requests and/or publish messages to Pub/Sub topics;
+ - RPC client
+ - RPC server
+ - Pub/Sub publisher 
+ - Pub/Sub subscriber
+ - Broker
+
+This meshup of roles enables a to implements a set of distributed architectures. 
 
 ## Installation
 
@@ -19,8 +21,6 @@ There are two types of processes: Components and Brokers.
 using Pkg
 Pkg.add("Rembus")
 ```
-
-Rembus installs and compiles in a minute or two.
 
 ## Broker
 
@@ -37,18 +37,86 @@ using Rembus
 broker()
 ```
 
+Calling `broker` without arguments start by default a WebSocket server listening on port 8000.
+
 A startup script could be useful and the following `broker` script will do:
 
 ```julia
-##!/bin/bash
+#!/bin/bash
 #=
-BINDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-exec julia --threads auto --color=no -e "include(popfirst!(ARGS))" \
+SDIR=$( dirname -- "${BASH_SOURCE[0]}" )
+BINDIR=$( cd -- $SDIR &> /dev/null && pwd )
+exec julia -t auto --color=no -e "include(popfirst!(ARGS))" \
  --project=$BINDIR/.. --startup-file=no "${BASH_SOURCE[0]}" "$@"
 =#
+using ArgParse
 using Rembus
 
-broker()
+function command_line(default_name="broker")
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--name", "-n"
+        help = "broker name"
+        default = default_name
+        arg_type = String
+        "--reset", "-r"
+        help = "factory reset, clean up broker configuration"
+        action = :store_true
+        "--secure", "-s"
+        help = "accept wss and tls connections"
+        action = :store_true
+        "--authenticated", "-a"
+        help = "only authenticated components allowed"
+        action = :store_true
+        "--http", "-p"
+        help = "accept HTTP clients on port HTTP"
+        arg_type = UInt16
+        "--prometheus", "-m"
+        help = "prometheus exposer port"
+        arg_type = UInt16
+        "--ws", "-w"
+        help = "accept WebSocket clients on port WS"
+        arg_type = UInt16
+        "--tcp", "-t"
+        help = "accept tcp clients on port TCP"
+        arg_type = UInt16
+        "--zmq", "-z"
+        help = "accept zmq clients on port ZMQ"
+        arg_type = UInt16
+        "--policy"
+        help = "set the broker routing policy"
+        arg_type = Symbol
+        "--debug", "-d"
+        help = "enable debug logs"
+        action = :store_true
+        "--info", "-i"
+        help = "enable info logs"
+        action = :store_true
+    end
+    return parse_args(s)
+end
+
+args = command_line()
+name = args["name"]
+if args["reset"]
+    Rembus.broker_reset(name)
+end
+
+if args["debug"]
+    Rembus.debug!()
+elseif args["info"]
+    Rembus.info!()
+end
+
+wait(Rembus.broker(
+    name=name,
+    ws=args["ws"],
+    tcp=args["tcp"],
+    zmq=args["zmq"],
+    prometheus=args["prometheus"],
+    authenticated=args["authenticated"]
+))
+
 ```
 
 `broker` starts by default a WebSocket server listening on port 8000,

@@ -70,7 +70,7 @@ function pool()
     expose(server, foo)
 
     nodes = ["a", "b"]
-    for policy in [:round_robin, :less_busy]
+    for policy in ["round_robin", "less_busy"]
         rb = component(nodes, policy=policy)
         for round in 1:3
             rpc(rb, "foo", df)

@@ -199,11 +199,11 @@ function getargs(data)
 end
 
 function set_policy(router, policy)
-    if !(policy in [:first_up, :less_busy, :round_robin])
-        error("wrong routing policy, must be one of :first_up, :less_busy, :round_robin")
+    if !(policy in ["first_up", "less_busy", "round_robin"])
+        error("wrong routing policy, must be one of first_up, less_busy, round_robin")
     end
 
-    router.policy = policy
+    router.policy = Symbol(policy)
 
     return nothing
 end

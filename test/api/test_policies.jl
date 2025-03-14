@@ -9,7 +9,7 @@ function run()
     server = connect("server")
 
     nodes = ["a", "b", "c"]
-    for policy in [:round_robin, :less_busy]
+    for policy in ["round_robin", "less_busy"]
         rb = component(nodes, policy=policy)
         @info "[$rb] socket: $(rb.socket)"
         expose(server, foo)

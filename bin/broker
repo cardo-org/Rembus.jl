@@ -15,7 +15,7 @@ function command_line(default_name="broker")
         help = "broker name"
         default = default_name
         arg_type = String
-        "--reset", "-r"
+        "--reset", "-x"
         help = "factory reset, clean up broker configuration"
         action = :store_true
         "--secure", "-s"
@@ -39,11 +39,15 @@ function command_line(default_name="broker")
         "--zmq", "-z"
         help = "accept zmq clients on port ZMQ"
         arg_type = UInt16
-        "--policy"
-        help = "set the broker routing policy"
-        arg_type = Symbol
+        "--policy", "-r"
+        help = "set the broker routing policy: first_up, round_robin, less_busy"
+        default = "first_up"
+        arg_type = String
         "--debug", "-d"
         help = "enable debug logs"
+        action = :store_true
+        "--info", "-i"
+        help = "enable info logs"
         action = :store_true
     end
     return parse_args(s)
@@ -57,13 +61,20 @@ end
 
 if args["debug"]
     Rembus.debug!()
+elseif args["info"]
+    Rembus.info!()
 end
 
-wait(Rembus.broker(
-    name=name,
-    ws=args["ws"],
-    tcp=args["tcp"],
-    zmq=args["zmq"],
-    prometheus=args["prometheus"],
-    authenticated=args["authenticated"]
-))
+try
+    wait(Rembus.broker(
+        name=name,
+        ws=args["ws"],
+        tcp=args["tcp"],
+        zmq=args["zmq"],
+        prometheus=args["prometheus"],
+        authenticated=args["authenticated"],
+        policy=args["policy"]
+    ))
+catch e
+    println(e)
+end

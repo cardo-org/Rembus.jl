@@ -126,9 +126,9 @@ end
 @testitem "set_policy" begin
     router = Rembus.Router{Rembus.Twin}("test_router")
 
-    @test isnothing(Rembus.set_policy(router, :first_up))
-    @test isnothing(Rembus.set_policy(router, :round_robin))
-    @test isnothing(Rembus.set_policy(router, :less_busy))
+    @test isnothing(Rembus.set_policy(router, "first_up"))
+    @test isnothing(Rembus.set_policy(router, "round_robin"))
+    @test isnothing(Rembus.set_policy(router, "less_busy"))
     @test_throws ErrorException Rembus.set_policy(router, :invalid_policy)
 end
 

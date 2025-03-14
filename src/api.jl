@@ -4,6 +4,189 @@ cid() = cid4macro[]
 
 cid!(name) = cid4macro[] = name
 
+"""
+    broker(; <keyword arguments>)
+
+Start a broker node and return a handle for interacting with it.
+
+The broker acts as a central node to manage routing of RPC requests and Pub/Sub messages
+between nodes.
+
+It supports multiple communication protocols (WebSocket, TCP, and ZMQ) and allows for
+customizable security, authentication, and routing policies.
+
+### Keyword arguments
+- `name::AbstractString="broker"`: The unique identifier for the broker supervisor process.
+- `ws=nothing`: The WebSocket (ws/wss) listening port. Set to `nothing` to disable.
+- `tcp=nothing`: The TCP (tcp/tls) listening port. Set to `nothing` to disable.
+- `zmq=nothing`: The ZMQ Router listening port. Set to `nothing` to disable.
+- `prometheus=nothing`: The Prometheus port for scraping monitoring metrics. Set to
+  `nothing` to disable.
+- `secure=false`: If `true`, enables WSS (WebSocket Secure) and TLS
+  (Transport Layer Security) protocols for encrypted connections.
+- `authenticated=false`: If `true`, only allows connections from named and authenticated
+   nodes.
+- `policy::String="first_up"`: The routing policy used when topics are served by multiple
+   nodes. Possible options include:
+    - `"first_up"`: Selects the first connected node from the list of nodes exposing the
+      RPC method.
+    - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
+    - `"less_busy"`: Chooses the node with fewer outstanding requests.
+
+### Default Behavior
+If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
+for WebSocket connections on port `8000`.
+"""
+function broker(;
+    name::AbstractString="broker",
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    prometheus=nothing,
+    secure=false,
+    authenticated=false,
+    policy="first_up"
+)
+    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
+        ws = DEFAULT_WS_PORT
+    end
+
+    router = get_router(
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        prometheus=prometheus,
+        authenticated=authenticated,
+        secure=secure,
+        policy=policy
+    )
+    # Return a floating twin.
+    return bind(router)
+end
+
+"""
+    server(; <keyword arguments>)
+
+Start a server node and return a handle for interacting with it.
+
+The server accepts connection from client nodes.
+
+It supports multiple communication protocols (WebSocket, TCP, and ZMQ) and allows for
+customizable security and authentication.
+
+### Keyword arguments
+- `name::AbstractString="broker"`: The unique identifier for the server supervisor process.
+- `ws=nothing`: The WebSocket (ws/wss) listening port. Set to `nothing` to disable.
+- `tcp=nothing`: The TCP (tcp/tls) listening port. Set to `nothing` to disable.
+- `zmq=nothing`: The ZMQ Router listening port. Set to `nothing` to disable.
+- `prometheus=nothing`: The Prometheus port for scraping monitoring metrics. Set to
+  `nothing` to disable.
+- `secure=false`: If `true`, enables WSS (WebSocket Secure) and TLS
+  (Transport Layer Security) protocols for encrypted connections.
+- `authenticated=false`: If `true`, only allows connections from named and authenticated
+   nodes.
+
+### Default Behavior
+If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
+for WebSocket connections on port `8000`.
+"""
+function server(;
+    name::AbstractString="server",
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    prometheus=nothing,
+    authenticated=false,
+    secure=false
+)
+    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
+        ws = DEFAULT_WS_PORT
+    end
+
+    router = get_router(
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        prometheus=prometheus,
+        authenticated=authenticated,
+        secure=secure,
+        tsk=server_task
+    )
+    # Return a floating twin.
+    return bind(router)
+end
+
+"""
+    component(url::AbstractString; <keyword arguments>)
+
+Start a component node and return a handle for interacting with it.
+
+The component connects to a remote node using the `url` argument, which specifies the
+connection details. For example, the URL `ws://127.0.0.1:8000/foo` specifies:
+- **Protocol**: `ws` (WebSocket). Other supported protocols: `wss`, `tcp`, `tls`, `zmq`.
+- **Address**: `127.0.0.1` (localhost).
+- **Port**: `8000`.
+- **Component Name**: `foo`.
+
+Anonymous connections omit the path part of the URL.
+
+If not specified, Rembus applies the following default values:
+- **Protocol**: `ws` (WebSocket).
+- **Address**: `127.0.0.1` (localhost).
+- **Port**: `8000`.
+
+This means the URL `ws://127.0.0.1:8000/foo` is equivalent to simply `foo`.
+
+Additionally, a component may listen for incoming connections on configured ports, enabling
+it to act as a broker. These ports are specified using keyword arguments.
+
+### Keyword Arguments
+- `name::Union{Missing, AbstractString}=missing`:
+  Unique identifier for the component's supervisor process.
+  Defaults to the path part of the `url` argument if `missing`.
+- `ws=nothing`:
+  WebSocket (ws/wss) listening port. Set to `nothing` to disable.
+- `tcp=nothing`:
+  TCP (tcp/tls) listening port. Set to `nothing` to disable.
+- `zmq=nothing`:
+  ZMQ Router listening port. Set to `nothing` to disable.
+- `secure=false`: If `true`, enables WSS (WebSocket Secure) and TLS
+  (Transport Layer Security) protocols for encrypted connections.
+- `authenticated=false`: If `true`, only allows connections from named and authenticated
+   nodes.
+- `policy::String="first_up"`: The routing policy used when topics are served by multiple
+   nodes. Possible options include:
+    - `"first_up"`: Selects the first connected node from the list of nodes exposing the
+      RPC method.
+    - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
+    - `"less_busy"`: Chooses the node with fewer outstanding requests.
+
+"""
+function component(
+    url::AbstractString;
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    name=missing,
+    secure=false,
+    authenticated=false,
+    policy="first_up"
+)
+    uid = RbURL(url)
+    return component(
+        uid,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        name=name,
+        authenticated=authenticated,
+        policy=policy,
+        secure=secure
+    )
+end
+
 function issuccess(response)
     response = fetch(response.future)
     if response.status !== STS_SUCCESS
