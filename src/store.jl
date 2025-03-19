@@ -134,23 +134,6 @@ function key_file(broker_name::AbstractString, cid::AbstractString)
     return fullname(basename)
 end
 
-function save_table(router, router_tbl, filename)
-    table = Dict()
-    for (topic, twins) in router_tbl
-        twin_ids = [tw.uid.id for tw in twins if hasname(tw)]
-        table[topic] = twin_ids
-    end
-    fn = joinpath(broker_dir(router), filename)
-    open(fn, "w") do io
-        write(io, JSON3.write(table))
-    end
-end
-
-function save_impl_table(router::Router)
-    @debug "saving exposers table"
-    save_table(router, router.topic_impls, "exposers.json")
-end
-
 function save_topic_auth_table(router)
     @debug "saving topic_auth table"
     fn = joinpath(broker_dir(router), "topic_auth.json")
@@ -209,25 +192,6 @@ function pubkey_file(router, cid::AbstractString)
 end
 
 isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
-
-function load_impl_table(router)
-    @debug "loading exposers table"
-    fn = joinpath(broker_dir(router), "exposers.json")
-    if isfile(fn)
-        content = read(fn, String)
-        table = JSON3.read(content, Dict)
-        for (topic, twin_ids) in table
-            twins = Set{Twin}()
-            for tid in twin_ids
-                twin = bind(router, RbURL(tid))
-                push!(twins, twin)
-            end
-            if !isempty(twins)
-                router.topic_impls[topic] = twins
-            end
-        end
-    end
-end
 
 function load_topic_auth_table(router)
     @debug "loading topic_auth table"
@@ -362,7 +326,6 @@ Persist router configuration on disk.
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "[$router] saving configuration to $(broker_dir(router))"
-        save_impl_table(router)
         save_topic_auth_table(router)
         save_admins(router)
 
@@ -376,7 +339,6 @@ end
 function load_configuration(router)
     callback_or(router, :load_configuration) do
         @debug "[$router] loading configuration from $(broker_dir(router))"
-        load_impl_table(router)
         load_topic_auth_table(router)
         load_admins(router)
         router.owners = load_tenants(router)

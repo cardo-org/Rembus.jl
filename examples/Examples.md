@@ -11,7 +11,7 @@ To play with the examples gets the required dependencies:
 and then starts a broker application:
 
 ```shell
-> j -e 'using Rembus; broker()' 
+> j -e 'using Rembus; broker() |> wait' 
 ```
 
 ## greeter.jl
@@ -24,7 +24,7 @@ a name and reply with a greeting:
 ```julia
 using Rembus
 
-@expose say_hello(name) = "hello loving $name"
+@expose say_hello(name) = "hello $name"
 @wait
 ```
 
@@ -53,7 +53,7 @@ Open a REPL and send some messages:
 ```julia
 using Rembus
 
-@publish announcement("geppeto", "Version 2.0 of pinocchio is a beautiful boy")
+@publish announcement("geppeto", "Pinocchio 2.0 is a real boy")
 @publish announcement("pinocchio", "Cat and Fox are my new friends")
 ```
 
@@ -111,11 +111,12 @@ end
 ```
 
 What remain to do is declare the method as a consumer of the topic `announcement`
-using the macro `@subscribe` and wait for messages with `@wait`:
+using the macro `@subscribe` folowed by `@reactive` to enable the sending of
+pub/sub messages to the component and `@wait` for the main loop:
 
 ```julia
 @subscribe announcement
-
+@reactive
 @wait
 ```
 
@@ -131,7 +132,7 @@ function announcement(username, post)
 end
 
 @subscribe announcement
-
+@reactive
 @wait
 ```
 
@@ -158,6 +159,7 @@ consume(topic, value) = @info "$topic = $value"
 rb = connect()
 
 subscribe(rb, "a/*/c", consume)
+reactive(rb)
 wait(rb)
 ```
 
@@ -215,8 +217,8 @@ subscribe!(subject, logger())
 
 @component "rocket"
 @inject subject
-@subscribe my_topic before_now
-@wait
+@subscribe my_topic from=Rembus.LastReceived()
+@reactive
 ```
 
 To see in action, start the subscriber in a REPL:
@@ -234,14 +236,17 @@ getvalues(keeper)
 
 Start another process to listen for alarms:
 
-```shell
-terminal_2> j -e 'using Rembus; @subscribe alarm(msg) = @info msg; @wait'
+```julia
+using Rembus
+
+@subscribe alarm(msg) = println(msg)
+@reactive
+@wait
 ```
 
 In another REPL publish messages:
 
 ```julia
-terminal_3> j
 using Rembus
 
 # no alarm is produced
@@ -258,7 +263,8 @@ Rembus may be used in a simpler client-server architecture, without a decoupling
 A server accepting connections may be setup with these lines:
 
 ```julia
-    rb = server(Ctx(2))
+    rb = server()
+    inject(rb, Ctx(2))
     
     # declare exposed methods
     expose(rb, power)
@@ -282,8 +288,8 @@ Where:
 between all provided methods.
 - `component` is an object representing the component that made the request.
 
-The `component` value is useful when the method has to be available only to
-authenticated components, for example:
+The `component` value may be useful when the method has to be available only to
+authenticated components:
 
 ```julia
 function power(ctx, component, df::DataFrame)

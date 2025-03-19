@@ -46,7 +46,7 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
     result = nothing
     sts = STS_GENERIC_ERROR
     if isa(msg.data, Base.GenericIOBuffer)
-        payload = dataframe_if_tagvalue(decode(msg.data))
+        payload = dataframe_if_tagvalue(decode(copy(msg.data)))
     else
         payload = msg.data
     end
@@ -292,7 +292,7 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
     for tw in authtwins
         # Do not publish back to the receiver channel and to unreactive components.
-        if tw !== msg.twin || notreactive(tw)
+        if tw !== msg.twin && tw.reactive
             @debug "[$router] broadcasting $msg to $tw"
             put!(tw.process.inbox, msg)
         end
@@ -309,7 +309,7 @@ function broadcast_msg(router::Router, msg::ResMsg)
         union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
         for tw in authtwins
             # Do not publish back to the receiver channel and to unreactive components.
-            if tw !== msg.twin || notreactive(tw)
+            if tw !== msg.twin && tw.reactive
                 @debug "[$router] broadcasting $msg to $tw"
                 put!(tw.process.inbox, msg)
             end
@@ -336,21 +336,6 @@ function select_twin(router::Router, topic, implementors)
     end
 
     return target
-end
-
-
-function reconnect(twin::Twin)
-    twin.process.phase === :closing && return
-    isdown = true
-    while isdown
-        sleep(2)
-        try
-            twin.process.phase === :closing && break
-            isdown = !do_connect(twin)
-        catch e
-            @debug "[$twin] reconnecting..."
-        end
-    end
 end
 
 #=
@@ -401,7 +386,6 @@ function rpc_response(router::Router, msg)
         @debug "[$twin] unexpected response: $msg"
     end
 end
-
 
 #=
     broker_task(self, router)
@@ -687,7 +671,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
         end
 
         server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), port))
-        router.server = server
+        router.tcp_server = server
         router.listeners[:tcp].status = on
 
         @info "$(pd.supervisor) listening at port $proto:$port"

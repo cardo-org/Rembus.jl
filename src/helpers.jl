@@ -251,16 +251,46 @@ function callback_and(
     end
 end
 
+isbuiltin(fn) = fn in ["rid", "version", "uptime"]
+
 function router_configuration(router)
     cfg = Dict("exposers" => Dict(), "subscribers" => Dict())
     for (topic, twins) in router.topic_impls
-        cfg["exposers"][topic] = [tid(t) for t in twins]
+        cfg["exposers"][topic] = [tid(t) for t in twins if !isbuiltin(topic)]
     end
     for (topic, twins) in router.topic_interests
         cfg["subscribers"][topic] = [tid(t) for t in twins]
     end
 
     return cfg
+end
+
+function twin_configuration(router, twin)
+    cfg = Dict("exposers" => [], "subscribers" => [])
+    for topic in keys(router.topic_function)
+        if haskey(router.subinfo, topic)
+            push!(cfg["subscribers"], topic)
+        else
+            push!(cfg["exposers"], topic)
+        end
+    end
+
+    return cfg
+end
+
+function twin_setup(router, twin)
+    cfg::Dict{String,Any} = twin_configuration(router, twin)
+    cfg[COMMAND] = SETUP_CMD
+    msg = AdminReqMsg(
+        twin,
+        BROKER_CONFIG,
+        cfg,
+        tid(twin)
+    )
+    response = send_msg(twin, msg)
+    result = fetch(response.future)
+    close(response.timer)
+    return (result.status === STS_SUCCESS)
 end
 
 #=

@@ -174,6 +174,14 @@ function mark_and_broadcast(router, twin, msg)
     admin_broadcast(router, twin, msg)
 end
 
+#=
+A router that has more than one outstanding route: it could be a real broker
+or a pool component.
+=#
+function ismultipath(router)
+    return !isempty(router.listeners) || (length(router.id_twin) > 1)
+end
+
 function admin_command(router::Router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
         return ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing)
@@ -182,18 +190,48 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
     sts = STS_SUCCESS
     data = nothing
     cmd = msg.data[COMMAND]
-    if cmd == SUBSCRIBE_CMD
-        if isauthorized(router, twin, msg.topic)
-            callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
-                msg_from = get(msg.data, MSG_FROM, Now())
-                twin.msg_from[msg.topic] = msg_from
-                if haskey(router.topic_interests, msg.topic)
-                    push!(router.topic_interests[msg.topic], twin)
+    if cmd == SETUP_CMD
+        # register the route only if it is a broker
+        if ismultipath(router)
+            for topic in msg.data["subscribers"]
+                if haskey(router.topic_interests, topic)
+                    push!(router.topic_interests[topic], twin)
                 else
-                    router.topic_interests[msg.topic] = Set([twin])
+                    router.topic_interests[topic] = Set([twin])
                 end
+            end
 
-                mark_and_broadcast(router, twin, msg)
+            for topic in msg.data["exposers"]
+                if haskey(router.topic_impls, topic)
+                    push!(router.topic_impls[topic], twin)
+                else
+                    router.topic_impls[topic] = Set([twin])
+                end
+            end
+            return EnableReactiveMsg(msg.id, true)
+        end
+    elseif cmd == SUBSCRIBE_CMD
+        if isauthorized(router, twin, msg.topic)
+            outcome = callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
+                if ismultipath(router)
+                    msg_from = get(msg.data, MSG_FROM, Now())
+                    twin.msg_from[msg.topic] = msg_from
+                    if haskey(router.topic_interests, msg.topic)
+                        push!(router.topic_interests[msg.topic], twin)
+                    else
+                        router.topic_interests[msg.topic] = Set([twin])
+                    end
+
+                    mark_and_broadcast(router, twin, msg)
+
+                    if get(msg.data, REACTIVE_CMD, false)
+                        return EnableReactiveMsg(msg.id, true)
+                    end
+                end
+            end
+
+            if outcome !== nothing
+                return outcome
             end
         else
             sts = STS_GENERIC_ERROR
@@ -202,13 +240,15 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
     elseif cmd == EXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(EXPOSE_HANDLER), router, twin, msg) do
-                if haskey(router.topic_impls, msg.topic)
-                    push!(router.topic_impls[msg.topic], twin)
-                else
-                    router.topic_impls[msg.topic] = Set([twin])
-                end
+                if ismultipath(router)
+                    if haskey(router.topic_impls, msg.topic)
+                        push!(router.topic_impls[msg.topic], twin)
+                    else
+                        router.topic_impls[msg.topic] = Set([twin])
+                    end
 
-                mark_and_broadcast(router, twin, msg)
+                    mark_and_broadcast(router, twin, msg)
+                end
             end
         else
             sts = STS_GENERIC_ERROR
@@ -217,23 +257,25 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
     elseif cmd == UNSUBSCRIBE_CMD
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(UNSUBSCRIBE_HANDLER), router, twin, msg) do
-                if haskey(router.topic_interests, msg.topic)
-                    if twin in router.topic_interests[msg.topic]
-                        delete!(router.topic_interests[msg.topic], twin)
-                        if isempty(router.topic_interests[msg.topic])
-                            delete!(router.topic_interests, msg.topic)
+                if ismultipath(router)
+                    if haskey(router.topic_interests, msg.topic)
+                        if twin in router.topic_interests[msg.topic]
+                            delete!(router.topic_interests[msg.topic], twin)
+                            if isempty(router.topic_interests[msg.topic])
+                                delete!(router.topic_interests, msg.topic)
+                            end
+                        else
+                            sts = STS_GENERIC_ERROR
                         end
+                        # remove from twin configuration
+                        if haskey(twin.msg_from, msg.topic)
+                            delete!(twin.msg_from, msg.topic)
+                        end
+
+                        mark_and_broadcast(router, twin, msg)
                     else
                         sts = STS_GENERIC_ERROR
                     end
-                    # remove from twin configuration
-                    if haskey(twin.msg_from, msg.topic)
-                        delete!(twin.msg_from, msg.topic)
-                    end
-
-                    mark_and_broadcast(router, twin, msg)
-                else
-                    sts = STS_GENERIC_ERROR
                 end
             end
         else
@@ -243,19 +285,21 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
     elseif cmd == UNEXPOSE_CMD
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(UNEXPOSE_HANDLER), router, twin, msg) do
-                if haskey(router.topic_impls, msg.topic)
-                    if twin in router.topic_impls[msg.topic]
-                        delete!(router.topic_impls[msg.topic], twin)
-                        if isempty(router.topic_impls[msg.topic])
-                            delete!(router.topic_impls, msg.topic)
-                        end
+                if ismultipath(router)
+                    if haskey(router.topic_impls, msg.topic)
+                        if twin in router.topic_impls[msg.topic]
+                            delete!(router.topic_impls[msg.topic], twin)
+                            if isempty(router.topic_impls[msg.topic])
+                                delete!(router.topic_impls, msg.topic)
+                            end
 
-                        mark_and_broadcast(router, twin, msg)
+                            mark_and_broadcast(router, twin, msg)
+                        else
+                            sts = STS_GENERIC_ERROR
+                        end
                     else
                         sts = STS_GENERIC_ERROR
                     end
-                else
-                    sts = STS_GENERIC_ERROR
                 end
             end
         else

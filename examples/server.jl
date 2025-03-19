@@ -17,7 +17,8 @@ end
 set_exponent(ctx, component, value) = ctx.exponent = value
 
 function start_server()
-    rb = server(Ctx(2))
+    rb = server()
+    inject(rb, Ctx(2))
     expose(rb, power)
     expose(rb, set_exponent)
     wait(rb)

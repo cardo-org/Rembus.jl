@@ -31,6 +31,15 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "data_at_rest" begin
             include("broker/test_data_at_rest.jl")
         end
+        @time @safetestset "ha_rpc" begin
+            include("broker/test_ha_rpc.jl")
+        end
+        @time @safetestset "ha_pub" begin
+            include("broker/test_ha_pub.jl")
+        end
+        @time @safetestset "ha_setup" begin
+            include("broker/test_ha_setup.jl")
+        end
     end
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "policies" begin
@@ -38,6 +47,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "pool" begin
             include("api/test_pool.jl")
+        end
+        @time @safetestset "pool_component" begin
+            include("api/test_pool_component.jl")
         end
         @time @safetestset "component" begin
             include("api/test_component.jl")

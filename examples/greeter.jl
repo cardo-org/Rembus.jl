@@ -1,7 +1,7 @@
 using Rembus
 
 function say_hello(name)
-    return "hello loving $name"
+    return "hello $name"
 end
 
 @component "greater"

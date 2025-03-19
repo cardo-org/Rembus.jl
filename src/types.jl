@@ -363,6 +363,7 @@ mutable struct Settings
     request_timeout::Float64
     challenge_timeout::Float64
     ack_timeout::Float64
+    reconnect_period::Float64
     Settings() = begin
         cfg = get(Base.get_preferences(), "Rembus", Dict())
 
@@ -409,6 +410,11 @@ mutable struct Settings
             "request_timeout",
             parse(Float64, get(ENV, "REMBUS_ACK_TIMEOUT", "2"))
         )
+        reconnect_period = get(
+            cfg,
+            "reconnect_period",
+            parse(Float64, get(ENV, "REMBUS_RECONNECT_PERIOD", "1"))
+        )
         new(
             zmq_ping_interval,
             ws_ping_interval,
@@ -424,7 +430,8 @@ mutable struct Settings
             connection_mode,
             request_timeout,
             challenge_timeout,
-            ack_timeout
+            ack_timeout,
+            reconnect_period
         )
     end
 end
@@ -460,7 +467,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     subinfo::Dict{String,Float64}
     topic_auth::Dict{String,Dict{String,Bool}} # topic => {tid(twin) => true}
     admins::Set{String}
-    server::Sockets.TCPServer
+    tcp_server::Sockets.TCPServer
     http_server::HTTP.Server
     ws_server::Sockets.TCPServer
     zmqsocket::ZMQ.Socket
@@ -532,6 +539,7 @@ mutable struct Twin <: AbstractTwin
     mark::UInt64
     msg_from::Dict{String,Float64} # subtract from now and consider minimum ts of unsent msg
     probe::Bool
+    failovers::Vector{RbURL}
     ackdf::DataFrame
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
@@ -546,7 +554,8 @@ mutable struct Twin <: AbstractTwin
         s,
         0,
         Dict(), # msg_from
-        false
+        false,
+        []
     )
 end
 
@@ -589,8 +598,6 @@ function Base.isopen(twin::Twin)
         return isopen(twin.socket)
     end
 end
-
-notreactive(twin) = twin.reactive === false
 
 Base.wait(twin::Twin) = isdefined(twin, :process) ? wait(twin.process.task) : nothing
 

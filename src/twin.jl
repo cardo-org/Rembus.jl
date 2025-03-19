@@ -378,6 +378,7 @@ function component(
     secure=false,
     authenticated=false,
     policy="first_up",
+    failovers=[]
 )
     if ismissing(name)
         name = tid(url)
@@ -386,19 +387,28 @@ function component(
         name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
     )
     set_policy(router, policy)
-    return component(url, router)
+    return component(url, router, failovers)
 end
 
 function component(
     url::AbstractString,
-    router::AbstractRouter
+    router::AbstractRouter,
+    failovers=[]
 )
     uid = RbURL(url)
-    return component(uid, router)
+    return component(uid, router, failovers)
 end
 
-function component(url::RbURL, router::AbstractRouter)
+function component(url::RbURL, router::AbstractRouter, failovers=[])
     twin = bind(router, url)
+    twin.failovers = [twin.uid]
+    for failover in failovers
+        cid = RbURL(failover)
+        cid.id = twin.uid.id
+        cid.hasname = twin.uid.hasname
+        push!(twin.failovers, cid)
+    end
+
     down_handler = (twin) -> @async reconnect(twin)
     twin.handler[HR_CONN_DOWN] = down_handler
     try
@@ -438,6 +448,13 @@ end
 
 connect() = connect(RbURL())
 
+function disconnect(twin::Twin)
+    if isdefined(twin, :process)
+        twin.process.phase = :closing
+        shutdown(twin.process)
+    end
+end
+
 function Visor.shutdown(twin::Twin)
     if isdefined(twin, :process)
         twin.process.phase = :closing
@@ -475,6 +492,58 @@ function rembus_ca()
     throw(CABundleNotFound())
 end
 
+function reconnect(twin::Twin, url::RbURL)
+    twin.uid = url
+    isconnected = false
+    try
+        if do_connect(twin)
+            router = last_downstream(twin.router)
+
+            # repost the configuration
+            @debug "[$twin] reposting exposers"
+            twin.reactive = true
+
+            if !twin_setup(router, twin)
+                @warn "[$twin] reconnection setup failed"
+                disconnect(twin)
+            else
+                twin.process.phase = :running
+                if !isempty(router.listeners)
+                    # It may be a failover node. Close all connected nodes to force
+                    # the reconnections to the main broker.
+                    connected = filter(router.id_twin) do (id, t)
+                        id !== tid(twin)
+                    end
+                    @debug "closing connected nodes"
+                    for (id, tw) in connected
+                        disconnect(tw)
+                    end
+                end
+
+                isconnected = true
+            end
+        end
+    catch e
+        @debug "[$twin] reconnecting error: ($e)"
+    end
+
+    return isconnected
+end
+
+function reconnect(twin::Twin)
+    twin.process.phase === :closing && return
+    @debug "reconnecting..."
+    period = last_downstream(twin.router).settings.reconnect_period
+    while true
+        for url in twin.failovers
+            sleep(period)
+            if twin.process.phase === :closing || reconnect(twin, url)
+                return
+            end
+        end
+    end
+end
+
 """
     do_connect(twin::Twin)
 
@@ -508,19 +577,21 @@ function update_tables(router::Router, twin::Twin, exports)
         return nothing
     end
 
-    @debug "[$twin] exports: $(exports[1])"
-    for topic in exports[1]
-        if !haskey(router.topic_impls, topic)
-            router.topic_impls[topic] = OrderedSet{Twin}()
+    if ismultipath(router)
+        @debug "[$twin] exports: $(exports[1])"
+        for topic in exports[1]
+            if !haskey(router.topic_impls, topic)
+                router.topic_impls[topic] = OrderedSet{Twin}()
+            end
+            push!(router.topic_impls[topic], twin)
         end
-        push!(router.topic_impls[topic], twin)
-    end
 
-    for topic in exports[2]
-        if !haskey(router.topic_interests, topic)
-            router.topic_interests[topic] = OrderedSet{Twin}()
+        for topic in exports[2]
+            if !haskey(router.topic_interests, topic)
+                router.topic_interests[topic] = OrderedSet{Twin}()
+            end
+            push!(router.topic_interests[topic], twin)
         end
-        push!(router.topic_interests[topic], twin)
     end
 
     return nothing
@@ -533,7 +604,6 @@ function authenticate(router::Router, twin::Twin)
     if !hasname(twin) || isa(twin.socket, Float)
         return nothing
     end
-
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
     reason = nothing
     msg = IdentityMsg(twin, cid(twin), meta)
@@ -638,7 +708,8 @@ end
 
 function topic_impls(router::Router, target::Twin)
     results = filter(keys(router.topic_function)) do topic
-        !haskey(router.subinfo, topic)
+        # filter out the built-in methods from the list of exposers
+        !haskey(router.subinfo, topic) && !isbuiltin(topic)
     end
 
     return _topics(results, target, router.topic_impls)
@@ -717,7 +788,9 @@ function receiver_exception(twin, e)
             @error "[$twin] connection closed: $e"
         end
     else
-        @error "[$twin] receiver error: $e"
+        if !isa(twin.socket, Float)
+            @error "[$twin] receiver error: $e"
+        end
     end
 end
 
@@ -743,7 +816,7 @@ function destroy_twin(twin::Twin, router::Router)
 end
 
 function end_receiver(twin::Twin)
-    twin.reactive = false
+    ## twin.reactive = false
     if hasname(twin)
         detach(twin)
     else
@@ -810,9 +883,9 @@ function pubsub_msg(router::Router, msg)
             msg.counter = save_message(router, msg)
         end
         # Publish to interested twins.
-        broadcast_msg(router, msg)
-        # Relay to subscribers of this broker.
         local_subscribers(router, msg.twin, msg)
+        # Relay to subscribers of this broker.
+        broadcast_msg(router, msg)
         if router.metrics !== nothing
             counter = Prometheus.labels(router.metrics.pub, (msg.topic,))
             Prometheus.inc(counter)
@@ -1096,14 +1169,16 @@ function detach(twin)
     # Forward the message counter to the last message received when online
     # because these messages get already a chance to be delivered.
     if twin.reactive
-        twin.mark = twin.router.mcounter
-        twin.reactive = false
+        twin.mark = last_downstream(twin.router).mcounter
+        ## twin.reactive = false
     end
+
+    # save the state to disk
+    save_twin(last_downstream(twin.router), twin)
 
     # Move the outstanding requests to the floating socket
     # This will trigger the requests timeout ...
     twin.socket = Float(twin.socket.out, twin.socket.direct)
-
 
     if !isempty(twin.ackdf)
         save_pubsub_received(twin)

@@ -57,8 +57,7 @@ const PRIVATE_TOPICS_CONFIG_CMD = "private_topics_config"
 const BROKER_CONFIG_CMD = "broker_config"
 const LOAD_CONFIG_CMD = "load_config"
 const SAVE_CONFIG_CMD = "save_config"
-
-const LEADER_HERE = "leader_here"
+const SETUP_CMD = "setup"
 
 const REACTIVE_HANDLER = "reactive_handler"
 const SUBSCRIBE_HANDLER = "subscribe_handler"

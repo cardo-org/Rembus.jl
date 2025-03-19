@@ -32,5 +32,5 @@ subscribe!(subject, logger())
 
 @component "rocket"
 @inject subject
-@subscribe my_topic before_now
-@wait
+@subscribe my_topic from = Rembus.LastReceived()
+@reactive

@@ -132,10 +132,7 @@ connection details. For example, the URL `ws://127.0.0.1:8000/foo` specifies:
 
 Anonymous connections omit the path part of the URL.
 
-If not specified, Rembus applies the following default values:
-- **Protocol**: `ws` (WebSocket).
-- **Address**: `127.0.0.1` (localhost).
-- **Port**: `8000`.
+If not specified, Rembus considers the above values as the default values.
 
 This means the URL `ws://127.0.0.1:8000/foo` is equivalent to simply `foo`.
 
@@ -172,7 +169,8 @@ function component(
     name=missing,
     secure=false,
     authenticated=false,
-    policy="first_up"
+    policy="first_up",
+    failovers=[]
 )
     uid = RbURL(url)
     return component(
@@ -183,7 +181,8 @@ function component(
         name=name,
         authenticated=authenticated,
         policy=policy,
-        secure=secure
+        secure=secure,
+        failovers=failovers
     )
 end
 
@@ -525,7 +524,7 @@ macro publish(topic, qos::Symbol=:QOS0)
 end
 
 function publish_expr(topic, qos)
-    ext = :(publish(Rembus.Rembus.singleton(), t))
+    ext = :(Rembus.publish(Rembus.Rembus.singleton(), t))
     fn = string(topic.args[1])
     ext.args[3] = fn
     args = topic.args[2:end]
@@ -582,7 +581,7 @@ macro rpc(topic)
 end
 
 function rpc_expr(topic)
-    ext = :(rpc(Rembus.singleton(), t))
+    ext = :(Rembus.rpc(Rembus.singleton(), t))
     fn = string(topic.args[1])
     ext.args[3] = fn
     args = topic.args[2:end]
@@ -594,13 +593,13 @@ fnname(fn::Expr) = fn.args[1].args[1]
 fnname(fn::Symbol) = fn
 
 function expose_expr(fn)
-    ext = :(expose(Rembus.singleton(), t))
+    ext = :(Rembus.expose(Rembus.singleton(), t))
     ext.args[3] = fnname(fn)
     return ext
 end
 
 function subscribe_expr(fn, from)
-    ext = :(subscribe(Rembus.singleton(), t, from))
+    ext = :(Rembus.subscribe(Rembus.singleton(), t, from))
     ext.args[3] = fnname(fn)
     ext.args[4] = from.args[2]
     return ext
@@ -674,7 +673,7 @@ end
 The methods of `fn` function is no more available to rpc clients.
 """
 macro unexpose(fn)
-    ext = :(unexpose(Rembus.singleton(), t))
+    ext = :(Rembus.unexpose(Rembus.singleton(), t))
     ext.args[3] = fn
     quote
         $(esc(ext))
@@ -741,7 +740,7 @@ end
 `mytopic`'s methods stop to handle messages published to topic `mytopic`.
 """
 macro unsubscribe(fn)
-    ext = :(unsubscribe(Rembus.singleton(), t))
+    ext = :(Rembus.unsubscribe(Rembus.singleton(), t))
     ext.args[3] = fn
     quote
         $(esc(ext))
@@ -755,7 +754,7 @@ end
 The subscribed methods start to handle published messages.
 """
 macro reactive(from::Expr=:(from = Rembus.LastReceived()))
-    ext = :(reactive(Rembus.singleton(), from))
+    ext = :(Rembus.reactive(Rembus.singleton(), from))
     ext.args[3] = from.args[2]
     quote
         $(esc(ext))
@@ -769,7 +768,7 @@ end
 The subscribed methods stop to handle published messages.
 """
 macro unreactive()
-    ext = :(unreactive(Rembus.singleton()))
+    ext = :(Rembus.unreactive(Rembus.singleton()))
     quote
         $(esc(ext))
         nothing
@@ -807,7 +806,7 @@ Using `@inject` to set a `container` object means that if some component
 
 """
 macro inject(ctx)
-    ext = :(inject(Rembus.singleton(), ctx))
+    ext = :(Rembus.inject(Rembus.singleton(), ctx))
     ext.args[3] = ctx
     quote
         $(esc(ext))
