@@ -385,10 +385,11 @@ Future Request Call.
 function fpc(
     twin::Twin,
     topic::AbstractString,
-    data=[]
+    data=(),
+    timeout=Inf
 )
     msg = RpcReqMsg(twin, topic, data)
-    return send_msg(twin, msg)
+    return send_msg(twin, msg, timeout)
 end
 
 #=
@@ -440,9 +441,10 @@ function Base.fetch(response::FutureResponse)
     end
 end
 
-function send_msg(twin, msg)
+function send_msg(twin, msg, timeout=Inf)
     router = last_downstream(twin.router)
-    timer = Timer(router.settings.request_timeout) do tmr
+    t = (timeout === Inf) ? router.settings.request_timeout : timeout
+    timer = Timer(t) do tmr
         if haskey(twin.socket.direct, msg.id)
             put!(twin.socket.direct[msg.id].future, RembusTimeout("$msg timeout"))
             delete!(twin.socket.direct, msg.id)

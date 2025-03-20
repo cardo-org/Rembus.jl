@@ -10,19 +10,10 @@ mutable struct Zenoh <: Rembus.AbstractRouter
     upstream::Union{Nothing,Rembus.AbstractRouter}
     process::Visor.Process
     function Zenoh()
-        return new(Dict(), nothing, nothing)
+        zenoh = new(Dict(), nothing, nothing)
+        zenoh.process = process("zenoh", zenoh_task, args=(zenoh,))
+        return zenoh
     end
-end
-
-#=
-Get the message data payload.
-Useful for content filtering by publish_interceptor().
-=#
-function msg_payload(io::IOBuffer)
-    mark(io)
-    payload = decode(io)
-    reset(io)
-    return payload
 end
 
 function subscribe_handler(zenoh, msg)
@@ -63,7 +54,7 @@ function publish_interceptor(zenoh, msg)
                 if unsealed
                     for cmp in zenoh.spaces[space]
                         @debug "[zenoh] sending: $payload"
-                        publish(cmp.second, cmp.first, topic, msg_payload(msg.data)...)
+                        publish(cmp.second, cmp.first, topic, Rembus.msgdata(msg.data)...)
                     end
                 end
             end
@@ -90,19 +81,6 @@ function zenoh_task(self, router)
     end
 end
 
-function start_zenoh(supervisor_name, downstream_router)
-    zenoh = Zenoh()
-    Rembus.upstream!(downstream_router, zenoh)
-    sv = from(supervisor_name)
-    zenoh.process = process("zenoh", zenoh_task, args=(zenoh,))
-    startup(sv, zenoh.process)
-end
-
-function start_broker()
-    router = Rembus.get_router(name="z", ws=8000)
-    start_zenoh("z", router)
-    return Rembus.bind(router)
-end
-
-rb = start_broker()
+rb = broker()
+Rembus.add_plugin(rb, Zenoh())
 wait(rb)

@@ -62,6 +62,19 @@ authenticated!() = set_preferences!(
     Rembus, "connection_mode" => string(authenticated), force=true
 )
 
+#=
+Get the message data payload.
+Useful for content filtering by publish_interceptor().
+=#
+function msgdata(io::IOBuffer)
+    mark(io)
+    payload = decode(io)
+    reset(io)
+    return payload
+end
+
+msgdata(v) = v
+
 function string_to_enum(connection_mode)
     if connection_mode == "anonymous"
         return anonymous
@@ -74,7 +87,7 @@ end
 
 function request_timeout()
     cfg = getcfg()
-    parse(Float64, get(cfg, "request_timeout", get(ENV, "REMBUS_TIMEOUT", "5")))
+    get(cfg, "request_timeout", parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5")))
 end
 
 function request_timeout!(newval)
@@ -268,6 +281,7 @@ end
 function twin_configuration(router, twin)
     cfg = Dict("exposers" => [], "subscribers" => [])
     for topic in keys(router.topic_function)
+        isbuiltin(topic) && continue
         if haskey(router.subinfo, topic)
             push!(cfg["subscribers"], topic)
         else

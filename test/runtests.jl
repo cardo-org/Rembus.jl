@@ -40,6 +40,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "ha_setup" begin
             include("broker/test_ha_setup.jl")
         end
+        @time @safetestset "simo" begin
+            include("broker/test_simo.jl")
+        end
+        @time @safetestset "setup" begin
+            include("broker/test_setup.jl")
+        end
     end
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "policies" begin

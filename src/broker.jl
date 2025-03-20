@@ -1,3 +1,20 @@
+function alltwins(router)
+    r = Rembus.last_downstream(router)
+    return [t for (name, t) in r.id_twin if name !== "__repl__"]
+end
+
+function add_plugin(twin::Twin, context)
+    router = twin.router
+    upstream!(router, context)
+    sv = router.process.supervisor
+    startup(sv, context.process)
+    twin.router = context
+
+    for tw in alltwins(router)
+        tw.router = context
+    end
+end
+
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
         df = load_pubsub_received(router, url)
@@ -153,7 +170,7 @@ end
 
 function local_fn(router::Router, twin::Twin, msg)
     if haskey(router.topic_function, msg.topic)
-        local_eval(router, twin, msg)
+        Threads.@spawn local_eval(router, twin, msg)
         return true
     end
     return false
@@ -161,9 +178,9 @@ end
 
 function local_subscribers(router::Router, twin::Twin, msg::RembusMsg)
     if haskey(router.topic_function, msg.topic)
-        local_eval(router, twin, msg)
+        Threads.@spawn local_eval(router, twin, msg)
     elseif haskey(router.topic_function, "*")
-        glob_eval(router, twin, msg)
+        Threads.@spawn glob_eval(router, twin, msg)
     end
     return nothing
 end
