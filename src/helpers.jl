@@ -73,7 +73,7 @@ function msgdata(io::IOBuffer)
     return payload
 end
 
-msgdata(v) = v
+msgdata(v) = v # COV_EXCL_LINE
 
 function string_to_enum(connection_mode)
     if connection_mode == "anonymous"

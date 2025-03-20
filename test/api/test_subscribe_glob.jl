@@ -70,7 +70,7 @@ function run(admin_component)
     # generate a broker error log
     publish(cli, "bar", 1, 2, 3)
 
-    sleep(0.5)
+    sleep(1)
     for c in [cli, clizmq, admin_sub, user_sub, user_subzmq]
         close(c)
     end
