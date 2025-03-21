@@ -4,6 +4,7 @@ Start the twin process and add to the router id_twin map.
 function start_twin(router::Router, twin::Twin)
     id = tid(twin)
     spec = process(id, twin_task, args=(twin,))
+    twin.process = spec
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
     router.id_twin[id] = twin
@@ -1196,7 +1197,6 @@ A twin enqueues the input messages when the component is offline.
 =#
 function twin_task(self, twin)
     try
-        twin.process = self
         @debug "starting twin [$(tid(twin))]"
         for msg in self.inbox
             if isshutdown(msg)

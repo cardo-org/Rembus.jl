@@ -3,7 +3,7 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.0.0 [Unreleased]
+## [Unreleased]
 
 ### Added
 
@@ -19,13 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - macro `@rpc_timeout` is superseded by `Rembus.request_timeout!(newval)`
 
-## 0.5.0 [2024-11-25]
+## [0.5.0] - 2024-11-25
 
 - Componenent multiplexing.
 
 - Internals refatoring and bug fixes.
 
-## 0.4.0 [2024-10-17]
+## [0.4.0] - 2024-10-17
 
 - Improve server api.
 
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [#32](https://github.com/cardo-org/Rembus.jl/issues/32) Update for julia 1.11.
 
-## 0.3.0 [2024-07-02]
+## [0.3.0] - 2024-07-02
 
 - HTTP api (GET for RPC, POST for Pub/Sub).
 
@@ -45,11 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - rpc_future() and fetch_response(): APIs for asynchronous RPC.
 
-## 0.2.1 [2024-05-21]
+## [0.2.1] - 2024-05-21
 
 - Add publish_interceptor method for extract and transform published messages.
 
-## 0.2.0 [2024-05-18]
+## [0.2.0] - 2024-05-18
 
 - [#4](https://github.com/cardo-org/Rembus.jl/issues/4) Improve connection error logs .
 
@@ -59,6 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Full test coverage.
 
-## 0.1.0 [2024-03-25]
+## [0.1.0] - 2024-03-25
 
 - First Release.
