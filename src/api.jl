@@ -123,8 +123,12 @@ end
 
 Start a component node and return a handle for interacting with it.
 
-The component connects to a remote node using the `url` argument, which specifies the
-connection details. For example, the URL `ws://127.0.0.1:8000/foo` specifies:
+In case of connection lost the underlying supervision logic attempts to reconnect to the
+broker until it succeed.
+
+The `url` argument specifies the connection details for the component. For example,
+the URL `ws://127.0.0.1:8000/foo` specifies:
+
 - **Protocol**: `ws` (WebSocket). Other supported protocols: `wss`, `tcp`, `tls`, `zmq`.
 - **Address**: `127.0.0.1` (localhost).
 - **Port**: `8000`.
@@ -140,8 +144,8 @@ Additionally, a component may listen for incoming connections on configured port
 it to act as a broker. These ports are specified using keyword arguments.
 
 ### Keyword Arguments
-- `name::Union{Missing, AbstractString}=missing`:
-  Unique identifier for the component's supervisor process.
+- `name=missing`:
+  Unique string identifier for the component's supervisor process.
   Defaults to the path part of the `url` argument if `missing`.
 - `ws=nothing`:
   WebSocket (ws/wss) listening port. Set to `nothing` to disable.
@@ -154,7 +158,7 @@ it to act as a broker. These ports are specified using keyword arguments.
 - `authenticated=false`: If `true`, only allows connections from named and authenticated
    nodes.
 - `policy::String="first_up"`: The routing policy used when topics are served by multiple
-   nodes. Possible options include:
+   nodes. Options:
     - `"first_up"`: Selects the first connected node from the list of nodes exposing the
       RPC method.
     - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
@@ -224,6 +228,9 @@ end
 
 unexpose(twin::Twin, fn::Function) = unexpose(twin, string(fn))
 
+"""
+    subscribe(rb, topic::AbstractString, fn::Function, from=Rembus.Now())
+"""
 function subscribe(
     twin::Twin,
     name::AbstractString,
@@ -244,6 +251,37 @@ function subscribe(
     return send_msg(twin, msg) |> fetch
 end
 
+"""
+    subscribe(rb, fn::Function, from=Rembus.Now())
+
+Subscribe to messages published to a `topic` and register a callback function `fn` to handle
+incoming messages.
+
+If the `topic` argument is omitted, the function name must be equal to the topic name.
+
+The `from` (default=`Rembus.Now`) argument defines the starting point in time from which
+messages published while the component was offline will be sent upon reconnection.
+Possible `from` values:
+  - **`Rembus.Now`**: Equivalent to `0.0`, ignores old messages, and starts receiving only
+    new messages from now.
+  - **`Rembus.LastReceived`**: Receives all messages published since the last disconnection.
+  - **`n::Float64`**: Receives messages published within the last `n` seconds.
+  - **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
+
+### Example
+
+```julia
+rb = component("myname")
+
+# Define a callback function for the "mytopic" topic
+function mytopic(data)
+    println("Received: ", data)
+end
+
+# Subscribe to "mytopic", receiving only new messages from now
+subscribe(rb, mytopic, from=Rembus.Now())
+```
+"""
 function subscribe(
     twin::Twin,
     func::Function,
@@ -291,12 +329,107 @@ function unreactive(twin::Twin)
     return send_msg(twin, msg) |> fetch
 end
 
+"""
+    publish(rb, topic::AbstractString, data...; qos=QOS0)
+
+Publish Vararg `data` values to `topic`.
+
+Each item of `data` map to an argument of the remote method subscribed to `topic`.
+
+`data` Vararg values may be of any type, but if the components are implemented in different
+languages then the values have to be DataFrames or primitive types that are
+[CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
+
+The `qos` keyword argument defines the quality of service:
+
+- **QOS0**: at most one message is delivered to the subscriber (message may be lost).
+- **QOS1**: at least one message is delivered to the subscriber (message may be duplicated).
+- **QOS2**: exactly one message is delivered to the subscriber.
+
+### Examples
+
+If the subscriber is a method that expects two arguments:
+
+```
+mytopic(x,y) = ... # do something with x and y
+```
+
+The published message is invoked with two Vararg arguments:
+
+```
+rb = component("myname")
+publish(rb, "mytopic", 1, 2)
+```
+
+If the remote subscribed method has no arguments invoke `publish` as:
+
+```
+publish(rb, "mytopic")
+```
+
+"""
+
+
+
+"""
+    publish(rb, topic::AbstractString, data...; qos=QOS0)
+
+Publish (`Vararg`) data values to a specified `topic`.
+
+Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
+
+The `data` values can be of any type. However, if the components are implemented in different languages,
+the values must be either `DataFrames` or primitive types that are CBOR-encodable
+(see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for interoperability.
+
+The keywork argument `qos` defines the quality of service (QoS) for message delivery. Possible values:
+
+- `QOS0` (default): At most one message is delivered to the subscriber (message may be lost).
+- `QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
+- `QOS2`: Exactly one message is delivered to the subscriber.
+
+# Examples
+
+If the subscriber is a method that expects two arguments:
+
+```julia
+mytopic(x, y) = ...  # do something with x and y
+```
+
+You can publish a message with (`Vararg`) data consisting of two values:
+
+```
+rb = component("myname")
+publish(rb, "mytopic", 1, 2)
+```
+
+If the remote subscribed method has no arguments invoke `publish` as:
+
+```
+publish(rb, "mytopic")
+```
+"""
 function publish(twin::Twin, topic::AbstractString, data...; qos=QOS0)
     isopen(twin) || error("connection down")
     msg = PubSubMsg(twin, topic, data, qos)
     return publish_msg(twin, msg)
 end
 
+"""
+    rpc(rb, service::AbstractString, data...)
+
+Make a request for a remote `service` method using Vararg `data` values as method arguments.
+
+Return a value or throw an error if a request timeout occurs or the remotely invoked
+method throws an exception.
+
+### Example
+```julia
+rb = component("myclient")
+# invoke mysum(1, 2) on the remote site
+result = rpc(rb, "mysum", 1, 2)
+```
+"""
 function rpc(
     twin::Twin,
     topic::AbstractString,

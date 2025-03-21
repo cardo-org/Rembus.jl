@@ -333,7 +333,7 @@ end
 """
     component(urls::Vector)
 
-Connect component to nodes defined be `urls` array.
+Start a component that connects to a pool of nodes defined by the `urls` array.
 """
 function component(
     urls::Vector;

@@ -207,8 +207,8 @@ function load_topic_auth_table(router)
 end
 
 function load_admins(router)
-    @debug "loading admins"
     fn = joinpath(broker_dir(router), "admins.json")
+    @debug "loading $fn"
     if isfile(fn)
         content = read(fn, String)
         router.admins = JSON3.read(content, Set)

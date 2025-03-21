@@ -47,6 +47,8 @@ function init_log(level=nothing)
     if !haskey(ENV, "JULIA_DEBUG")
         isnothing(level) ? logging("warn") : logging(level)
     end
+
+    return nothing
 end
 
 debug!() = init_log("debug")
