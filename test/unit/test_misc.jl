@@ -81,6 +81,9 @@ end
 @testitem "default_broker" begin
     rb = broker()
     @test Rembus.islistening(rb, wait=10)
+
+    request_timeout!(rb, 20)
+    @test request_timeout(rb) == 20
     shutdown()
 end
 @testitem "default_server" begin
