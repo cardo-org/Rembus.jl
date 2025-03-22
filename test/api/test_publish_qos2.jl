@@ -29,7 +29,7 @@ function run(pub_url, sub_url)
     Rembus.reset_probe!(sub)
     Rembus.reset_probe!(pub)
 
-    publish(pub, "foo", val, qos=QOS2)
+    publish(pub, "foo", val, qos=Rembus.QOS2)
 
     @test wait_message() do
         haskey(ctx, tid(sub)) && ctx[tid(sub)] == val

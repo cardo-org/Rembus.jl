@@ -659,7 +659,7 @@ function serve_zmq(pd, router::Router, port)
         router.zmqsocket = Socket(router.zmqcontext, ROUTER)
         ZMQ.bind(router.zmqsocket, "tcp://*:$port")
         router.listeners[:zmq].status = on
-        @info "$(pd.supervisor) listening at port zmq:$port"
+        @debug "$(pd.supervisor) listening at port zmq:$port"
         setphase(pd, :listen)
 
         @async zmq_broker_read_task(router)
@@ -691,7 +691,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
         router.tcp_server = server
         router.listeners[:tcp].status = on
 
-        @info "$(pd.supervisor) listening at port $proto:$port"
+        @debug "$(pd.supervisor) listening at port $proto:$port"
         setphase(pd, :listen)
 
         @async while true

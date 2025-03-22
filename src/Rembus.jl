@@ -36,9 +36,7 @@ export RembusError,
     RpcMethodLoopback,
     RpcMethodException
 
-export QOS0,
-    QOS1,
-    QOS2,
+export
     authorize,
     unauthorize,
     get_private_topics,
@@ -51,6 +49,8 @@ export QOS0,
     close,
     fpc,
     fdc,
+    request_timeout,
+    request_timeout!,
     direct,
     rpc,
     publish,
@@ -95,7 +95,6 @@ include("api.jl")
 include("http.jl")
 
 function __init__()
-    init_log(load_preference(Rembus, "log_level"))
     Visor.setroot(intensity=3)
     atexit(shutdown)
 end

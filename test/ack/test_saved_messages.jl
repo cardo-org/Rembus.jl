@@ -39,7 +39,7 @@ function produce(pub_url)
     for round in 1:2
         count = 0
         while count < messages
-            publish(pub, "foo", count, qos=QOS2)
+            publish(pub, "foo", count, qos=Rembus.QOS2)
             publish(pub, "bar", count)
             count += 1
         end
@@ -52,8 +52,8 @@ function consume(sub_url)
     ctx = Ctx()
 
     sub = connect(sub_url, name="saved_messages_sub")
-    @test isnothing(subscribe(sub, foo, Rembus.LastReceived()))
-    @test isnothing(subscribe(sub, bar, Rembus.LastReceived()))
+    @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
+    @test isnothing(subscribe(sub, bar, Rembus.LastReceived))
     inject(sub, ctx)
     reactive(sub, 1_900_000)
 

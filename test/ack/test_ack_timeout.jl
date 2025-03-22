@@ -6,7 +6,7 @@ function testcase(puburl)
     Rembus.ack_timeout!(1e-20)
     pub = connect(puburl)
     Rembus.info!()
-    publish(pub, "topic", (1, 2, 3), qos=QOS1)
+    publish(pub, "topic", (1, 2, 3), qos=Rembus.QOS1)
     close(pub)
     @info "$puburl closed"
     Rembus.ack_timeout!(2)

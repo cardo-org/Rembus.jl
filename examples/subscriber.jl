@@ -34,7 +34,7 @@ all_announcements(ann_db, rb) = return ann_db.df
 # subscribe is a configuration command, to start receive messages a reactive
 # command MUST be issued.
 #
-@subscribe announcement from = Rembus.LastReceived()
+@subscribe announcement from = Rembus.LastReceived
 
 #
 # From now on the component may receive pub/sub message from the broker.

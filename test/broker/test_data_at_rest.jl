@@ -35,7 +35,7 @@ function run(pub_url, sub_url)
     Rembus.islistening(bro, protocol=[:ws], wait=10)
 
     sub = connect(sub_url, name="saved_messages_sub")
-    @test isnothing(subscribe(sub, foo, Rembus.LastReceived()))
+    @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     inject(sub, ctx)
     reactive(sub)
 
@@ -43,8 +43,8 @@ function run(pub_url, sub_url)
     count = 0
 
     while count < rounds
-        publish(pub, "foo_qos2", Dict(string(count) => Float32(count)), qos=QOS2)
-        publish(pub, "foo_qos0", count, qos=QOS0)
+        publish(pub, "foo_qos2", Dict(string(count) => Float32(count)), qos=Rembus.QOS2)
+        publish(pub, "foo_qos0", count, qos=Rembus.QOS0)
         count += 1
     end
     sleep(1)

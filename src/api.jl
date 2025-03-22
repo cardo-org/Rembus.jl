@@ -199,17 +199,73 @@ function issuccess(response)
 end
 
 """
-    inject(twin::Twin, ctx)
+    inject(rb, ctx)
 
-Bind a `ctx` context object to the `twin` component.
+Bind a `ctx` context to the `rb` component.
 
-When a `ctx` context object is bound then it will be the first argument of subscribed and
-exposed methods.
+When a `ctx` context is bound, the method signatures of subscribed and exposed
+functions change as follows:
 
-See [`@inject`](@ref) for more details.
+- the first argument is the `ctx` context.
+- the second argument is the `rb` component.
+- The remaining arguments correspond to the RPC request's arguments.
+
+The `ctx` is useful for maintaining local state contextualized to the `rb` component.
+
+### Example
+
+```julia
+using Rembus
+
+# keep the number of processed messages
+mutable struct Context
+    msgcount::UInt
+end
+
+function topic(context::Context, rb, arg1, arg2)
+    context.msgcount += 1
+    some_logic(arg1, arg2)
+end
+
+ctx = Context(0)
+rb = component("myname")
+subscribe(rb, topic)
+inject(rb, ctx)
+```
+
+In this example, when a message is published:
+
+```julia
+publish(rb, "topic", arg1, arg2)
+```
+
+The invoked method will receive the context and component as the first two arguments:
+
+```julia
+foo(container, rb, arg2, arg2)
+```
 """
 inject(twin, ctx=nothing) = twin.router.shared = ctx
 
+"""
+    expose(rb, topic::AbstractString, fn::Function)
+    expose(rb, fn::Function)
+
+Expose the methods of function `fn` to be executed by rpc clients using `topic` as
+RPC method name.
+
+If the `topic` argument is omitted the function name equals to the RPC method name.
+
+`fn` returns the RPC response.
+
+Expose the methods of function `fn` to be invoked by RPC clients, using `topic` as the RPC
+method name.
+
+If the `topic` argument is omitted, the function name is used as the RPC method name.
+
+`fn` is expected to return the RPC response. Any exceptions thrown by `fn` are caught and
+returned as an RPC exception.
+"""
 function expose(twin::Twin, name::AbstractString, func::Function)
     router = twin.router
     router.topic_function[name] = func
@@ -219,6 +275,11 @@ end
 
 expose(twin::Twin, func::Function) = expose(twin, string(func), func)
 
+"""
+    unexpose(rb, service::AbstractString)
+
+Stop servicing RPC requests targeting `service`.
+"""
 function unexpose(twin::Twin, topic::AbstractString)
     router = twin.router
     delete!(router.topic_function, topic)
@@ -226,16 +287,21 @@ function unexpose(twin::Twin, topic::AbstractString)
     return send_msg(twin, msg) |> fetch
 end
 
+"""
+    unexpose(rb, fn::Function)
+
+Stop servicing RPC requests targeting `fn` function.
+"""
 unexpose(twin::Twin, fn::Function) = unexpose(twin, string(fn))
 
 """
-    subscribe(rb, topic::AbstractString, fn::Function, from=Rembus.Now())
+    subscribe(rb, topic::AbstractString, fn::Function, from=Rembus.Now)
 """
 function subscribe(
     twin::Twin,
     name::AbstractString,
     func::Function,
-    from::Union{Real,Period,Dates.CompoundPeriod}=Now()
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now
 )
     from_now = to_microseconds(from)
     router = twin.router
@@ -252,7 +318,7 @@ function subscribe(
 end
 
 """
-    subscribe(rb, fn::Function, from=Rembus.Now())
+    subscribe(rb, fn::Function, from=Rembus.Now)
 
 Subscribe to messages published to a `topic` and register a callback function `fn` to handle
 incoming messages.
@@ -279,17 +345,22 @@ function mytopic(data)
 end
 
 # Subscribe to "mytopic", receiving only new messages from now
-subscribe(rb, mytopic, from=Rembus.Now())
+subscribe(rb, mytopic, from=Rembus.Now)
 ```
 """
 function subscribe(
     twin::Twin,
     func::Function,
-    from::Union{Real,Period,Dates.CompoundPeriod}=Now()
+    from::Union{Real,Period,Dates.CompoundPeriod}=Now
 )
     return subscribe(twin, string(func), func, from)
 end
 
+"""
+    unsubscribe(rb, topic::AbstractString)
+
+Stops delivering messages published on the specified `topic` to the `rb` component.
+"""
 function unsubscribe(twin::Twin, topic::AbstractString)
     router = twin.router
     delete!(router.topic_function, topic)
@@ -298,8 +369,51 @@ function unsubscribe(twin::Twin, topic::AbstractString)
     return send_msg(twin, msg) |> fetch
 end
 
+"""
+    unsubscribe(rb, fn::Function)
+
+Stops delivering messages to the specified `fn` function.
+"""
 unsubscribe(twin::Twin, fn::Function) = unsubscribe(twin, string(fn))
 
+"""
+    reactive(rb, from::Union{Real,Period,Dates.CompoundPeriod}=Day(1))
+
+Enable the reception of published messages for topics to which the node is subscribed via
+[`subscribe`](@ref).
+
+The `from` argument specifies the starting point in time from which messages published while
+the component was offline will be delivered upon reconnection.
+
+This value applies to all subscribed topics but can be overridden by the `from` argument in
+the [`subscribe`](@ref) method for a specific topic — though only to define narrower time
+ranges.
+
+Possible `from` values:
+  - **`Rembus.Now`**: Equivalent to `0.0`, ignores old messages, and starts receiving only
+    new messages from now.
+  - **`Rembus.LastReceived`**: Receives all messages published since the last disconnection.
+  - **`n::Float64`**: Receives messages published within the last `n` seconds.
+  - **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
+
+### Example
+
+```julia
+rb = component("myname")
+subscribe(rb, "mytopic1", Rembus.Now)
+subscribe(rb, "mytopic2", Rembus.LastReceived)
+subscribe(rb, "mytopic3", Hour(1))
+
+reactive(rb, Day(1))
+```
+
+In this example:
+
+-    `mytopic1` will receive messages starting from now.
+-    `mytopic2` will receive messages published within the last day, even if `subscribe()`
+     uses `Rembus.LastReceived`.
+-    `mytopic3` will receive messages published within the last hour.
+"""
 function reactive(
     twin::Twin,
     from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
@@ -316,6 +430,11 @@ function reactive(
     return send_msg(twin, msg) |> fetch
 end
 
+"""
+    unreactive(rb)
+
+Stops the delivery of published messages to the `rb` component.
+"""
 function unreactive(twin::Twin)
     msg = AdminReqMsg(
         twin,
@@ -330,7 +449,7 @@ function unreactive(twin::Twin)
 end
 
 """
-    publish(rb, topic::AbstractString, data...; qos=QOS0)
+    publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
 Publish Vararg `data` values to `topic`.
 
@@ -342,9 +461,11 @@ languages then the values have to be DataFrames or primitive types that are
 
 The `qos` keyword argument defines the quality of service:
 
-- **QOS0**: at most one message is delivered to the subscriber (message may be lost).
-- **QOS1**: at least one message is delivered to the subscriber (message may be duplicated).
-- **QOS2**: exactly one message is delivered to the subscriber.
+- **Rembus.Rembus.Rembus.QOS0**: at most one message is delivered to the subscriber
+    (message may be lost).
+- **Rembus.QOS1**: at least one message is delivered to the subscriber
+    (message may be duplicated).
+- **Rembus.QOS2**: exactly one message is delivered to the subscriber.
 
 ### Examples
 
@@ -372,7 +493,7 @@ publish(rb, "mytopic")
 
 
 """
-    publish(rb, topic::AbstractString, data...; qos=QOS0)
+    publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
 Publish (`Vararg`) data values to a specified `topic`.
 
@@ -384,9 +505,9 @@ the values must be either `DataFrames` or primitive types that are CBOR-encodabl
 
 The keywork argument `qos` defines the quality of service (QoS) for message delivery. Possible values:
 
-- `QOS0` (default): At most one message is delivered to the subscriber (message may be lost).
+- `Rembus.QOS0` (default): At most one message is delivered to the subscriber (message may be lost).
 - `QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
-- `QOS2`: Exactly one message is delivered to the subscriber.
+- `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
 
 # Examples
 
@@ -409,7 +530,7 @@ If the remote subscribed method has no arguments invoke `publish` as:
 publish(rb, "mytopic")
 ```
 """
-function publish(twin::Twin, topic::AbstractString, data...; qos=QOS0)
+function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
     isopen(twin) || error("connection down")
     msg = PubSubMsg(twin, topic, data, qos)
     return publish_msg(twin, msg)
@@ -450,7 +571,7 @@ function direct(
 end
 
 """
-    function authorize(twin::Twin, client::AbstractString, topic::AbstractString)
+    function authorize(rb, client::AbstractString, topic::AbstractString)
 
 Authorize the `client` component to use the private `topic`.
 
@@ -462,7 +583,7 @@ function authorize(twin::Twin, client::AbstractString, topic::AbstractString)
 end
 
 """
-    function unauthorize(twin::Twin, client::AbstractString, topic::AbstractString)
+    function unauthorize(rb, client::AbstractString, topic::AbstractString)
 
 Revoke authorization to the `client` component for use of the private `topic`.
 
@@ -474,11 +595,11 @@ function unauthorize(twin::Twin, client::AbstractString, topic::AbstractString)
 end
 
 """
-    private_topic(twin::Twin, topic::AbstractString)
+    private_topic(rb, topic::AbstractString)
 
-Set the `topic` to private.
+Set the specified `topic` to private.
 
-The component must have the admin role for changing the privateness level.
+The component must have the admin role to change the privacy level.
 """
 function private_topic(twin::Twin, topic::AbstractString)
     msg = AdminReqMsg(twin, topic, Dict(COMMAND => PRIVATE_TOPIC_CMD))
@@ -486,11 +607,11 @@ function private_topic(twin::Twin, topic::AbstractString)
 end
 
 """
-    public_topic(twin::Twin, topic::AbstractString)
+    public_topic(rb, topic::AbstractString)
 
-Set the `topic` to public.
+Set the specified `topic` to public.
 
-The component must have the admin role for changing the privateness level.
+The component must have the admin role to change the privacy level.
 """
 function public_topic(twin::Twin, topic::AbstractString)
     msg = AdminReqMsg(twin, topic, Dict(COMMAND => PUBLIC_TOPIC_CMD))
@@ -498,9 +619,9 @@ function public_topic(twin::Twin, topic::AbstractString)
 end
 
 """
-    get_private_topics(twin::Twin)
+    get_private_topics(rb)
 
-Get the components bound to private topics.
+Return a dictionary mapping private topics to their lists of authorized components.
 """
 function get_private_topics(twin::Twin)
     msg = AdminReqMsg(twin, BROKER_CONFIG, Dict(COMMAND => PRIVATE_TOPICS_CONFIG_CMD))
@@ -625,6 +746,23 @@ function broker_shutdown(admin::Twin)
     return send_msg(admin, msg) |> fetch
 end
 
+"""
+    request_timeout(rb)
+
+Get the request timeout value for the component `rb`.
+"""
+request_timeout(twin::Twin) = last_downstream(twin.router).settings.request_timeout
+
+"""
+    request_timeout!(rb, value::Real)
+
+Set the request timeout value for the component `rb`.
+"""
+function request_timeout!(twin::Twin, value::Real)
+    router = last_downstream(twin.router)
+    router.settings.request_timeout = value
+    return twin
+end
 
 """
     @publish topic(arg1,arg2,...)
@@ -651,7 +789,7 @@ end
 supervise()
 ```
 """
-macro publish(topic, qos::Symbol=:QOS0)
+macro publish(topic, qos=Rembus.QOS0)
     ext = publish_expr(topic, qos)
     quote
         $(esc(ext))
@@ -846,7 +984,7 @@ supervise()
 @publish foo("gfr", 54.2)
 ```
 """
-macro subscribe(fn::Symbol, from=:(from = Rembus.Now()))
+macro subscribe(fn::Symbol, from=:(from = Rembus.Now))
     quote
         $(esc(subscribe_expr(fn, from)))
         nothing
@@ -860,7 +998,7 @@ end
 
 Subscribe the function expression.
 """
-macro subscribe(fn::Expr, from=:(from = Rembus.Now()))
+macro subscribe(fn::Expr, from=:(from = Rembus.Now))
     ex = subscribe_expr(fn, from)
     quote
         $(esc(fn))
@@ -888,7 +1026,7 @@ end
 
 The subscribed methods start to handle published messages.
 """
-macro reactive(from::Expr=:(from = Rembus.LastReceived()))
+macro reactive(from::Expr=:(from = Rembus.LastReceived))
     ext = :(Rembus.reactive(Rembus.singleton(), from))
     ext.args[3] = from.args[2]
     quote
@@ -913,32 +1051,10 @@ end
 """
      @inject container
 
-Bind a `container` object that is passed as the first argument of the subscribed
-component functions.
+Binds a `container` object, which is passed as the first argument to subscribed component
+functions.
 
-The `container` is useful for mantaining a state.
-
-```julia
-using Rembus
-
-# keep the number of processed messages
-mutable struct Context
-    msgcount::UInt
-end
-
-function topic(context::Context, arg1, arg2)
-    context.msgcount += 1
-    some_logic(arg1, arg2)
-end
-
-ctx = Context(0)
-@subscribe topic
-@inject ctx
-```
-
-Using `@inject` to set a `container` object means that if some component
-`publish topic(arg1,arg2)` then the method `foo(container,arg2,arg2)` will be called.
-
+See [`inject`](@ref) for more details.
 """
 macro inject(ctx)
     ext = :(Rembus.inject(Rembus.singleton(), ctx))

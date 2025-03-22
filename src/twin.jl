@@ -838,7 +838,7 @@ function sendto_origin(twin, msg)
 end
 
 """
-    isauthenticated(twin::Twin)
+    isauthenticated(rb)
 
 Return true if the component is authenticated.
 """
@@ -1144,7 +1144,7 @@ function listener(proc, port, router::Router, sslconfig)
     # router.ws_server = server
     ws_server!(router, server)
     proto = (sslconfig === nothing) ? "ws" : "wss"
-    @info "$(proc.supervisor) listening at port $proto:$port"
+    @debug "$(proc.supervisor) listening at port $proto:$port"
 
     setphase(proc, :listen)
 

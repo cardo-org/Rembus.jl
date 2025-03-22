@@ -1,14 +1,6 @@
 
 # COV_EXCL_START
 
-#=
-The from keyword of the subscribe methods may assume the values:
-  * Now() subscribes for messages received from now on;
-  * LastReceived() subscribes for all messages received in the past where node was offline;
-=#
-Now() = 0.0
-LastReceived() = Inf
-
 always_true(uid) = true
 
 isenabled(router, tenant::Nothing) = true
@@ -87,13 +79,25 @@ function string_to_enum(connection_mode)
     end
 end
 
+"""
+    request_timeout()
+
+Returns the default request timeout used when creating new nodes with the
+[`broker`](@ref), [`component`](@ref), [`connect`](@ref), or [`server`](@ref) functions.
+"""
 function request_timeout()
     cfg = getcfg()
     get(cfg, "request_timeout", parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5")))
 end
 
-function request_timeout!(newval)
-    set_preferences!(Rembus, "request_timeout" => newval, force=true)
+"""
+    request_timeout!(value::Real)
+
+Set the default request timeout used when creating new nodes with the
+[`broker`](@ref), [`component`](@ref), [`connect`](@ref), or [`server`](@ref) functions.
+"""
+function request_timeout!(value::Real)
+    set_preferences!(Rembus, "request_timeout" => value, force=true)
 end
 
 function challenge_timeout!(newval)
@@ -373,7 +377,7 @@ function get_data(pkt)
     return data
 end
 
-function data_at_rest(; from=LastReceived(), broker="broker")
+function data_at_rest(; from=LastReceived, broker="broker")
     files = messages_files(broker, to_microseconds(from))
     result = DataFrame(
         ptr=UInt64[],

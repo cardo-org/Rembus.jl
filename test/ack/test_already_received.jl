@@ -33,17 +33,17 @@ function run(pub_url, sub_url)
     ctx = Ctx()
 
     sub = connect(sub_url, name="saved_messages_sub")
-    @test isnothing(subscribe(sub, foo, Rembus.LastReceived()))
+    @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     inject(sub, ctx)
     reactive(sub)
 
     pub = connect(pub_url, name="saved_messages_pub")
     count = 0
 
-    msg = Rembus.PubSubMsg(pub, "foo", "data", QOS2)
+    msg = Rembus.PubSubMsg(pub, "foo", "data", Rembus.QOS2)
     @info "[already_received] msgid: $([msg.id])"
     while count < messages
-        #publish(pub, "foo", count, qos=QOS2)
+        #publish(pub, "foo", count, qos=Rembus.QOS2)
         msg.counter = Rembus.save_message(pub.router, msg)
         Rembus.message_send(pub, msg)
         count += 1

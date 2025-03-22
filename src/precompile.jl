@@ -56,7 +56,7 @@ function pubsub(pub_url, sub_url)
     pub = connect(pub_url)
     val = 1
     publish(pub, "precompile_topic", val)
-    publish(pub, "precompile_topic", val, qos=QOS2)
+    publish(pub, "precompile_topic", val, qos=Rembus.QOS2)
     unsubscribe(sub, precompile_topic)
     close(sub)
     close(pub)

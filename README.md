@@ -80,9 +80,9 @@ df = DataFrame(a=1:1_000_000, b=rand(1_000_000))
 
 # Messages are acknowledged and eventually retransmitted.
 # at least once delivery guarantee.
-@publish mytopic(df) QOS1
+@publish mytopic(df) Rembus.QOS1
 
 # Exactly once delivery guarantee.
-@publish mytopic(df) QOS2
+@publish mytopic(df) Rembus.QOS2
 
 ```

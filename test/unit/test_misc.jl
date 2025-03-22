@@ -57,7 +57,7 @@ end
 
     url = Rembus.RbURL(comp)
     twin = Rembus.Twin(url, router)
-    msg = Rembus.PubSubMsg(twin, "topic", "data", QOS2)
+    msg = Rembus.PubSubMsg(twin, "topic", "data", Rembus.QOS2)
     twin.ackdf = Rembus.load_pubsub_received(router, url)
     Rembus.add_pubsub_id(twin, msg)
     Rembus.detach(twin)
@@ -98,10 +98,10 @@ end
 end
 
 @testitem "periods" begin
-    p = Rembus.Now()
+    p = Rembus.Now
     @test p == 0
 
-    p = Rembus.LastReceived()
+    p = Rembus.LastReceived
     @test isinf(p)
 end
 

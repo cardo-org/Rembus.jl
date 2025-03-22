@@ -127,10 +127,10 @@ because the node was offline are sent to it.
 ```
 
 For declaring interest for all messaged delivered wheh the node was offline with [Macro-based API](@ref)
-use `from=LastReceived()` expression:
+use `from=LastReceived` expression:
 
 ```julia
-@subscribe mytopic1 from=LastReceived()
+@subscribe mytopic1 from=LastReceived
 ```
 
 ### Private topics

@@ -215,7 +215,7 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
             callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
                 if ismultipath(router)
                     if mark_and_broadcast(router, twin, msg)
-                        msg_from = get(msg.data, MSG_FROM, Now())
+                        msg_from = get(msg.data, MSG_FROM, Now)
                         twin.msg_from[msg.topic] = msg_from
                         if haskey(router.topic_interests, msg.topic)
                             push!(router.topic_interests[msg.topic], twin)

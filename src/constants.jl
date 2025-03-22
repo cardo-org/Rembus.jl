@@ -39,6 +39,15 @@ const TRACE_DEBUG = "debug"
 const TRACE_INFO = "info"
 const TRACE_ERROR = "error"
 
+#=
+The from argument of the subscribe methods may assume the values:
+  * Now subscribes for messages received from now on;
+  * LastReceived subscribes for all messages received in the past where node was offline;
+=#
+const Now = 0.0
+const LastReceived = Inf
+
+
 const REACTIVE_CMD = "reactive"
 const RESET_ROUTER_CMD = "reset_router"
 const SHUTDOWN_CMD = "shutdown"

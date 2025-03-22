@@ -1,11 +1,15 @@
 abstract type RembusException <: Exception end
 
 """
-    RembusTimeout
+$(TYPEDEF)
 
-Thrown when a response it is not received.
+Exception thrown when a response is not received before the request timeout expires.
+
+## Fields
+$(TYPEDFIELDS)
 """
 struct RembusTimeout{T} <: RembusException
+    "request message"
     msg::T
     RembusTimeout{T}(msg) where {T} = new{T}(msg)
 end
@@ -14,9 +18,20 @@ RembusTimeout(msg) = RembusTimeout{typeof(msg)}(msg)
 
 # An error response from the broker that is not one of:
 # STS_METHOD_NOT_FOUND, STS_METHOD_EXCEPTION, STS_METHOD_LOOPBACK, STS_METHOD_UNAVAILABLE
+"""
+$(TYPEDEF)
+
+Generic Rembus error.
+
+## Fields
+$(TYPEDFIELDS)
+"""
 Base.@kwdef struct RembusError <: RembusException
+    "error code"
     code::UInt8
+    "topic name if available"
     topic::Union{String,Nothing} = nothing
+    "detailed error message"
     reason::Union{String,Nothing} = nothing
 end
 
@@ -25,16 +40,22 @@ struct AlreadyConnected <: RembusException
 end
 
 """
-`RpcMethodNotFound` is thrown from a rpc request when the called method is unknown.
+$(TYPEDEF)
 
-fields:
-$(FIELDS)
+Exception thrown from a rpc request when the called method is unknown.
 
-## RPC Client
+## Fields
+$(TYPEDFIELDS)
+
+## Example
+An RPC Client request a method that does not exist.
+
 ```julia
 @rpc coolservice()
 ```
-Output:
+
+The result is an exception:
+
 ```
 ERROR: Rembus.RpcMethodNotFound("rembus", "coolservice")
 Stacktrace:
@@ -47,15 +68,15 @@ struct RpcMethodNotFound <: RembusException
 end
 
 """
-    RpcMethodUnavailable
+$(TYPEDEF)
 
 Thrown when a RPC method is unavailable.
 
 A method is considered unavailable when some component that exposed the method is
 currently disconnected from the broker.
 
-# Fields
-$(FIELDS)
+## Fields
+$(TYPEDFIELDS)
 """
 struct RpcMethodUnavailable <: RembusException
     "service name"
@@ -63,12 +84,12 @@ struct RpcMethodUnavailable <: RembusException
 end
 
 """
-    RpcMethodLoopback
+$(TYPEDEF)
 
 Thrown when a RPC request would invoke a locally exposed method.
 
-# Fields
-$(FIELDS)
+## Fields
+$(TYPEDFIELDS)
 """
 struct RpcMethodLoopback <: RembusException
     "service name"
@@ -76,18 +97,22 @@ struct RpcMethodLoopback <: RembusException
 end
 
 """
-    RpcMethodException
+$(TYPEDEF)
 
 Thrown when a RPC method throws an exception.
 
-# Fields
-$(FIELDS)
+## Fields
+$(TYPEDFIELDS)
 
-## Exposer
+## Example
+A component exposes a method that expect a string argument.
+
 ```julia
 @expose foo(name::AbstractString) = "hello " * name
 ```
-## RPC client
+
+A RPC client invoke the method with an integer argument.
+
 ```julia
 try
     @rpc foo(1)
@@ -95,7 +120,9 @@ catch e
     @error e.reason
 end
 ```
-Output:
+
+The result is an exception:
+
 ```
 ┌ Error: MethodError: no method matching foo(::UInt64)
 │
@@ -175,11 +202,11 @@ end
 struct CABundleNotFound <: Exception
 end
 
-"""
+#=
 A component of the Rembus network.
 
 If port is equal to zero the node is not eligible to become a broker.
-"""
+=#
 struct Node
     cid::String # component id
     protocol::Symbol # :ws, :wss, :tcp, :tls, :zmq
@@ -547,7 +574,7 @@ mutable struct Twin <: AbstractTwin
         missing,
         Dict(), # handler
         false,
-        true,
+        false,
         nothing,
         nothing,
         r,

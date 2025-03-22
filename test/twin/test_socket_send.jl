@@ -21,7 +21,7 @@ function run()
     sleep(0.1)
 
     Rembus.ack_timeout!(1e-9)
-    msg = Rembus.PubSubMsg(rb, "topic", "data", QOS2)
+    msg = Rembus.PubSubMsg(rb, "topic", "data", Rembus.QOS2)
     pubsub(rb, msg)
     Rembus.ack_timeout!(2)
 end

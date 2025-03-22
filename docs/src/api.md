@@ -129,12 +129,12 @@ wait(rb) # or until Ctrl-C
 By default `subscribe` will consume messages published after the component connect
 to the broker, messages sent previously are lost.
 
-For receiving messages when the component was offline it is mandatory to set a component name and to declare interest in old messages with the `from` argument set to `LastReceived()`:
+For receiving messages when the component was offline it is mandatory to set a component name and to declare interest in old messages with the `from` argument set to `LastReceived`:
 
 ```julia
 rb = connect("myname")
 
-subscribe(rb, mytopic, from=LastReceived())
+subscribe(rb, mytopic, LastReceived)
 
 wait(rb) # or until Ctrl-C
 ```
