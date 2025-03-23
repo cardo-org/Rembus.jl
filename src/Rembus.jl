@@ -64,7 +64,7 @@ export
     register,
     unregister,
     issuccess,
-    tid,
+    rid,
     @component,
     @publish,
     @subscribe,

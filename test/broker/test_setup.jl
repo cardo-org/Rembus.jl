@@ -42,7 +42,7 @@ function twin_setup(router, twin)
         twin,
         Rembus.BROKER_CONFIG,
         cfg,
-        tid(twin)
+        rid(twin)
     )
     response = Rembus.send_msg(twin, msg)
     result = Rembus.fetch(response.future)

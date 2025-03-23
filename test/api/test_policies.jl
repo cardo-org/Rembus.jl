@@ -4,7 +4,7 @@ foo() = "ciao mondo"
 
 function run()
 
-    Rembus.cid!("policies_component")
+    Rembus.localcid!("policies_component")
 
     server = connect("server")
 
@@ -32,4 +32,4 @@ function run()
 end
 
 execute(run, "policies")
-Rembus.cid!("")
+Rembus.localcid!("")

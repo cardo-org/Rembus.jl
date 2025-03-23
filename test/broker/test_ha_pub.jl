@@ -13,9 +13,9 @@ broker_name = "ha_pub_main"
 failover_name = "ha_pub_failover"
 
 function mytopic(ctx, rb, msg)
-    tid = Rembus.tid(rb)
+    rid = Rembus.rid(rb)
     @info "[ha_pub][$(Rembus.path(rb))] recv: $msg"
-    ctx[tid] = msg
+    ctx[rid] = msg
 end
 
 function run()

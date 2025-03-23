@@ -67,8 +67,8 @@ function test_errors()
     @test_throws ErrorException connect()
 
     # reset the default cid
-    Rembus.cid!("")
-    component()
+    Rembus.localcid!("")
+    #component()
 
 end
 

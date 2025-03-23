@@ -71,7 +71,7 @@ function run()
         ### result = rpc(client[i], "myservice$i", i)
         result = rpc(client[i], "myservice$i", df)
         try
-            put!(ch, Result(tid(client[i]), result))
+            put!(ch, Result(rid(client[i]), result))
         catch e
             @error "result: $e"
         end

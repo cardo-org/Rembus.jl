@@ -18,8 +18,8 @@ end
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
         df = load_pubsub_received(router, url)
-        if haskey(router.id_twin, tid(url))
-            twin = router.id_twin[tid(url)]
+        if haskey(router.id_twin, rid(url))
+            twin = router.id_twin[rid(url)]
         else
             twin = Twin(url, first_upstream(router))
             twin.ackdf = df
@@ -293,10 +293,10 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     # Broadcast to twins that are admins and to twins that are authorized to
     # subscribe to topic.
     for twin in twins
-        if tid(twin) in router.admins
+        if rid(twin) in router.admins
             push!(authtwins, twin)
         elseif haskey(router.topic_auth, topic)
-            if haskey(router.topic_auth[topic], tid(twin))
+            if haskey(router.topic_auth[topic], rid(twin))
                 # It is a private topic, check if twin is authorized.
                 push!(authtwins, twin)
             end
@@ -431,7 +431,7 @@ function router_task(self, router::Router, ready, implementor_rule)
             elseif isa(msg, IdentityMsg)
                 twin = msg.twin
                 url = RbURL(msg.cid)
-                twin_id = tid(url)
+                twin_id = rid(url)
                 @debug "[$twin] auth identity: $msg"
                 if haskey(twin.handler, "challenge")
                     @debug "[$twin] challenge active"
@@ -581,7 +581,7 @@ function cleanup(twin::Twin, router::Router)
         end
     end
 
-    delete!(router.id_twin, tid(twin))
+    delete!(router.id_twin, rid(twin))
     return nothing
 end
 
@@ -721,7 +721,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
 end
 
 function get_router(;
-    name=cid(),
+    name=localcid(),
     ws=nothing,
     tcp=nothing,
     zmq=nothing,

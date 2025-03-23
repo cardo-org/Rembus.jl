@@ -275,10 +275,10 @@ isbuiltin(fn) = fn in ["rid", "version", "uptime"]
 function router_configuration(router)
     cfg = Dict("exposers" => Dict(), "subscribers" => Dict())
     for (topic, twins) in router.topic_impls
-        cfg["exposers"][topic] = [tid(t) for t in twins if !isbuiltin(topic)]
+        cfg["exposers"][topic] = [rid(t) for t in twins if !isbuiltin(topic)]
     end
     for (topic, twins) in router.topic_interests
-        cfg["subscribers"][topic] = [tid(t) for t in twins]
+        cfg["subscribers"][topic] = [rid(t) for t in twins]
     end
 
     return cfg
@@ -305,7 +305,7 @@ function twin_setup(router, twin)
         twin,
         BROKER_CONFIG,
         cfg,
-        tid(twin)
+        rid(twin)
     )
     response = send_msg(twin, msg)
     result = fetch(response.future)

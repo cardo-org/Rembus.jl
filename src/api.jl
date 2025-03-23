@@ -1,8 +1,8 @@
 const cid4macro = TaskLocalValue{String}(() -> "") # COV_EXCL_LINE
 
-cid() = cid4macro[]
+localcid() = cid4macro[]
 
-cid!(name) = cid4macro[] = name
+localcid!(name) = cid4macro[] = name
 
 """
     broker(; <keyword arguments>)
@@ -33,37 +33,11 @@ customizable security, authentication, and routing policies.
     - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
     - `"less_busy"`: Chooses the node with fewer outstanding requests.
 
-### Default Behavior
-If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
-for WebSocket connections on port `8000`.
-"""
-function broker(;
-    name::AbstractString="broker",
-    ws=nothing,
-    tcp=nothing,
-    zmq=nothing,
-    prometheus=nothing,
-    secure=false,
-    authenticated=false,
-    policy="first_up"
-)
-    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
-        ws = DEFAULT_WS_PORT
-    end
-
-    router = get_router(
-        name=name,
-        ws=ws,
-        tcp=tcp,
-        zmq=zmq,
-        prometheus=prometheus,
-        authenticated=authenticated,
-        secure=secure,
-        policy=policy
-    )
-    # Return a floating twin.
-    return bind(router)
-end
+    ### Default Behavior
+    If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
+    for WebSocket connections on port `8000`.
+        """
+broker = component
 
 """
     server(; <keyword arguments>)
@@ -190,6 +164,36 @@ function component(
     )
 end
 
+function component(;
+    name::AbstractString="broker",
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    prometheus=nothing,
+    secure=false,
+    authenticated=false,
+    policy="first_up",
+    failovers=[]
+)
+    if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
+        ws = DEFAULT_WS_PORT
+    end
+
+    router = get_router(
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        prometheus=prometheus,
+        authenticated=authenticated,
+        secure=secure,
+        policy=policy,
+    )
+    set_policy(router, policy)
+    twin = bind(router)
+    return add_failovers(twin, failovers)
+end
+
 function issuccess(response)
     response = fetch(response.future)
     if response.status !== STS_SUCCESS
@@ -269,7 +273,7 @@ returned as an RPC exception.
 function expose(twin::Twin, name::AbstractString, func::Function)
     router = twin.router
     router.topic_function[name] = func
-    msg = AdminReqMsg(twin, name, Dict{String,Any}(COMMAND => EXPOSE_CMD), tid(twin))
+    msg = AdminReqMsg(twin, name, Dict{String,Any}(COMMAND => EXPOSE_CMD), rid(twin))
     return send_msg(twin, msg) |> fetch
 end
 
@@ -312,7 +316,7 @@ function subscribe(
         twin,
         name,
         Dict{String,Any}(COMMAND => SUBSCRIBE_CMD, MSG_FROM => from_now),
-        tid(twin)
+        rid(twin)
     )
     return send_msg(twin, msg) |> fetch
 end

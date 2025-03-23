@@ -178,7 +178,12 @@ end
 
 nodeurl(c::RbURL) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-tid(c::RbURL) = c.id
+"""
+$(SIGNATURES)
+
+Return the name of the component.
+"""
+rid(c::RbURL) = c.id
 
 function cid(c::RbURL)
     c.protocol === :repl ? "__repl__" : "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
@@ -492,7 +497,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id_twin::Dict{String,T} # id => twin
     topic_function::Dict{String,Function}
     subinfo::Dict{String,Float64}
-    topic_auth::Dict{String,Dict{String,Bool}} # topic => {tid(twin) => true}
+    topic_auth::Dict{String,Dict{String,Bool}} # topic => {rid(twin) => true}
     admins::Set{String}
     tcp_server::Sockets.TCPServer
     http_server::HTTP.Server
@@ -586,18 +591,18 @@ mutable struct Twin <: AbstractTwin
     )
 end
 
-Base.:(==)(a::Twin, b::Twin) = tid(a) === tid(b)
+Base.:(==)(a::Twin, b::Twin) = rid(a) === rid(b)
 
-Base.hash(t::Twin) = hash(tid(t))
+Base.hash(t::Twin) = hash(rid(t))
 
 "twin unique identifier"
-tid(twin::Twin) = twin.uid.id
+rid(twin::Twin) = twin.uid.id
 
 cid(twin::Twin) = cid(twin.uid)
 
 nodeurl(rb::Twin) = nodeurl(rb.uid)
 
-path(twin::Twin) = "$(isdefined(twin, :process) ? twin.process.supervisor.supervisor : ":"):$(tid(twin))"
+path(twin::Twin) = "$(isdefined(twin, :process) ? twin.process.supervisor.supervisor : ":"):$(rid(twin))"
 
 hasname(twin::Twin) = hasname(twin.uid)
 

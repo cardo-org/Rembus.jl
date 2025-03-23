@@ -5,7 +5,7 @@ Check if twin client has admin privilege.
 function isadmin(router, twin, cmd)
     sts = twin.uid.id in router.admins
     if !sts
-        @error "$cmd failed: $(tid(twin)) not authorized"
+        @error "$cmd failed: $(rid(twin)) not authorized"
     end
 
     return sts
@@ -130,7 +130,7 @@ function color_admin(tw::Twin, msg)
     if !haskey(msg.data, "touch")
         msg.data["touch"] = []
     end
-    push!(msg.data["touch"], tid(tw))
+    push!(msg.data["touch"], rid(tw))
     transport_send(tw, msg)
 end
 
@@ -138,8 +138,8 @@ function admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
     @debug "[$(path(twin))] admin command broadcast: $msg"
     touched = haskey(msg.data, "touch") ? msg.data["touch"] : []
     for tw in values(router.id_twin)
-        if hasname(tw) && tid(tw) != tid(twin) &&
-           !(tid(tw) in touched)
+        if hasname(tw) && rid(tw) != rid(twin) &&
+           !(rid(tw) in touched)
             @debug "[$(path(twin))] broadcasting $msg to $tw"
             if !isopen(tw.socket)
                 @debug "[$tw] expose not sent: socket is closed"

@@ -66,9 +66,9 @@ function simo_task(self, router)
         if isa(msg, Rembus.RpcReqMsg)
             requests = []
             for tw in Rembus.alltwins(router)
-                push!(requests, (tid(tw), Rembus.fpc(
+                push!(requests, (rid(tw), Rembus.fpc(
                     tw, msg.topic,
-                    (tid(tw), msg.data...),
+                    (rid(tw), msg.data...),
                     Rembus.request_timeout() - 1
                 )))
             end

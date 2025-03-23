@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-foo(ctx, rb, x) = ctx[tid(rb)] = x
+foo(ctx, rb, x) = ctx[rid(rb)] = x
 
 function wait_message(fn, max_wait=10)
     wtime = 0.1
@@ -32,7 +32,7 @@ function run(pub_url, sub_url)
     publish(pub, "foo", val, qos=Rembus.QOS2)
 
     @test wait_message() do
-        haskey(ctx, tid(sub)) && ctx[tid(sub)] == val
+        haskey(ctx, rid(sub)) && ctx[rid(sub)] == val
     end
     sleep(0.1)
 

@@ -27,8 +27,8 @@ end
 
 function reg(url)
     node = Rembus.RbURL(url)
-    private_key = joinpath(Rembus.rembus_dir(), tid(node), ".secret")
-    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(tid(node)).rsa.pem")
+    private_key = joinpath(Rembus.rembus_dir(), rid(node), ".secret")
+    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(rid(node)).rsa.pem")
 
     rm(private_key, force=true)
     rm(public_key, force=true)

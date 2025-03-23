@@ -29,7 +29,7 @@ mutable struct TypeHolder
     ])
 end
 
-precompile_topic(ctx, rb, x) = ctx[tid(rb)] = x
+precompile_topic(ctx, rb, x) = ctx[rid(rb)] = x
 precompile_service(ctx, rb, x) = x
 precompile_service(ctx, rb, x, y) = x + y
 

@@ -223,7 +223,7 @@ Load the persisted twin configuration from disk.
 function load_twin(twin::Twin)
     @debug "[$twin] loading configuration"
     router = last_downstream(twin.router)
-    twinid = tid(twin)
+    twinid = rid(twin)
     fn = joinpath(broker_dir(router), "twins", "$twinid.json")
     if isfile(fn)
         content = read(fn, String)
@@ -298,7 +298,7 @@ end
 
 function save_twin(router::Router, twin::Twin)
     @debug "[$twin] saving methods configuration"
-    twinid = tid(twin)
+    twinid = rid(twin)
     twin_cfg = Dict()
 
     if hasname(twin) && haskey(router.id_twin, twinid) && !isrepl(twin.uid)

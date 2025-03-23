@@ -2,7 +2,7 @@
 Start the twin process and add to the router id_twin map.
 =#
 function start_twin(router::Router, twin::Twin)
-    id = tid(twin)
+    id = rid(twin)
     spec = process(id, twin_task, args=(twin,))
     twin.process = spec
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
@@ -346,7 +346,7 @@ function component(
     policy="first_up"
 )
     if ismissing(name)
-        nodeurl = cid()
+        nodeurl = localcid()
         name = RbURL(nodeurl).id
     end
 
@@ -361,14 +361,14 @@ function component(
 end
 
 function singleton()
-    if isempty(cid())
-        cid!(string(uuid4()))
+    if isempty(localcid())
+        localcid!(string(uuid4()))
     end
 
-    return component()
+    return component(localcid())
 end
 
-component() = component(cid())
+#component() = component(localcid())
 
 function component(
     url::RbURL;
@@ -382,7 +382,7 @@ function component(
     failovers=[]
 )
     if ismissing(name)
-        name = tid(url)
+        name = rid(url)
     end
     router = get_router(
         name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
@@ -402,6 +402,10 @@ end
 
 function component(url::RbURL, router::AbstractRouter, failovers=[])
     twin = bind(router, url)
+    return add_failovers(twin, failovers)
+end
+
+function add_failovers(twin::Twin, failovers)
     twin.failovers = [twin.uid]
     for failover in failovers
         cid = RbURL(failover)
@@ -471,7 +475,7 @@ function close_twin(twin::Twin)
         shutdown(twin.process)
     end
     router = last_downstream(twin.router)
-    delete!(router.id_twin, tid(twin))
+    delete!(router.id_twin, rid(twin))
     return nothing
 end
 
@@ -513,7 +517,7 @@ function reconnect(twin::Twin, url::RbURL)
                     # It may be a failover node. Close all connected nodes to force
                     # the reconnections to the main broker.
                     connected = filter(router.id_twin) do (id, t)
-                        id !== tid(twin)
+                        id !== rid(twin)
                     end
                     @debug "closing connected nodes"
                     for (id, tw) in connected
@@ -612,7 +616,7 @@ function authenticate(router::Router, twin::Twin)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)
         close(twin.socket)
-        throw(AlreadyConnected(tid(twin)))
+        throw(AlreadyConnected(rid(twin)))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(router, twin, response)
         response = twin_request(twin, msg, router.settings.request_timeout)
@@ -638,10 +642,10 @@ end
 Update twin identity parameters.
 =#
 function setidentity(router::Router, twin::Twin, msg; isauth=false)
-    delete!(router.id_twin, tid(twin))
+    delete!(router.id_twin, rid(twin))
     twin.uid = RbURL(msg.cid)
-    router.id_twin[tid(twin)] = twin
-    setname(twin.process, tid(twin))
+    router.id_twin[rid(twin)] = twin
+    setname(twin.process, rid(twin))
     twin.isauth = isauth
     load_twin(twin)
     return nothing
@@ -696,7 +700,7 @@ function _topics(results, target::Twin, topic_map)
     @debug "[$target] calculating exported topics ..."
     for (topic, twins) in topic_map
         vals = filter(twins) do twin
-            tid(twin) !== tid(target)
+            rid(twin) !== rid(target)
         end
         if !isempty(vals)
             push!(results, topic)
@@ -764,7 +768,7 @@ function attestation(router::Router, twin::Twin, msg, authenticate=true)
             push!(
                 router.network,
                 nodes(
-                    tid(twin),
+                    rid(twin),
                     string(twin.socket.sock.io.peerip), msg.meta
                 )...
             )
@@ -796,7 +800,7 @@ function receiver_exception(twin, e)
 end
 
 function remove_twin(router::Router, twin::Twin)
-    delete!(router.id_twin, tid(twin))
+    delete!(router.id_twin, rid(twin))
 end
 
 #=
@@ -811,7 +815,6 @@ function destroy_twin(twin::Twin, router::Router)
     if isdefined(twin, :process)
         Visor.shutdown(twin.process)
     end
-    #delete!(router.id_twin, tid(twin))
     remove_twin(router, twin)
     return nothing
 end
@@ -1197,7 +1200,7 @@ A twin enqueues the input messages when the component is offline.
 =#
 function twin_task(self, twin)
     try
-        @debug "starting twin [$(tid(twin))]"
+        @debug "starting twin [$(rid(twin))]"
         for msg in self.inbox
             if isshutdown(msg)
                 self.phase = :closing
