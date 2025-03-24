@@ -14,11 +14,11 @@ failover_name = "ha_setup_failover"
 
 myservice(x, y) = x + y
 
-mutable struct Proxy <: Rembus.AbstractRouter
+mutable struct HAProxy <: Rembus.AbstractRouter
     downstream::Union{Nothing,Rembus.AbstractRouter}
     upstream::Union{Nothing,Rembus.AbstractRouter}
     process::Visor.Process
-    function Proxy()
+    function HAProxy()
         return new(nothing, nothing)
     end
 end
@@ -41,7 +41,7 @@ function proxy_task(self, router)
 end
 
 function start_proxy(supervisor_name, downstream_router)
-    proxy = Proxy()
+    proxy = HAProxy()
     Rembus.upstream!(downstream_router, proxy)
     sv = from(supervisor_name)
     proxy.process = process("proxy", proxy_task, args=(proxy,))
@@ -77,7 +77,7 @@ function run()
     @test rpc(c1, "rid") === failover_name
 
     @test rpc(c1, "myservice", x, y) == x + y
-    @info "[$bro] exposers: $(bro.router.topic_impls)"
+    @info "[$bro] exposers: $(Rembus.last_downstream(bro.router).topic_impls)"
     @info "[$failover] exposers: $(failover.router.topic_impls)"
 
     # Restart the main broker.

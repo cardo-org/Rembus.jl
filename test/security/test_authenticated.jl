@@ -68,7 +68,6 @@ function test_errors()
 
     # reset the default cid
     Rembus.localcid!("")
-    #component()
 
 end
 
