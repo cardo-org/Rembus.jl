@@ -845,7 +845,7 @@ function tagvalue_if_dataframe(data)
             if isa(el, DataFrame)
                 aio = IOBuffer()
                 Arrow.write(aio, el)
-                push!(result, Tag(DATAFRAME_TAG, aio.data))
+                push!(result, Tag(DATAFRAME_TAG, Base.wrap(Array, aio.data)))
             else
                 push!(result, el)
             end
@@ -854,8 +854,7 @@ function tagvalue_if_dataframe(data)
     elseif isa(data, DataFrame)
         aio = IOBuffer()
         Arrow.write(aio, data)
-
-        return Tag(DATAFRAME_TAG, aio.data)
+        return Tag(DATAFRAME_TAG, Base.wrap(Array, aio.data))
     end
 
     return data

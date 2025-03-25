@@ -66,6 +66,11 @@ function test_errors()
     # Anonymous connection is not permitted in authenticated mode.
     @test_throws ErrorException connect()
 
+    # Throw an error if the component is anonymous
+    #@test_throws ErrorException component("ws://:8000", failovers=["myfailover"])
+    component("ws://:8000", failovers=["myfailover"])
+
+
     # reset the default cid
     Rembus.localcid!("")
 

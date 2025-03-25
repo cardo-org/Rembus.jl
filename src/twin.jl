@@ -75,6 +75,9 @@ function attestate(router::Router, twin::Twin, response)
     cid = twin.uid.id
     file = pkfile(cid)
     if !isfile(file)
+        # disable reconnection, error is unrecoverable
+        delete!(twin.handler, HR_CONN_DOWN)
+        twin.process.phase = :closing
         error("missing/invalid $cid secret")
     end
 
@@ -553,7 +556,7 @@ end
 """
     do_connect(twin::Twin)
 
-Connect anonymously to the endpoint declared with `REMBUS_BASE_URL` env variable.
+Connect to the endpoint declared with `REMBUS_BASE_URL` env variable.
 
 `REMBUS_BASE_URL` default to `ws://127.0.0.1:8000`
 

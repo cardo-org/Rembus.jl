@@ -181,3 +181,17 @@ end
     ENV["REMBUS_TIMEOUT"] = "10"
     @test Rembus.request_timeout() == 10
 end
+
+@testitem "get_meta" begin
+    io = IOBuffer(encode([Rembus.TYPE_IDENTITY, 2, 3]))
+    header = read(io, UInt8)
+    @test isempty(Rembus.get_meta(io, header))
+
+    io = IOBuffer(encode([Rembus.TYPE_IDENTITY, 2, 3, Dict("ws" => 8000)]))
+    header = read(io, UInt8)
+    for i in 1:3
+        v = Rembus.decode_internal(io)
+    end
+    meta = Rembus.get_meta(io, header)
+    @test haskey(meta, "ws")
+end
