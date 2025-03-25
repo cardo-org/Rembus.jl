@@ -16,8 +16,6 @@ end
 
 RembusTimeout(msg) = RembusTimeout{typeof(msg)}(msg)
 
-# An error response from the broker that is not one of:
-# STS_METHOD_NOT_FOUND, STS_METHOD_EXCEPTION, STS_METHOD_LOOPBACK, STS_METHOD_UNAVAILABLE
 """
 $(TYPEDEF)
 
@@ -178,11 +176,6 @@ end
 
 nodeurl(c::RbURL) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-"""
-$(SIGNATURES)
-
-Return the name of the component.
-"""
 rid(c::RbURL) = c.id
 
 function cid(c::RbURL)
@@ -572,6 +565,7 @@ mutable struct Twin <: AbstractTwin
     msg_from::Dict{String,Float64} # subtract from now and consider minimum ts of unsent msg
     probe::Bool
     failovers::Vector{RbURL}
+    failover_from::Float64
     ackdf::DataFrame
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
@@ -587,7 +581,8 @@ mutable struct Twin <: AbstractTwin
         0,
         Dict(), # msg_from
         false,
-        []
+        [],
+        0.0
     )
 end
 
@@ -595,8 +590,17 @@ Base.:(==)(a::Twin, b::Twin) = rid(a) === rid(b)
 
 Base.hash(t::Twin) = hash(rid(t))
 
-"twin unique identifier"
-rid(twin::Twin) = twin.uid.id
+"""
+$(SIGNATURES)
+
+Return the identifier of the component (`R`embus `ID`entifier).
+
+```julia
+rb = component("ws://myhost.org:8000/myname")
+rid(rb) === "myname"
+```
+"""
+rid(rb::Twin) = rb.uid.id
 
 cid(twin::Twin) = cid(twin.uid)
 
@@ -608,6 +612,15 @@ hasname(twin::Twin) = hasname(twin.uid)
 
 # TODO: to be called iszmqdealer
 iszmq(twin::Twin) = isa(twin.socket, ZDealer)
+
+failover_queue(twin::Twin) = twin.failover_from > 0.0
+
+function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
+    twin.failover_from = msg_from
+    twin.msg_from[topic] = msg_from
+    send_queue(twin, twin.failover_from)
+    return nothing
+end
 
 #=
     offline!(router, twin)

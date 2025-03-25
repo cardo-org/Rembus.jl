@@ -535,7 +535,7 @@ publish(rb, "mytopic")
 ```
 """
 function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
-    isopen(twin) || error("connection down")
+    isopen(twin) || failover_queue(twin) || error("connection down")
     msg = PubSubMsg(twin, topic, data, qos)
     return publish_msg(twin, msg)
 end
@@ -723,6 +723,9 @@ function publish_msg(twin, msg)
     if isa(twin.socket, Float)
         put!(twin.router.process.inbox, msg)
     else
+        if failover_queue(twin)
+            msg.counter = save_message(last_downstream(twin.router), msg)
+        end
         cast(twin.process, msg)
     end
 

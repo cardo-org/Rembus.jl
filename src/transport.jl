@@ -64,6 +64,15 @@ function from_cbor(twin, counter, packet)
     return nothing
 end
 
+function get_meta(io, header)
+    plen = header & ~TYPE_BITS_MASK
+    if plen > 3
+        return decode_internal(io)
+    else
+        return Dict()
+    end
+end
+
 #=
     broker_parse(pkt)
 
@@ -86,7 +95,7 @@ function broker_parse(twin::Twin, pkt)
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        meta = decode_internal(io)
+        meta = get_meta(io, header)
         return IdentityMsg(twin, bytes2id(id), cid, meta)
     elseif ptype == TYPE_PUB
         if flags > QOS0
@@ -134,7 +143,7 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
-        meta = decode_internal(io)
+        meta = get_meta(io, header)
         return Attestation(twin, bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")

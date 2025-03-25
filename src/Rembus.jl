@@ -47,6 +47,8 @@ export
     server,
     connect,
     close,
+    failover_queue,
+    failover_queue!,
     fpc,
     fdc,
     request_timeout,

@@ -33,6 +33,9 @@ function run(pub_url, sub_url)
     reactive(sub, Rembus.Now)
 
     pub = connect(pub_url)
+    Rembus.failover_queue!(pub, "foo")
+    @test Rembus.failover_queue(pub)
+
     val = 1
 
     Rembus.reset_probe!(sub)
