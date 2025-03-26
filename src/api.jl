@@ -535,8 +535,8 @@ publish(rb, "mytopic")
 ```
 """
 function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
-    isopen(twin) || failover_queue(twin) || error("connection down")
-    msg = PubSubMsg(twin, topic, data, qos)
+    wait_open(twin) || failover_queue(twin) || error("connection down")
+    msg = PubSubMsg(twin, topic, collect(data), qos)
     return publish_msg(twin, msg)
 end
 
@@ -560,7 +560,7 @@ function rpc(
     topic::AbstractString,
     data...
 )
-    isopen(twin) || error("connection down")
+    wait_open(twin) || error("connection down")
     return fetch(fpc(twin, topic, data))
 end
 
@@ -646,7 +646,7 @@ function fpc(
     data=(),
     timeout=Inf
 )
-    msg = RpcReqMsg(twin, topic, data)
+    msg = RpcReqMsg(twin, topic, collect(data))
     return send_msg(twin, msg, timeout)
 end
 

@@ -506,6 +506,7 @@ end
 
 function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
+    content = tagvalue_if_dataframe(msg.data)
     if msg.flags > QOS0
         msgid = msg.id
         r = last_downstream(msg.twin.router)
@@ -515,13 +516,13 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
 
         ack_cond = FutureResponse(msg, timer)
         socket.out[msgid] = ack_cond
-        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, msg.data]
+        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
         transport_write(socket, pkt)
         outcome = fetch(ack_cond.future)
         close(ack_cond.timer)
         delete!(socket.out, msgid)
     else
-        pkt = [TYPE_PUB | msg.flags, msg.topic, msg.data]
+        pkt = [TYPE_PUB | msg.flags, msg.topic, content]
         transport_write(socket, pkt)
     end
 

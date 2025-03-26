@@ -48,6 +48,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "api"
+        @time @safetestset "ifdown_block" begin
+            include("api/test_ifdown_block.jl")
+        end
         @time @safetestset "policies" begin
             include("api/test_policies.jl")
         end

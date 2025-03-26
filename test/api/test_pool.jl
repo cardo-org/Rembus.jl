@@ -23,7 +23,7 @@ function run()
     response = direct(rb, "pool_a", "myservice", "hello")
     @test response == "hello"
 
-    futres = Rembus.fpc(rb, "myservice", "hello")
+    futres = Rembus.fpc(rb, "myservice", ("hello",))
     @test issuccess(futres)
     @test fetch(futres) == "hello"
 

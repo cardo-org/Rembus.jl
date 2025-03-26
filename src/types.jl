@@ -553,6 +553,7 @@ end
 
 mutable struct Twin <: AbstractTwin
     uid::RbURL
+    connected::Union{Nothing,Channel{Bool}}
     shared::Any
     handler::Dict{String,Function}
     isauth::Bool
@@ -570,6 +571,7 @@ mutable struct Twin <: AbstractTwin
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
         uid,
+        nothing,
         missing,
         Dict(), # handler
         false,
@@ -615,6 +617,16 @@ iszmq(twin::Twin) = isa(twin.socket, ZDealer)
 
 failover_queue(twin::Twin) = twin.failover_from > 0.0
 
+"""
+$(SIGNATURES)
+
+Block [`rpc`](@ref) and [`publish`](@ref) calls until the twin is connected to the broker.
+"""
+function ifdown_block(rb::Twin)
+    rb.connected = Channel{Bool}(1)
+    return nothing
+end
+
 function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
@@ -634,6 +646,14 @@ function offline!(router::Router, twin::Twin)
 
     filter!(((k, v),) -> twin != v, router.address2twin)
     return nothing
+end
+
+function wait_open(twin::Twin)
+    if !isnothing(twin.connected)
+        return fetch(twin.connected)
+    else
+        return isopen(twin)
+    end
 end
 
 function Base.isopen(twin::Twin)

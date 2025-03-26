@@ -578,7 +578,18 @@ function do_connect(twin::Twin)
         end
     end
 
-    return isopen(twin.socket)
+    if isopen(twin.socket)
+        if !isnothing(twin.connected)
+            c = twin.connected
+            # time granted to remote component for booting.
+            Timer(0.1) do tmr
+                put!(c, true)
+            end
+        end
+        return true
+    else
+        return false
+    end
 end
 
 function update_tables(router::Router, twin::Twin, exports)
@@ -989,8 +1000,8 @@ function rpc_request(router::Router, msg, implementor_rule)
             put!(twin.process.inbox, m)
         end
     else
-        # msg is routable, get it to router
-        @debug "[$twin] to router $(typeof(router)): $msg"
+        # msg is routable, try to resolve locally or get it to selected twin
+        @debug "[$twin] to router: $msg"
         if local_fn(router, twin, msg)
         elseif implementor_rule(twin.uid)
             find_implementor(router, msg)
@@ -1177,6 +1188,11 @@ Disconnect the twin from the ws/tcp/zmq channel.
 =#
 function detach(twin)
     close(twin.socket)
+
+    # Remove the connected message bookmarker
+    if !isnothing(twin.connected)
+        take!(twin.connected)
+    end
 
     # Forward the message counter to the last message received when online
     # because these messages get already a chance to be delivered.
