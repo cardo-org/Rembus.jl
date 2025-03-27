@@ -1,4 +1,4 @@
-FROM julia:1.10.2
+FROM ubuntu:24.04
 
 WORKDIR /broker
 

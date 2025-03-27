@@ -95,6 +95,7 @@ include("store.jl")
 include("transport.jl")
 include("api.jl")
 include("http.jl")
+include("main.jl")
 
 function __init__()
     Visor.setroot(intensity=3)

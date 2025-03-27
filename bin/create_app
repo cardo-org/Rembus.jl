@@ -4,6 +4,9 @@ PKG_DIR=$(dirname $BIN_DIR)
 
 cat << EOF | julia --startup-file=no --threads auto --project=${PKG_DIR}
 
+using Pkg
+Pkg.add("PackageCompiler")
+
 using PackageCompiler
 
 try
@@ -14,5 +17,5 @@ catch e
 end
 EOF
 
-gcc ${PKG_DIR}/src/sv.c -o ${PKG_DIR}/build/bin/sv
+gcc ${PKG_DIR}/shims/sv.c -o ${PKG_DIR}/build/bin/sv
 
