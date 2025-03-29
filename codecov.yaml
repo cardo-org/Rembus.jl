@@ -15,6 +15,7 @@ coverage:
         target: 90%  # new contributions should have a coverage at least equal to target
 
 ignore:
+  - "src/main.jl"
   - "src/precompile.jl"
   - "src/cbor.jl"
   - "src/encode.jl"
