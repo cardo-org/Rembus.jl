@@ -25,30 +25,103 @@ Rembus API functions:
 
 ## component
 
-Connect to the broker and return a Visor process handle used by the other APIs for exchanging data and commands.
+```julia
+component(
+    url::AbstractString;
+    ws=nothing,
+    tcp=nothing,
+    zmq=nothing,
+    name=missing,
+    secure=false,
+    authenticated=false,
+    policy="first_up",
+    failovers=[]
+) -> Twin
 
-In case of connection lost the underlying supervision logic attempts to reconnect
-to the broker until it succeed.
+# for more details
+help?> component
+```
+
+Start a component and join the network of Rembus nodes.
+
+### Connected Component
 
 ```julia
 rb = component("ws://hostname:8000/mycomponent")
 ```
 
-The [Macro-based API](./macro_api.md#component) page documents the URL format.
+Connect to a broker that listens at the connection point `ws://hostname:8000`
+and return the `rb` handle used by the other APIs for exchanging data and
+commands.
+
+In case of connection lost the underlying supervision logic attempts to reconnect
+to the broker until it succeed.
+
+See [Connected Components](@ref) for URL format details.
+
+### Broker
+
+```juliaTYPEDSIGNATURES
+rb = component(ws=8000, tcp=8001)
+```
+
+Start a broker that listens on the web socket port `8000` and on the TCP port
+`8001`. The broker will accept connections from other components.
+
+### Broker and Connected Component
+
+This is an advanced pattern that allows to create a component that is also a
+broker and that is able to connect to another broker. This pattern is useful for
+creating a component that is able to act as a proxy between two brokers or to
+create a component that is able to connect to a broker and at the same time
+to act as a broker for other components.
+
+```julia
+rb = component("ws://hostname:8000/mycomponent", ws=9000)
+```
+
+Start a broker that listens on the WebSocket port `9000` and connect to a
+broker defined at the connection point `ws://hostname:8000`.
 
 ## connect
 
-Connect to the broker and return a connection handle used by the other APIs for exchanging data and commands.
+```julia
+connect(url::AbstractString) -> Twin
+```
 
-The URL string passed to `connect` contains the address of a broker, the transport protocol, the port and optionally a persistent unique name for the component.
+Connect to the broker and return a connection handle used by the other APIs for
+exchanging data and commands.
+
+The URL string passed to `connect` contains the address of a broker, the
+transport protocol, the port and optionally a persistent unique name for the
+component.
+
+A disconnection from the remote endpoint will not trigger automatic
+reconnection, for example:
 
 ```julia
 rb = connect("ws://hostname:8000/mycomponent")
 ```
 
-The [Macro-based API](./macro_api.md#component) page documents the URL format.
+Connects to a broker that listens at the connection point
+`ws://hostname:8000` and returns the `rb` handle used by the other APIs for
+exchanging data and commands.
+
+If the broker is not reachable the `connect` function will throw an Exception
+and if the connection is lost at a later time the `rb` handle becomes
+disconnected. The status of a component can be checked with the `isopen` 
+method:
+
+```julia
+isopen(rb)
+```
 
 ## expose
+
+```julia
+expose(rb, name::AbstractString, fn::Function)
+expose(rb, fn::Function)
+```
 
 Take a Julia function and exposes all of its the methods.
 
@@ -66,17 +139,30 @@ end
 expose(rb, myservice)
 ```
 
-The exposed function will became available to RPC clients using the [`@rpc`](./macro_api.md#rpc) macro or the [`rpc`](#rpc) function.
+The exposed function will became available to RPC clients using the
+[`@rpc`](./macro_api.md#rpc) macro or the [`rpc`](#rpc) function.
 
 ## unexpose
 
-Stop serving remote requests via [`rpc`](#rpc) or [`@rpc`](./macro_api.md#rpc).
-
 ```julia
-unexpose(rb, myservice)
+unexpose(rb, topic::AbstractString)
+unexpose(rb, fn::Function)
 ```
 
+Stop serving remote requests via [`rpc`](#rpc) or [`@rpc`](./macro_api.md#rpc).
+
 ## rpc
+
+```julia
+rpc(
+    rb::Twin,
+    service::AbstractString,
+    data...
+)
+
+# for more details
+help?> rpc
+```
 
 Request a remote method and wait for a response.
 
@@ -85,12 +171,14 @@ response = rpc(rb, "my_service", Dict("name"=>"foo", "tickets"=>3))
 ```
 
 The service name and the arguments are CBOR-encoded and transported to
-the remote site and the method `my_service` that expects a `Dict` as argument is called. 
+the remote site and the method `my_service` that expects a `Dict` as argument
+is called.
 
-The return value of `my_service` is transported back to the RPC client calling site
-and taken as the return value of `rpc`.
+The return value of `my_service` is transported back to the RPC client calling
+site and taken as the return value of `rpc`.
 
-If the remote method throws an Exception then the local RPC client will throw either an Exception reporting the reason of the remote error.
+If the remote method throws an Exception then the local RPC client will throw
+either an Exception reporting the reason of the remote error.
 
 If the exposed method expects many arguments send an array of values, where
 each value is an argument:
@@ -110,9 +198,22 @@ rpc(rb, "my_service", [1, 2, 3])
 
 ## subscribe
 
-Declare interest for messages published on a logical channel: the topic.
+```julia
+subscribe(rb, topic::AbstractString, fn::Function, from=Rembus.Now)
 
-The subscribed Julia methods are named as the topic of interest. 
+subscribe(rb, fn::Function, from=Rembus.Now)
+
+# for more details
+help?> subscribe
+```
+
+Declare interest for messages published on the `topic` logical channel.
+
+If the `topic` is not specified the function `fn` is subscribed to the topic
+of the same name of the function.
+
+To enable the reception of published messages, [`reactive`](@ref) must be
+called.
 
 ```julia
 function mytopic(x, y)
@@ -123,39 +224,44 @@ rb = connect()
 
 subscribe(rb, mytopic)
 
-wait(rb) # or until Ctrl-C 
+reactive(rb) 
 ```
 
 By default `subscribe` will consume messages published after the component connect
 to the broker, messages sent previously are lost.
 
-For receiving messages when the component was offline it is mandatory to set a component name and to declare interest in old messages with the `from` argument set to `LastReceived`:
+For receiving messages when the component was offline it is mandatory to set a component name and to declare interTYPEDSIGNATURESest in old messages with the `from` argument set to `LastReceived`:
 
 ```julia
 rb = connect("myname")
 
 subscribe(rb, mytopic, LastReceived)
 
-wait(rb) # or until Ctrl-C
+reactive(rb) 
 ```
-
-> **NOTE** By design messages are not persisted until a component declares
-interest for a topic. In other words the persistence feature for a topic is enabled at the time of first subscription. If is important not to loose any message the rule is subscribe first and publish after.
 
 The subscribed function will be called each time a component produce a message with the[`@publish`](./macro_api.md#publish) macro or the [`publish`](#publish) function.
 
 ## unsubscribe
 
+```julia
+unsubscribe(rb::Twin, topic::AbstractString)
+unsubscribe(rb::Twin, fn::Function)
+```
+
 Stop the function to receive messages produced with [`publish`](#publish) or
 [`@publish`](./macro_api.md#publish).
 
-```julia
-unsubscribe(rb, myservice)
-```
-
 ## publish
 
-Publish a message:
+```julia
+publish(rb::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
+
+# for more details
+help?> subscribe
+```
+
+Publish a message on the `topic` channel.
 
 ```julia
 rb = connect()
@@ -167,8 +273,8 @@ close(rb)
 
 `metric` is the message topic and the `Dict` value is the message content.
 
-If the subscribed method expects many arguments send an array of values, where
-each value is an argument:
+If the subscribed method expects many arguments send the values as a `Vararg`
+list:
 
 ```julia
 # subscriber side
@@ -179,36 +285,49 @@ function my_topic(x,y,z)
 end
 
 # publisher side
-publish(rb, "my_topic", [1, 2, 3])
+publish(rb, "my_topic", 1, 2, 3)
 ```
 
 ## reactive
 
-Enable the reception of published messages from subscribed topics.
-
 ```julia
-reactive(rb)
+reactive(
+    rb::Twin,
+    from::Union{Real,Period,Dates.CompoundPeriod}=Day(1),
+)
+
+# for more details
+help?> reactive
 ```
+
+Enable the reception of published messages from subscribed topics.
 
 Reactiveness is a property of a component and is applied to all subscribed topics.
 
-It is worth noting that the [`wait`](#wait) function enables the reactive mode.
-
 ## unreactive
+
+```julia
+unreactive(rb::Twin)
+```
 
 Stop receiving published messages.
 
-```julia
-unreactive(rb)
-```
-
 ## wait
 
-Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods. Wait forever for rpc requests or pub/sub messages.
+```julia
+wait(rb::Twin)
+```
 
-By default `wait` enable component reactiveness, see [reactive](#reactive).
+Needed for components that [expose](#expose) and/or [subscribe](#subscribe) 
+methods. Wait forever for rpc requests or pub/sub messages.
 
 ## inject
+
+```julia
+inject(rb::Twin, state::Any)
+```
+
+Bind a state object to the component.
 
 `inject` is handy when a state must be shared between the subscribed methods,
 the exposed methods and the application.
@@ -266,6 +385,10 @@ wait(rb)
 
 ## close
 
+```julia
+close(rb::Twin)
+```
+
 Close the network connections associated with the `rb` handle and terminate the supervised processes related to the handle.
 
 ```julia
@@ -274,10 +397,9 @@ close(rb)
 
 ## shutdown
 
-Terminate all the active supervised processes:
-
 ```julia
-shutdown()
+shutdown(rb::Twin)
 ```
 
+Terminate all the active supervised processes:
 The method `shutdown(rb)` is equivalent to `close(rb)`.

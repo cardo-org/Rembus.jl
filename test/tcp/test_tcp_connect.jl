@@ -14,7 +14,7 @@ function testcase(issecure)
         @test !Rembus.islistening(rb, protocol=[:ws], wait=1)
         @test Rembus.islistening(rb, protocol=[:tcp], wait=10)
 
-        node = connect(node_url, name="component")
+        node = connect(Rembus.RbURL(node_url), name="component")
         ver = rpc(node, "version")
         @test ver == Rembus.VERSION
 

@@ -18,12 +18,12 @@ end
 function run(pub_url, sub_url)
     ctx = Dict()
 
-    sub = connect(sub_url, name="subscriber")
+    sub = connect(Rembus.RbURL(sub_url), name="subscriber")
     @test isnothing(subscribe(sub, foo))
     inject(sub, ctx)
     reactive(sub)
 
-    pub = connect(pub_url, name="publisher")
+    pub = connect(Rembus.RbURL(pub_url), name="publisher")
     val = 1
 
     Rembus.reset_probe!(sub)

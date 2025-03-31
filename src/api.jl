@@ -194,6 +194,19 @@ function component(;
     return add_failovers(twin, failovers)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Connect to the remote endpoint defined by `url`.
+
+A disconnection from the remote endpoint will not trigger automatic reconnection.
+
+# Example
+
+rb = connect("ws://127.0.0.1:8000/mycomponent")
+"""
+connect(url::AbstractString)::Twin = connect(RbURL(url))
+
 function issuccess(response)
     response = fetch(response.future)
     if response.status !== STS_SUCCESS
@@ -249,7 +262,7 @@ The invoked method will receive the context and component as the first two argum
 foo(container, rb, arg2, arg2)
 ```
 """
-inject(twin, ctx=nothing) = twin.router.shared = ctx
+inject(rb::Twin, ctx=nothing) = rb.router.shared = ctx
 
 """
     expose(rb, topic::AbstractString, fn::Function)
@@ -338,6 +351,8 @@ Possible `from` values:
   - **`n::Float64`**: Receives messages published within the last `n` seconds.
   - **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
 
+To enable the reception of published messages, the `reactive` function must be called.
+
 ### Example
 
 ```julia
@@ -350,6 +365,7 @@ end
 
 # Subscribe to "mytopic", receiving only new messages from now
 subscribe(rb, mytopic, from=Rembus.Now)
+reactive(rb)
 ```
 """
 function subscribe(

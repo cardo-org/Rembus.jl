@@ -34,7 +34,7 @@ function wait_message(fn, max_wait=10)
 end
 
 function produce(pub_url)
-    pub = connect(pub_url, name="saved_messages_pub")
+    pub = connect(Rembus.RbURL(pub_url), name="saved_messages_pub")
 
     for round in 1:2
         count = 0
@@ -51,7 +51,7 @@ end
 function consume(sub_url)
     ctx = Ctx()
 
-    sub = connect(sub_url, name="saved_messages_sub")
+    sub = connect(Rembus.RbURL(sub_url), name="saved_messages_sub")
     @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     @test isnothing(subscribe(sub, bar, Rembus.LastReceived))
     inject(sub, ctx)

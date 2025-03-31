@@ -34,12 +34,12 @@ function run(pub_url, sub_url)
     bro = broker(name=broker_name, ws=8010)
     Rembus.islistening(bro, protocol=[:ws], wait=10)
 
-    sub = connect(sub_url, name="saved_messages_sub")
+    sub = connect(Rembus.RbURL(sub_url), name="saved_messages_sub")
     @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     inject(sub, ctx)
     reactive(sub)
 
-    pub = connect(pub_url, name="saved_messages_pub")
+    pub = connect(Rembus.RbURL(pub_url), name="saved_messages_pub")
     count = 0
 
     while count < rounds

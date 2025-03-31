@@ -37,7 +37,7 @@ try
     rb = broker(zmq=8012, name=broker_name)
     Rembus.islistening(rb.router, protocol=[:zmq], wait=20)
     register(node_url, pin)
-    auth_node = connect(node_url, name="component")
+    auth_node = connect(Rembus.RbURL(node_url), name="component")
     named_node = connect("zmq://:8012/zmq_resend_named_component")
     Rembus.reset_probe!(auth_node)
 

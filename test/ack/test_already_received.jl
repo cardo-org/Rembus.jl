@@ -32,12 +32,12 @@ end
 function run(pub_url, sub_url)
     ctx = Ctx()
 
-    sub = connect(sub_url, name="saved_messages_sub")
+    sub = connect(Rembus.RbURL(sub_url), name="saved_messages_sub")
     @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     inject(sub, ctx)
     reactive(sub)
 
-    pub = connect(pub_url, name="saved_messages_pub")
+    pub = connect(Rembus.RbURL(pub_url), name="saved_messages_pub")
     count = 0
 
     msg = Rembus.PubSubMsg(pub, "foo", "data", Rembus.QOS2)

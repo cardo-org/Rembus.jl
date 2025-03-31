@@ -24,11 +24,11 @@ function run()
     @test response == "hello"
 
     futres = Rembus.fpc(rb, "myservice", ("hello",))
-    @test issuccess(futres)
+    @test Rembus.issuccess(futres)
     @test fetch(futres) == "hello"
 
     sts = Rembus.fpc(rb, "unknown_method")
-    @test !issuccess(sts)
+    @test !Rembus.issuccess(sts)
 end
 
 execute(run, "pool")

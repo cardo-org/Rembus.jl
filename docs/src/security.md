@@ -73,3 +73,19 @@ More then one component may be assigned the `admin` role:
 # admis.json
 ["superuser", "foobar"]
 ```
+
+## Component registration
+
+Authenticated components may be provisioned with the [`Rembus.register`](@ref)
+method.
+
+```julia
+register(component_name, pin; tenant=nothing, scheme=SIG_RSA)
+```
+
+* `component_name` is the name of the component;
+* `pin` is a secret PIN code;
+* `tenant` is the name of the tenant;
+* `scheme` may be equal to:
+  * `SIG_RSA` for RSA Encryption;
+  * `SIG_ECDSA` for Elliptic Curve Digital Signature Algorithm;

@@ -65,7 +65,6 @@ export
     unreactive,
     register,
     unregister,
-    issuccess,
     rid,
     @component,
     @publish,

@@ -377,7 +377,6 @@ mutable struct Settings
     ws_ping_interval::Float32
     rembus_dir::String
     log_destination::String
-    log_level::String
     overwrite_connection::Bool
     stacktrace::Bool  # log stacktrace on error
     connection_retry_period::Float32 # seconds between reconnection attempts
@@ -399,15 +398,6 @@ mutable struct Settings
             parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
         rdir = get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", default_rembus_dir()))
         log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
-
-        if haskey(ENV, "REMBUS_DEBUG")
-            log_level = TRACE_INFO
-            if ENV["REMBUS_DEBUG"] == "1"
-                log_level = TRACE_DEBUG
-            end
-        else
-            log_level = get(cfg, "log_level", TRACE_INFO)
-        end
 
         overwrite_connection = get(cfg, "overwrite_connection", true)
         stacktrace = get(cfg, "stacktrace", false)
@@ -445,7 +435,6 @@ mutable struct Settings
             ws_ping_interval,
             rdir,
             log_destination,
-            log_level,
             overwrite_connection,
             stacktrace,
             connection_retry_period,
@@ -593,8 +582,7 @@ Base.:(==)(a::Twin, b::Twin) = rid(a) === rid(b)
 Base.hash(t::Twin) = hash(rid(t))
 
 """
-$(SIGNATURES)
-
+$(TYPEDSIGNATURES)
 Return the identifier of the component (`R`embus `ID`entifier).
 
 ```julia
@@ -602,13 +590,13 @@ rb = component("ws://myhost.org:8000/myname")
 rid(rb) === "myname"
 ```
 """
-rid(rb::Twin) = rb.uid.id
+rid(rb::Twin)::String = rb.uid.id
 
 cid(twin::Twin) = cid(twin.uid)
 
 nodeurl(rb::Twin) = nodeurl(rb.uid)
 
-path(twin::Twin) = "$(isdefined(twin, :process) ? twin.process.supervisor.supervisor : ":"):$(rid(twin))"
+path(t::Twin) = "$(isdefined(t, :process) ? t.process.supervisor.supervisor : ":"):$(rid(t))"
 
 hasname(twin::Twin) = hasname(twin.uid)
 
@@ -618,8 +606,7 @@ iszmq(twin::Twin) = isa(twin.socket, ZDealer)
 failover_queue(twin::Twin) = twin.failover_from > 0.0
 
 """
-$(SIGNATURES)
-
+$(TYPEDSIGNATURES)
 Block [`rpc`](@ref) and [`publish`](@ref) calls until the twin is connected to the broker.
 """
 function ifdown_block(rb::Twin)
@@ -656,15 +643,23 @@ function wait_open(twin::Twin)
     end
 end
 
-function Base.isopen(twin::Twin)
-    if isrepl(twin.uid)
-        return isdefined(twin, :process) && !istaskdone(twin.process.task)
+"""
+$(TYPEDSIGNATURES)
+Check if the component is connected to the broker.
+"""
+function Base.isopen(rb::Twin)::Bool
+    if isrepl(rb.uid)
+        return isdefined(rb, :process) && !istaskdone(rb.process.task)
     else
-        return isopen(twin.socket)
+        return isopen(rb.socket)
     end
 end
 
-Base.wait(twin::Twin) = isdefined(twin, :process) ? wait(twin.process.task) : nothing
+"""
+$(TYPEDSIGNATURES)
+Wait for RPC requests and Pub/Sub messages.
+"""
+Base.wait(rb::Twin) = isdefined(rb, :process) ? wait(rb.process.task) : nothing
 
 isconnected(twin::Twin) = isopen(twin.socket)
 

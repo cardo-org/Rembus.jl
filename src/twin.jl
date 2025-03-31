@@ -450,10 +450,6 @@ function connect(url::RbURL; name=missing)
     return twin
 end
 
-function connect(url::AbstractString; name=missing)
-    return connect(RbURL(url), name=name)
-end
-
 connect() = connect(RbURL())
 
 function disconnect(twin::Twin)
@@ -463,14 +459,22 @@ function disconnect(twin::Twin)
     end
 end
 
-function Visor.shutdown(twin::Twin)
-    if isdefined(twin, :process)
-        twin.process.phase = :closing
-        shutdown(twin.process.supervisor.supervisor)
+"""
+$(TYPEDSIGNATURES)
+Close the connection and terminate the component.
+"""
+function Visor.shutdown(rb::Twin)
+    if isdefined(rb, :process)
+        rb.process.phase = :closing
+        shutdown(rb.process.supervisor.supervisor)
     end
 end
 
-Base.close(twin::Twin) = Visor.shutdown(twin)
+"""
+$(TYPEDSIGNATURES)
+Close the connection and terminate the component.
+"""
+Base.close(rb::Twin) = Visor.shutdown(rb)
 
 function close_twin(twin::Twin)
     if isdefined(twin, :process)

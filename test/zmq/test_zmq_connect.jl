@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function run(rb, node_url)
-    node = connect(node_url, name="component")
+    node = connect(Rembus.RbURL(node_url), name="component")
     Visor.dump()
     return node
 end

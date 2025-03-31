@@ -15,7 +15,7 @@ function run()
     Rembus.request_timeout!(20)
 
     # Starts a component just for being notified of subscribed events
-    dummy = connect("dummy_component", name="dummy_component")
+    dummy = connect(Rembus.RbURL("dummy_component"), name="dummy_component")
 
     sleep(2)
 

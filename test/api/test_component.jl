@@ -15,7 +15,7 @@ function run()
 
     Rembus.debug!()
     # Starts a component just for being notified of subscribed events
-    dummy = connect("rpc_dummy_component", name="rpc_dummy_component")
+    dummy = connect(Rembus.RbURL("rpc_dummy_component"), name="rpc_dummy_component")
 
     Rembus.warn!()
 
@@ -40,11 +40,11 @@ function run()
         @test response == "hello"
 
         futres = Rembus.fpc(rb, "myservice", ("hello",))
-        @test issuccess(futres)
+        @test Rembus.issuccess(futres)
         @test fetch(futres) == "hello"
 
         sts = Rembus.fpc(rb, "unknown_method")
-        @test !issuccess(sts)
+        @test !Rembus.issuccess(sts)
 
         shutdown(rb)
     end
