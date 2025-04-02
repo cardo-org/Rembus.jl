@@ -5,8 +5,9 @@ It is possible to use Rembus protocol to setup a simple client-server architectu
 In this scenario one component plays the role of a server that handles RPC requests and
 receives messages published by others components that play the role of clients.
 
-> **NOTE** Without a broker a pub/sub is a one-to-one communication pattern: components publish
-> messages that are received by the server but they are not broadcasted to anyone else.
+> **NOTE** Without a broker a pub/sub is a one-to-one communication pattern: components
+> publish messages that are received by the server but they are not broadcasted to anyone
+> else.
 
 Below a minimal example of a component that exposes a service and accepts connections
 for others components and respond only to authenticated components:
@@ -15,16 +16,12 @@ for others components and respond only to authenticated components:
 using Rembus
 
 function my_service(ctx, component, x, y)
-    ## authorization barrier 
-    # isauthenticated(component) || error("unauthorized")
     return x+y
 end
 
-function start_server()
-    rb = server()
-    expose(rb, my_service)
-    wait(rb)
-end
+rb = server()
+expose(rb, my_service)
+wait(rb)
 
 start_server()
 ```

@@ -8,11 +8,13 @@ Rembus is a middleware for Pub/Sub and RPC communication styles.
 
 A Rembus node may play one o more roles:
 
-- RPC client
-- RPC server
-- Pub/Sub publisher
-- Pub/Sub subscriber
-- Broker
+- RPC client - `component("ws://host:8000/my_rpc_client")`
+- RPC server - `component("ws://host:8000/my_rpc_server")`
+- Pub/Sub publisher - `component("ws://host:8000/my_producer")`
+- Pub/Sub subscriber - `component("ws://host:8000/my_consumer")`
+- Broker - `component(ws=8000)`
+- Broker and Component - `component("my_app", ws=8000)`
+- Server - `server(ws=8000)`
 
 This meshup of roles enables a to implements a set of distributed architectures.
 
