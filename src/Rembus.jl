@@ -19,7 +19,6 @@ using Reexport
 using Sockets
 using Parameters
 using PrecompileTools
-using Preferences
 using Printf
 using Prometheus
 using URIs

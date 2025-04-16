@@ -57,7 +57,7 @@ commands.
 In case of connection lost the underlying supervision logic attempts to reconnect
 to the broker until it succeed.
 
-See [Connected Components](@ref) for URL format details.
+See [Component](@ref) for URL format details.
 
 ### Broker
 

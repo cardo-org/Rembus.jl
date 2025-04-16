@@ -69,7 +69,7 @@ function simo_task(self, router)
                 push!(requests, (rid(tw), Rembus.fpc(
                     tw, msg.topic,
                     (rid(tw), msg.data...),
-                    Rembus.request_timeout() - 1
+                    request_timeout() - 1
                 )))
             end
             @async wait_responses(self, msg, requests)

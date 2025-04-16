@@ -4,19 +4,37 @@
 CurrentModule = Rembus
 ```
 
-Rembus is a middleware for Pub/Sub and RPC communication styles.
+> A Component is a Broker or a Broker is a Component? This is the question.
+> -- `The Rembus rebus`
 
-A Rembus node may play one o more roles:
+Rembus is a Julia package designed for building distributed applications using
+both Publish/Subscribe (Pub/Sub) and Remote Procedure Call (RPC) communication
+patterns. 
 
-- RPC client - `component("ws://host:8000/my_rpc_client")`
-- RPC server - `component("ws://host:8000/my_rpc_server")`
-- Pub/Sub publisher - `component("ws://host:8000/my_producer")`
-- Pub/Sub subscriber - `component("ws://host:8000/my_consumer")`
-- Broker - `component(ws=8000)`
-- Broker and Component - `component("my_app", ws=8000)`
-- Server - `server(ws=8000)`
+A key distinguishing feature of Rembus is its highly flexible role
+system, allowing a single application to act as a client, server, publisher,
+subscriber, and even a message broker concurrently.
 
-This meshup of roles enables a to implements a set of distributed architectures.
+This unique capability enables the implementation of a wide range of distributed
+architectures.
+
+**Key Features:**
+
+- Support multiple transport protocol: WebSocket, TCP, and ZeroMQ.
+- Efficient CBOR encoding for primitive types.
+- Optimized Arrow Table Format for encodings DataFrames.
+
+**Application Roles:**
+
+An application utilizing Rembus can assume one or more of the following roles:
+
+- **RPC Client (Requestor):** Initiates requests for services from other components.
+- **RPC Server (Exposer):** Provides and executes services in response to requests.
+- **Pub/Sub Publisher:** Produces and disseminates messages to interested subscribers.
+- **Pub/Sub Subscriber:** Consumes messages published on specific topics.
+- **Broker:** Routes messages between connected components, potentially across different transport protocols.
+- **Broker and Component:** Combines the routing capabilities of a broker with the application logic of a component.
+- **Server:** Accepts connections from clients but does not route messages between them in the same way a broker does.
 
 ## Installation
 
@@ -27,31 +45,89 @@ Pkg.add("Rembus")
 
 ## Broker
 
-A `Broker` routes messages between components.
+A Rembus Broker acts as a central message router, facilitating communication
+between components. Importantly, a Broker can bridge components using different
+transport protocols (e.g., a ZeroMQ component can communicate with a WebSocket
+component).
 
-A `Broker` is capable of making components that use different transport
-protocols talk to each other. For example a component that uses a ZeroMQ socket
-may talk to a component that uses the WebSocket protocol.
-
-Starting a `Broker` is simple as:
-
-```julia
-using Rembus
-
-component(ws=8000, tcp=8001, zmq=8002, prometheus=8003)
-```
-
-Calling `component` without arguments start by default a WebSocket server
-listening on port 8000:
+Starting a basic WebSocket Broker:
 
 ```julia
 using Rembus
-component()
+
+component() # Starts a WebSocket server listening on port 8000
 ```
 
-The connection point of the **Broker** is defined by the url `ws://host:8000`.
+The connection point for this broker is `ws://host:8000`.
 
-A startup script could be useful and the following `broker` script will do:
+A Broker can also function as a Component, connecting to another broker while
+simultaneously acting as a local broker:
+
+```julia
+using Rembus
+rb = component("ws://myhost:8000/mynode", ws=9000)
+```
+
+Here, the `mynode` component connects to the broker at `myhost:8000` and also
+acts as a broker, accepting WebSocket connections on port `9000` and routing
+messages between its connected components.
+
+## Component
+
+A Rembus Component is a process that embodies one or more of the communication
+roles (Publisher, Subscriber, Requestor, Exposer). To connect to a broker, a
+component uses a URL with the broker's connection point and a unique component
+identifier:
+
+```julia
+component_url = "[<protocol>://][<host>][:<port>/][<cid>]"
+```
+
+Where `<protocol>` is one of `ws`, `wss`, `tcp`, `tls`, or `zmq`. `<host>` and
+`<port>` specify the broker's address, and `<cid>` is the component's unique
+name (optional for anonymous components).
+
+Example connecting a named component:
+
+```julia
+rb = component("ws://host:8000/my_component")
+```
+
+A Component can also act as a Broker:
+
+```julia
+pub = component("ws://host:8000/my_pub", ws=9000)
+```
+
+The `my_pub` component communicates with the broker at `host:8000` and
+simultaneously acts as a WebSocket broker on port `9000` for other components..
+
+**Types of Components:**
+
+- **Anonymous**: Assumes a random, ephemeral identity on each connection.
+  Useful when message origin tracing isn't required, for subscribers
+  uninterested in offline messages, and for prototyping.
+- **Named**: Possesses a unique, persistent name, enabling it to receive messages
+  published while offline.
+- **Authenticated**: A named component with cryptographic credentials (private key
+  or shared secret) to prove its identity, allowing access to private Pub/Sub
+  topics and RPC methods.
+
+## Server
+
+Rembus simplifies the client-server architecture with a dedicated server API for
+creating components that accept client connections without acting as
+general-purpose message routers:
+
+```julia
+rb = server(ws=9876)
+```
+
+A server can expose RPC services and subscribe to Pub/Sub topics (typical server
+roles) but can also publish messages or request RPC services from its connected
+clients.
+
+## A Simple Broker Script
 
 ```julia
 #!/bin/bash
@@ -65,84 +141,36 @@ using Rembus
 Rembus.brokerd()
 ```
 
-`broker` starts by default a WebSocket server listening on port 8000,
-for enabling `tcp` and/or `zmq` transports use the appropriate arguments:
+This script starts a Rembus broker with a default WebSocket server on port
+`8000`. Use command-line arguments (e.g., `./broker -t 8001 -z 8002`) to enable
+TCP and ZeroMQ transports.
 
 ```text
 shell> ./broker
-usage: broker [-r] [-s] [-p HTTP] [-w WS] [-t TCP] [-z ZMQ] [-d] [-h]
+usage: broker [-n NAME] [-x] [-s] [-a] [-p HTTP] [-m PROMETHEUS]
+              [-w WS] [-t TCP] [-z ZMQ] [-r POLICY] [-d] [-i] [-h]
 
 optional arguments:
-  -r, --reset      factory reset, clean up broker configuration
-  -s, --secure     accept wss and tls connections
-  -p, --http HTTP  accept HTTP clients on port HTTP (type: UInt16)
-  -w, --ws WS      accept WebSocket clients on port WS (type: UInt16)
-  -t, --tcp TCP    accept tcp clients on port TCP (type: UInt16)
-  -z, --zmq ZMQ    accept zmq clients on port ZMQ (type: UInt16)
-  -d, --debug      enable debug logs
-  -h, --help       show this help message and exit
+  -n, --name NAME       broker name (default: "broker")
+  -x, --reset           factory reset, clean up broker configuration
+  -s, --secure          accept wss and tls connections
+  -a, --authenticated   only authenticated components allowed
+  -p, --http HTTP       accept HTTP clients on port HTTP (type:
+                        UInt16)
+  -m, --prometheus PROMETHEUS
+                        prometheus exposer port (type: UInt16)
+  -w, --ws WS           accept WebSocket clients on port WS (type:
+                        UInt16)
+  -t, --tcp TCP         accept tcp clients on port TCP (type: UInt16)
+  -z, --zmq ZMQ         accept zmq clients on port ZMQ (type: UInt16)
+  -r, --policy POLICY   set the broker routing policy: first_up,
+                        round_robin, less_busy (default: "first_up")
+  -d, --debug           enable debug logs
+  -i, --info            enable info logs
+  -h, --help            show this help message and exit
 ```
 
-See [Broker environment variables](@ref) for customizing the runtime setting.  
-
-## Connected Components
-
-Aside to be a **Broker** a component is a process that plays one or more of the following roles:
-
-- Publisher (Pub/Sub) : produce messages;
-- Subscriber (Pub/Sub): consume published messages;
-- Requestor (RPC): request a service;
-- Exposer (RPC): execute a service request and give back a response;
-
-To connect to a broker a component must use a URL composed of the connection
-point of the **Broker** and the component unique name.
-
-```julia
-component_url = "[<protocol>://][<host>][:<port>/][<cid>]"
-
-rb = component(component_url)
-```
-
-`<protocol>` is one of:
-
-- `ws` web socket
-- `wss` secure web socket
-- `tcp` tcp socket
-- `tls` TLS over tcp socket
-- `zmq` ZeroMQ socket
-
-`<host>` and `<port>` are the hostname/ip and the port of the listening broker.
-
-`<rid>` is the unique name of the component. If it is not defined an anonymous
-component is created:
-
-```julia
-pub = component("ws://host:8000/my_pub")
-```
-
-defines the component `my_pub` that communicates with the broker hosted on
-`host`, listening on port `8000` and accepting web socket connections.
-
-### Types of Components
-
-There are three type of Components:
-
-- Anonymous
-- Named
-- Authenticated
-
-An `Anonymous` component assume a random and ephemeral identity each time it connects to the broker. Example usage for anonymous components may be:
-
-- when it is not required to trace the originating source of messages;
-- for a `Subscriber` not interested to receive messages published when it was
-  offline;
-- for preliminary prototyping;
-
-A `Named` component has a unique and persistent name that make possible to receive messages published when the component was offline.
-
-An `Authenticated` component is a named component that own a private key or a shared secret which can prove its identity.
-
-Only authenticated components may use Pub/Sub private topics and private RPC methods.
+See [Configuration](@ref) for customizing the runtime setting.  
 
 ## Index
 

@@ -65,6 +65,8 @@ function brokerd()::Cint
             tcp=args["tcp"],
             zmq=args["zmq"],
             prometheus=args["prometheus"],
+            secure=args["secure"],
+            http=args["http"],
             authenticated=args["authenticated"],
             policy=args["policy"]
         ))

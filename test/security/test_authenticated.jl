@@ -17,6 +17,10 @@ function setup()
         end
     end
 
+    settings = Dict("connection_mode" => "authenticated")
+    open(joinpath(Rembus.rembus_dir(), node, "settings.json"), "w") do f
+        write(f, JSON3.write(settings))
+    end
 end
 
 function run()
@@ -32,12 +36,11 @@ end
 
 function test_errors()
     # Connect anonymously and try to send a command.
-    rb = connect()
     Rembus.request_timeout!(2)
+    rb = connect()
     @test_throws RembusTimeout reactive(rb)
     Rembus.request_timeout!(20)
 
-    Rembus.authenticated!()
     rb = connect(node)
     @test isopen(rb)
     shutdown(rb)
@@ -64,12 +67,14 @@ function test_errors()
     @test_throws RembusError connect(node)
 
     # Anonymous connection is not permitted in authenticated mode.
-    @test_throws ErrorException connect()
+    rb = connect()
+    # after CHALLENGE_TIMEOUT seconds the connection is closed.
+    sleep(rb.router.settings.challenge_timeout + 0.1)
+    @test !isopen(rb)
 
-    # Throw an error if the component is anonymous
-    #@test_throws ErrorException component("ws://:8000", failovers=["myfailover"])
-    component("ws://:8000", failovers=["myfailover"])
-
+    rb = component("ws://:8000", failovers=["myfailover"])
+    sleep(rb.router.settings.challenge_timeout + 0.1)
+    @test !isopen(rb)
 
     # reset the default cid
     Rembus.localcid!("")
@@ -77,4 +82,3 @@ function test_errors()
 end
 
 execute(run, broker_name, ws=8000, authenticated=true, setup=setup)
-Rembus.anonymous!()

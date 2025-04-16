@@ -33,7 +33,7 @@ function zmq_ping(twin::Twin)
         end
     catch e
         @warn "[$(cid(twin))]: pong not received ($e)"
-        dumperror(e)
+        dumperror(twin, e)
     end
 
     return nothing
@@ -208,7 +208,7 @@ function zmq_receive(twin::Twin)
                 break
             else
                 @error "[$twin] zmq_receive: $e"
-                dumperror(e)
+                dumperror(twin, e)
             end
         end
     end
@@ -309,7 +309,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
         end
     catch e
         notify(isconnected, e, error=true)
-        dumperror(e)
+        dumperror(twin, e)
     end
 end
 
@@ -378,6 +378,7 @@ function component(
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
+    http=nothing,
     name=missing,
     secure=false,
     authenticated=false,
@@ -388,7 +389,7 @@ function component(
         name = rid(url)
     end
     router = get_router(
-        name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
+        name=name, ws=ws, tcp=tcp, zmq=zmq, http=http, authenticated=authenticated, secure=secure
     )
     set_policy(router, policy)
     return component(url, router, failovers)
@@ -642,6 +643,9 @@ function authenticate(router::Router, twin::Twin)
     end
 
     if (response.status != STS_SUCCESS)
+        # If an error occurs when authenticating than shutdown the component
+        # to avoid reconnecting attempts.
+        twin.process.phase = :closing
         close(twin.socket)
         rembuserror(code=response.status, reason=reason)
     else
@@ -1120,7 +1124,7 @@ function twin_receiver(twin::Twin)
         end
     catch e
         receiver_exception(twin, e)
-        dumperror(e)
+        dumperror(twin, e)
     finally
         end_receiver(twin)
     end
@@ -1214,6 +1218,11 @@ function detach(twin)
 
     if !isempty(twin.ackdf)
         save_pubsub_received(twin)
+    end
+
+    # Remove the twin from the router tables.
+    if !hasname(twin)
+        cleanup(twin, last_downstream(twin.router))
     end
 
     return nothing

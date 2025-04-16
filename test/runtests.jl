@@ -25,6 +25,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "broker"
+        @time @safetestset "overwrite_connection" begin
+            include("broker/test_overwrite_connection.jl")
+        end
         @time @safetestset "plugin" begin
             include("broker/test_plugin.jl")
         end

@@ -1,28 +1,34 @@
 # Configuration
 
-## Broker environment variables
+## Environment variables
 
-The broker setup is affected by the following environment variables.
-
-| Variable |Default| Descr |
-|----------|-------|-------|
-|`REMBUS_DIR`|\$HOME/.config/rembus|data root directory|
-|`REMBUS_KEYSTORE`|\$REMBUS\_ROOT\_DIR/keystore| Directory of broker/server certificate `rembus.crt` and broker/server secret key `rembus.key`|
-
-## Component environment variables
-
-A Rembus component is affected by the following environment variables.
+A component is affected by the following environment variables.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
 |`REMBUS_DIR`|\$HOME/.config/rembus|data root directory|
 |`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
 |`REMBUS_TIMEOUT`|5| Maximum number of seconds waiting for rpc responses|
-|`HTTP_CA_BUNDLE`|\$REMBUS\_ROOT\_DIR/ca/rembus-ca.crt|CA certificate|
+|`REMBUS_ACK_TIMEOUT`|5| Maximum number of seconds waiting for pub/sub ack messages|
+|`REMBUS_CHALLENGE_TIMEOUT`|5|  Time interval after which the connection is closed if a challenge response is not received when `connection_mode` is `authenticated`
+|`REMBUS_RECONNECT_PERIOD`|1| Reconnection retry period|
+|`REMBUS_CACHE_SIZE`|1000000| Max numbers of pub/sub messages cached in memory|
+|`HTTP_CA_BUNDLE`|\$REMBUS\_DIR/ca/rembus-ca.crt|CA certificate|
+
+## Broker only environment variables
+
+When a component is a broker the setup is affected also by the `REMBUS_KEYSTORE`
+variable that define the directory where are stored the private key and the server
+certificate needed for wss and tls secure connections. 
+
+| Variable |Default| Descr |
+|----------|-------|-------|
+|`REMBUS_KEYSTORE`|\$REMBUS\_DIR/keystore| Directory of broker/server certificate `rembus.crt` and broker/server secret key `rembus.key`|
 
 ## Broker configuration files
 
-The broker name determines the directory where the data files are stored.
+The broker name determines the directory where settings and component related data are
+stored.
 
 For example, to set the name of the broker with the companion `broker` script use
 the optional `name` argument:
@@ -32,7 +38,7 @@ broker --name my_broker
 ```
 
 In the following it is assumed the default `broker` name for the broker: in this
-case the directory `$REMBUS_DIR/broker` contains the broker states and settings
+case the directory `$REMBUS_DIR/broker` contains the broker configuration data
 and secret materials.
 
 ```sh
@@ -50,6 +56,7 @@ and secret materials.
     ├── 345456
     └── 867687
 ├── router.json
+├── settings.json
 ├── tenants.json
 ├── tenant_component.json
 ├── topic_auth.json
@@ -58,6 +65,48 @@ and secret materials.
 │   └── foo.json
 
 
+```
+
+### Component settings
+
+The behavoir of a component may be configured with the properties defined in the
+`settings.json` file. The values from `settings.json` take priority over environment
+variables values.
+
+The following properties are supported (in parenthesis the corresponding environment
+variable):
+
+- `cache_size (REMBUS_CACHE_SIZE)`: max numbers of pub/sub messages cached in memory; 
+- `connection_mode`: `"authenticated"` or `"anonymous"` for components without name or 
+   authentication credentials;
+- `ack_timeout (REMBUS_ACK_TIMEOUT)`: timeout in seconds for pub/sub ack messages;
+- `challenge_timeout (REMBUS_CHALLENGE_TIMEOUT)`: time interval after which the connection
+   is closed if a challenge response is not received. This feature holds only if
+   `connection_mode` is `authenticated`;
+- `request_timeout (REMBUS_TIMEOUT)`: maximum time in seconds for waiting a rpc response; 
+- `overwrite_connection`: If `true` a connecting component with the same name of an
+   already connected component connect successfully and the already connected component is
+   disconnected from the broker. 
+- `reconnect_period (REMBUS_RECONNECT_PERIOD)`: reconnection retry period when connection is
+   down;
+- `stacktrace`: When an exception occurs the error stack trace is logged if `stacktrace` is
+   `true`. 
+- `zmq_ping_interval (REMBUS_ZMQ_PING_INTERVAL)`: ZMQ ping interval in seconds;
+- `ws_ping_interval (REMBUS_WS_PING_INTERVAL)`: WebSocket ping interval in seconds;
+
+```json
+{
+    "cache_size": 1000000,
+    "connection_mode": "anonymous",
+    "ack_timeout": 2,
+    "challenge_timeout": 3,
+    "request_timeout": 5,
+    "overwrite_connection": false,
+    "reconnect_period": 1,
+    "stacktrace": false,
+    "zmq_ping_interval": 30,
+    "ws_ping_interval": 30
+}
 ```
 
 ### Secrets and public keys

@@ -15,8 +15,17 @@ mutable struct Proxy <: Rembus.AbstractRouter
     end
 end
 
-Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
-Rembus.request_timeout!(20)
+ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus")
+ENV["REMBUS_TIMEOUT"] = "20"
+
+"""
+    request_timeout()
+
+Return the default request timeout.
+"""
+function request_timeout()
+    return parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5"))
+end
 
 atexit() do
     fn = joinpath(@__DIR__, "..", "LocalPreferences.toml")

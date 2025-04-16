@@ -195,7 +195,7 @@ end
 Unregister a component.
 =#
 function unregister_node(router, msg)
-    @debug "[$twin] unregistering $(msg.cid), isauth: $(twin.isauth)"
+    @debug "[$router] unregistering $(msg.cid), isauth: $(msg.twin.isauth)"
     twin = msg.twin
     sts = STS_SUCCESS
     reason = nothing

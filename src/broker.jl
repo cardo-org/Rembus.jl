@@ -404,6 +404,19 @@ function rpc_response(router::Router, msg)
     end
 end
 
+function auth_identity(router::Router, msg)
+    twin = msg.twin
+    url = RbURL(msg.cid)
+    twin_id = rid(url)
+    if if_authenticated(router, twin_id)
+        # cid is registered, send the challenge
+        response = challenge(router, twin, msg.id)
+        transport_send(twin, response)
+    else
+        attestation(router, twin, msg, false)
+    end
+end
+
 #=
     broker_task(self, router)
 
@@ -441,16 +454,18 @@ function router_task(self, router::Router, ready, implementor_rule)
                     response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "empty cid")
                     transport_send(twin, response)
                 elseif isconnected(router, twin_id)
-                    @warn "[$(path(twin))] a component with id [$twin_id] is already connected"
-                    response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "already connected")
-                    transport_send(twin, response)
-                elseif if_authenticated(router, twin_id)
-                    # cid is registered, send the challenge
-                    # TODO: save wsport into session
-                    response = challenge(router, twin, msg.id)
-                    transport_send(twin, response)
+                    if router.settings.overwrite_connection
+                        # close the already connected node
+                        close_twin(router.id_twin[twin_id])
+                        auth_identity(router, msg)
+                    else
+                        @warn "[$(path(twin))] a node with id [$twin_id] is already connected"
+                        response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "already connected")
+                        transport_send(twin, response)
+                    end
+                    continue
                 else
-                    attestation(router, twin, msg, false)
+                    auth_identity(router, msg)
                 end
                 ### callbacks(twin)
             elseif isa(msg, PingMsg)
@@ -748,7 +763,6 @@ function get_router(;
             secure=secure,
             name=name,
             ws=ws, tcp=tcp, zmq=zmq, http=http, prometheus=prometheus,
-            ready=ready
         )
         take!(ready)
     else
@@ -782,7 +796,6 @@ Overwrite command line arguments if args is not empty.
 """
 function start_broker(
     router;
-    ready,
     secure=false,
     ws=nothing,
     tcp=nothing,

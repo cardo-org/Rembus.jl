@@ -376,39 +376,37 @@ mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
     rembus_dir::String
-    log_destination::String
     overwrite_connection::Bool
     stacktrace::Bool  # log stacktrace on error
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
     save_messages::Bool
-    db_max_messages::UInt
+    cache_size::UInt
     connection_mode::ConnectionMode
     request_timeout::Float64
     challenge_timeout::Float64
     ack_timeout::Float64
     reconnect_period::Float64
-    Settings() = begin
-        cfg = get(Base.get_preferences(), "Rembus", Dict())
+    Settings(name::AbstractString) = begin
+        cfg = getcfg(name)
 
         zmq_ping_interval = get(cfg, "zmq_ping_interval",
-            parse(Float32, get(ENV, "REMBUS_ZMQ_PING_INTERVAL", "10")))
+            parse(Float32, get(ENV, "REMBUS_ZMQ_PING_INTERVAL", "30")))
 
         ws_ping_interval = get(cfg, "ws_ping_interval",
-            parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "0")))
+            parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "30")))
         rdir = get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", default_rembus_dir()))
-        log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
 
-        overwrite_connection = get(cfg, "overwrite_connection", true)
+        overwrite_connection = get(cfg, "overwrite_connection", false)
         stacktrace = get(cfg, "stacktrace", false)
 
         connection_mode = string_to_enum(get(cfg, "connection_mode", "anonymous"))
         connection_retry_period = get(cfg, "connection_retry_period", 2.0)
 
-        db_max_messages = get(
+        cache_size = get(
             cfg,
-            "db_max_messages",
-            parse(UInt, get(ENV, "REMBUS_DB_MAX_SIZE", REMBUS_DB_MAX_SIZE))
+            "cache_size",
+            parse(UInt, get(ENV, "REMBUS_CACHE_SIZE", REMBUS_CACHE_SIZE))
         )
         request_timeout = get(
             cfg,
@@ -422,7 +420,7 @@ mutable struct Settings
         )
         ack_timeout = get(
             cfg,
-            "request_timeout",
+            "ack_timeout",
             parse(Float64, get(ENV, "REMBUS_ACK_TIMEOUT", "2"))
         )
         reconnect_period = get(
@@ -434,13 +432,12 @@ mutable struct Settings
             zmq_ping_interval,
             ws_ping_interval,
             rdir,
-            log_destination,
             overwrite_connection,
             stacktrace,
             connection_retry_period,
             nothing,
             true,
-            db_max_messages,
+            cache_size,
             connection_mode,
             request_timeout,
             challenge_timeout,
@@ -494,7 +491,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         nothing,
         name,
         rand(Xoshiro(time_ns()), UInt64),
-        Settings(),
+        Settings(name),
         anonymous,
         ReentrantLock(),
         :first_up,

@@ -75,9 +75,11 @@ try
     pub_url = "ws://127.0.0.1:8010/pub"
     sub_url = "ws://127.0.0.1:8010/sub"
 
-    set_preferences!(Rembus, "db_max_messages" => 2)
+    ENV["REMBUS_CACHE_SIZE"] = "2"
+
     Rembus.request_timeout!(20)
     rb = broker(ws=8010, name="saved_messages")
+    @info "cache size: $(rb.router.settings.cache_size)"
     produce(pub_url)
     consume(sub_url)
 catch e

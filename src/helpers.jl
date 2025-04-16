@@ -7,15 +7,24 @@ isenabled(router, tenant::Nothing) = true
 
 # COV_EXCL_STOP
 
-stacktrace!(enable=true) = set_preferences!(Rembus, "stacktrace" => enable, force=true)
-
-function dumperror(e)
-    if get(getcfg(), "stacktrace", false)
+function dumperror(twin, e)
+    if last_downstream(twin.router).settings.stacktrace
         showerror(stdout, e, catch_backtrace())
     end
 end
 
-getcfg() = get(Base.get_preferences(), "Rembus", Dict())
+function getcfg(name::AbstractString)
+    dir = joinpath(get(ENV, "REMBUS_DIR", default_rembus_dir()), name)
+    if !isdir(dir)
+        mkpath(dir)
+    end
+    cfg_file = joinpath(dir, "settings.json")
+    if isfile(cfg_file)
+        return JSON3.read(cfg_file)
+    else
+        return Dict()
+    end
+end
 
 function default_rembus_dir()
     if Sys.iswindows()
@@ -27,12 +36,7 @@ function default_rembus_dir()
 end
 
 function rembus_dir()
-    cfg = getcfg()
-    get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", default_rembus_dir()))
-end
-
-function rembus_dir!(new_dir::AbstractString)
-    set_preferences!(Rembus, "rembus_dir" => new_dir, force=true)
+    return get(ENV, "REMBUS_DIR", default_rembus_dir())
 end
 
 function init_log(level=nothing)
@@ -47,14 +51,6 @@ debug!() = init_log("debug")
 info!() = init_log("info")
 warn!() = init_log("warn")
 error!() = init_log("error")
-
-anonymous!() = set_preferences!(
-    Rembus, "connection_mode" => string(anonymous), force=true
-)
-
-authenticated!() = set_preferences!(
-    Rembus, "connection_mode" => string(authenticated), force=true
-)
 
 #=
 Get the message data payload.
@@ -80,40 +76,30 @@ function string_to_enum(connection_mode)
 end
 
 """
-    request_timeout()
-
-Returns the default request timeout used when creating new nodes with the
-[`broker`](@ref), [`component`](@ref), [`connect`](@ref), or [`server`](@ref) functions.
-"""
-function request_timeout()
-    cfg = getcfg()
-    get(cfg, "request_timeout", parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5")))
-end
-
-"""
     request_timeout!(value::Real)
 
 Set the default request timeout used when creating new nodes with the
 [`broker`](@ref), [`component`](@ref), [`connect`](@ref), or [`server`](@ref) functions.
 """
 function request_timeout!(value::Real)
-    set_preferences!(Rembus, "request_timeout" => value, force=true)
+    ENV["REMBUS_TIMEOUT"] = string(value)
 end
 
-function challenge_timeout!(newval)
-    set_preferences!(Rembus, "challenge_timeout" => newval, force=true)
+function challenge_timeout!(value)
+    ENV["REMBUS_CHALLENGE_TIMEOUT"] = string(value)
+
 end
 
-function ack_timeout!(newval)
-    set_preferences!(Rembus, "ack_timeout" => newval, force=true)
+function ack_timeout!(value)
+    ENV["REMBUS_ACK_TIMEOUT"] = string(value)
 end
 
-function ws_ping_interval!(newval)
-    set_preferences!(Rembus, "ws_ping_interval" => newval, force=true)
+function ws_ping_interval!(value)
+    ENV["REMBUS_WS_PING_INTERVAL"] = string(value)
 end
 
-function zmq_ping_interval!(newval)
-    set_preferences!(Rembus, "zmq_ping_interval" => newval, force=true)
+function zmq_ping_interval!(value)
+    ENV["REMBUS_ZMQ_PING_INTERVAL"] = string(value)
 end
 
 #=
@@ -353,7 +339,7 @@ function save_message(router, msg::PubSubMsg)
     push!(router.msg_df, [router.mcounter, ts, msg.id, msg.topic, data])
     #end
 
-    if (router.mcounter % router.settings.db_max_messages) == 0
+    if (router.mcounter % router.settings.cache_size) == 0
         persist_messages(router)
         @debug "persisted $(router.mcounter) file"
         router.msg_df = msg_dataframe()

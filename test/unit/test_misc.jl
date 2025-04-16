@@ -38,7 +38,6 @@ end
 
     comp = "component1"
     bro = "test_router"
-    Rembus.rembus_dir!(joinpath(tempdir(), "rembus"))
     dir = joinpath(Rembus.rembus_dir(), bro, comp)
     @info "creating dir $dir"
     mkpath(dir)
@@ -113,10 +112,11 @@ end
 end
 
 @testitem "showerror" begin
-    Rembus.stacktrace!()
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    router.settings.stacktrace = true
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
     e = ErrorException("test error")
-    Rembus.dumperror(e)
-    Rembus.stacktrace!(false)
+    Rembus.dumperror(twin, e)
 end
 
 @testitem "string_to_enum" begin
@@ -150,7 +150,7 @@ end
 @testitem "log_to_file" begin
     using Preferences
     logfile = joinpath(tempdir(), "test.log")
-    set_preferences!(Rembus, "log_destination" => logfile, force=true)
+    ENV["BROKER_LOG"] = logfile
 
     # init log
     Rembus.logging("debug")
@@ -162,18 +162,13 @@ end
     @test isfile(logfile)
 
     # reset log to default
-    set_preferences!(Rembus, "log_destination" => "stdout", force=true)
+    ENV["BROKER_LOG"] = "stdout"
     Rembus.logging("info")
 end
 
 @testitem "node" begin
     node = Rembus.Node("ws://myhost:8765/mycid")
     @test node.protocol === :ws
-end
-
-@testitem "request_timeout" begin
-    ENV["REMBUS_TIMEOUT"] = "10"
-    @test Rembus.request_timeout() == 10
 end
 
 @testitem "get_meta" begin

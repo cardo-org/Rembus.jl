@@ -5,7 +5,7 @@ const DATAFRAME_TAG = 80
 const PING_INTERVAL = 10
 const PONG_STRING = "*_pong_*"
 
-const REMBUS_DB_MAX_SIZE = "1000000"
+const REMBUS_CACHE_SIZE = "1000000"
 
 const MESSAGE_CHANNEL_SZ = 1000
 

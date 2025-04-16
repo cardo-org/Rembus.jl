@@ -12,8 +12,7 @@ function repl_metafmt(level::LogLevel, _module, group, id, file, line)
 end
 
 function logging(level)
-    cfg = getcfg()
-    log_destination = get(cfg, "log_destination", get(ENV, "BROKER_LOG", "stdout"))
+    log_destination = get(ENV, "BROKER_LOG", "stdout")
     if log_destination === "stdout"
         rlogger = RembusLogger(stdout, level)
         rlogger |> global_logger

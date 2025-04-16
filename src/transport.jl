@@ -64,9 +64,9 @@ function from_cbor(twin, counter, packet)
     return nothing
 end
 
-function get_meta(io, header)
+function get_meta(io, header, minsize=3)
     plen = header & ~TYPE_BITS_MASK
-    if plen > 3
+    if plen > minsize
         return decode_internal(io)
     else
         return Dict()
@@ -132,7 +132,8 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         tenant = decode_internal(io)
-        pubkey = decode_internal(io)
+        val = decode_internal(io)
+        pubkey = isa(val, Tag) ? val.data : val
         type = decode_internal(io)
         return Register(twin, bytes2id(id), cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
@@ -143,7 +144,7 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
-        meta = get_meta(io, header)
+        meta = get_meta(io, header, 4)
         return Attestation(twin, bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")

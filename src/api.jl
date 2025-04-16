@@ -144,6 +144,7 @@ function component(
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
+    http=nothing,
     name=missing,
     secure=false,
     authenticated=false,
@@ -156,6 +157,7 @@ function component(
         ws=ws,
         tcp=tcp,
         zmq=zmq,
+        http=http,
         name=name,
         authenticated=authenticated,
         policy=policy,
@@ -169,6 +171,7 @@ function component(;
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
+    http=nothing,
     prometheus=nothing,
     secure=false,
     authenticated=false,
@@ -184,6 +187,7 @@ function component(;
         ws=ws,
         tcp=tcp,
         zmq=zmq,
+        http=http,
         prometheus=prometheus,
         authenticated=authenticated,
         secure=secure,
@@ -471,50 +475,6 @@ end
 """
     publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
-Publish Vararg `data` values to `topic`.
-
-Each item of `data` map to an argument of the remote method subscribed to `topic`.
-
-`data` Vararg values may be of any type, but if the components are implemented in different
-languages then the values have to be DataFrames or primitive types that are
-[CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) encodable.
-
-The `qos` keyword argument defines the quality of service:
-
-- **Rembus.Rembus.Rembus.QOS0**: at most one message is delivered to the subscriber
-    (message may be lost).
-- **Rembus.QOS1**: at least one message is delivered to the subscriber
-    (message may be duplicated).
-- **Rembus.QOS2**: exactly one message is delivered to the subscriber.
-
-### Examples
-
-If the subscriber is a method that expects two arguments:
-
-```
-mytopic(x,y) = ... # do something with x and y
-```
-
-The published message is invoked with two Vararg arguments:
-
-```
-rb = component("myname")
-publish(rb, "mytopic", 1, 2)
-```
-
-If the remote subscribed method has no arguments invoke `publish` as:
-
-```
-publish(rb, "mytopic")
-```
-
-"""
-
-
-
-"""
-    publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
-
 Publish (`Vararg`) data values to a specified `topic`.
 
 Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
@@ -525,8 +485,8 @@ the values must be either `DataFrames` or primitive types that are CBOR-encodabl
 
 The keywork argument `qos` defines the quality of service (QoS) for message delivery. Possible values:
 
-- `Rembus.QOS0` (default): At most one message is delivered to the subscriber (message may be lost).
-- `QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
+- `Rembus.QOS0`: (default): At most one message is delivered to the subscriber (message may be lost).
+- `Rembus.QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
 - `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
 
 # Examples
