@@ -5,13 +5,13 @@ myservice(val) = val;
 function run()
     # Test requests timeout
     Rembus.error!()
-    Rembus.request_timeout!(0.1)
+    request_timeout!(0.1)
     try
         connect("rpc_timeout_component")
     catch e
         @info "[test_rpc] expected: $e"
     end
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
 
     Rembus.debug!()
     # Starts a component just for being notified of subscribed events

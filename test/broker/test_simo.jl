@@ -114,7 +114,7 @@ end
 
 @info "[ha_setup] start"
 try
-    Rembus.request_timeout!(5)
+    request_timeout!(5)
     run()
 catch e
     @test false

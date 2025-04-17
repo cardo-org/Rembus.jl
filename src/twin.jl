@@ -405,6 +405,10 @@ function component(
 end
 
 function component(url::RbURL, router::AbstractRouter, failovers=[])
+    if router.settings.connection_mode === authenticated && !hasname(url)
+        error("anonymous components not allowed")
+    end
+
     twin = bind(router, url)
     return add_failovers(twin, failovers)
 end
@@ -572,9 +576,9 @@ function do_connect(twin::Twin)
     if !isopen(twin.socket)
         router = last_downstream(twin.router)
         if router.settings.connection_mode === authenticated
-            if !hasname(twin)
-                error("anonymous components not allowed")
-            end
+            #            if !hasname(twin)
+            #                error("anonymous components not allowed")
+            #            end
             transport_connect(twin)
             await_challenge(router, twin)
         else
@@ -636,7 +640,7 @@ function authenticate(router::Router, twin::Twin)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)
         close(twin.socket)
-        throw(AlreadyConnected(rid(twin)))
+        throw(RembusError(code=STS_GENERIC_ERROR))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(router, twin, response)
         response = twin_request(twin, msg, router.settings.request_timeout)
@@ -1077,9 +1081,9 @@ sent an Identity message. In this case the Identity response is delayed
 until the original challenge is resolved with an Attestation.
 =#
 function await_attestation(router::Router, twin::Twin, socket, msg)
-    future = Distributed.Future()
+    future = Channel{UInt8}(1)
     t = Timer(router.settings.request_timeout) do _t
-        put!(future, ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing))
+        put!(future, STS_GENERIC_ERROR)
     end
 
     twin.handler["att"] = (sts) -> put!(future, sts)

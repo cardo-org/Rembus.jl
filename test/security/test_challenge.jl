@@ -22,10 +22,15 @@ function setup()
             write(f, "mysecret")
         end
     end
+
+    settings = Dict("connection_mode" => "authenticated", "request_timeout" => 1)
+    open(joinpath(Rembus.rembus_dir(), node, "settings.json"), "w") do f
+        write(f, JSON3.write(settings))
+    end
+
 end
 
 function run()
-    Rembus.request_timeout!(10)
     @test_throws RembusTimeout connect(node)
 end
 

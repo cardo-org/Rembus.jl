@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function run()
-    Rembus.ws_ping_interval!(0.1)
+    ws_ping_interval!(0.1)
     node = connect("keep_alive_node")
     shutdown(node)
     sleep(0.5)

@@ -35,25 +35,26 @@ function test_disconnection()
 end
 
 function test_errors()
+    router = from("$broker_name.broker").args[1]
     # Connect anonymously and try to send a command.
-    Rembus.request_timeout!(2)
+    router.settings.request_timeout = 2
+
     rb = connect()
     @test_throws RembusTimeout reactive(rb)
-    Rembus.request_timeout!(20)
+    router.settings.request_timeout = 20
 
     rb = connect(node)
     @test isopen(rb)
     shutdown(rb)
 
-    Rembus.request_timeout!(0.001)
+    router.settings.request_timeout = 0.001
+    @info "TIMEOUT=$(router.settings.request_timeout)"
 
     try
         connect(node)
     catch e
         @test isa(e, RembusTimeout)
     end
-
-    Rembus.request_timeout!(20)
 
     # Modify the server secret.
     fn = joinpath(Rembus.broker_dir(broker_name), "keys", node)

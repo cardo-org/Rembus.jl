@@ -5,14 +5,14 @@ myservice(val) = val;
 
 function run()
     # Test requests timeout
-    Rembus.request_timeout!(0.1)
+    request_timeout!(0.1)
     try
         connect("timeout_component")
         #rpc(dummy, "version")
     catch e
         @info "[test_direct] expected: $e"
     end
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
 
     # Starts a component just for being notified of subscribed events
     dummy = connect(Rembus.RbURL("dummy_component"), name="dummy_component")

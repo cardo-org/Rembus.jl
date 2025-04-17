@@ -77,7 +77,7 @@ try
     # clear configurartion
     rm(joinpath(Rembus.rembus_dir(), broker_name), recursive=true, force=true)
 
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
     run(pub_url, srv_url)
 catch e
     @error "[setup] error: $e"

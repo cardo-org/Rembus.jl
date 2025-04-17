@@ -75,33 +75,6 @@ function string_to_enum(connection_mode)
     end
 end
 
-"""
-    request_timeout!(value::Real)
-
-Set the default request timeout used when creating new nodes with the
-[`broker`](@ref), [`component`](@ref), [`connect`](@ref), or [`server`](@ref) functions.
-"""
-function request_timeout!(value::Real)
-    ENV["REMBUS_TIMEOUT"] = string(value)
-end
-
-function challenge_timeout!(value)
-    ENV["REMBUS_CHALLENGE_TIMEOUT"] = string(value)
-
-end
-
-function ack_timeout!(value)
-    ENV["REMBUS_ACK_TIMEOUT"] = string(value)
-end
-
-function ws_ping_interval!(value)
-    ENV["REMBUS_WS_PING_INTERVAL"] = string(value)
-end
-
-function zmq_ping_interval!(value)
-    ENV["REMBUS_ZMQ_PING_INTERVAL"] = string(value)
-end
-
 #=
 Return a copy of `msg` modified by function `fn`.
 =#

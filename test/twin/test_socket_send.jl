@@ -6,7 +6,7 @@ function pubsub(rb, msg)
 end
 
 function run()
-    Rembus.request_timeout!(0.001)
+    request_timeout!(0.001)
     rb = connect()
 
     sleep(1)
@@ -20,10 +20,10 @@ function run()
     Rembus.message_send(rb, msg)
     sleep(0.1)
 
-    Rembus.ack_timeout!(1e-9)
+    ack_timeout!(1e-9)
     msg = Rembus.PubSubMsg(rb, "topic", "data", Rembus.QOS2)
     pubsub(rb, msg)
-    Rembus.ack_timeout!(2)
+    ack_timeout!(2)
 end
 
 execute(run, "socket_send")

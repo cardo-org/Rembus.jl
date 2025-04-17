@@ -17,9 +17,9 @@ function run(url)
     cmp = Rembus.RbURL(url)
 
     # trigger a request timeout
-    Rembus.request_timeout!(0)
+    request_timeout!(0)
     @test_throws RembusTimeout Rembus.register(url, pin, tenant="A")
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
 
 
     # wait a moment, to be sure that the pubkey file is created by the above register

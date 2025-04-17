@@ -25,6 +25,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "broker"
+        @time @safetestset "anonymous_twin" begin
+            include("broker/test_anonymous_twin.jl")
+        end
         @time @safetestset "overwrite_connection" begin
             include("broker/test_overwrite_connection.jl")
         end
@@ -127,6 +130,9 @@ const GROUP = get(ENV, "GROUP", "all")
     if GROUP == "all" || GROUP == "security"
         @time @safetestset "challenge" begin
             include("security/test_challenge.jl")
+        end
+        @time @safetestset "await_attestation" begin
+            include("security/test_await_attestation.jl")
         end
         @time @safetestset "authenticated" begin
             include("security/test_authenticated.jl")

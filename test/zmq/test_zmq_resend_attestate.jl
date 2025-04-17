@@ -22,8 +22,8 @@ end
 
 @info "[zmq_resend_attestate] start"
 try
-    Rembus.zmq_ping_interval!(3)
-    Rembus.challenge_timeout!(2)
+    zmq_ping_interval!(3)
+    challenge_timeout!(2)
 
     init(pin)
     url = Rembus.RbURL(node_url)

@@ -77,7 +77,7 @@ try
 
     ENV["REMBUS_CACHE_SIZE"] = "2"
 
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
     rb = broker(ws=8010, name="saved_messages")
     @info "cache size: $(rb.router.settings.cache_size)"
     produce(pub_url)

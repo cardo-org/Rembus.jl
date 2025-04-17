@@ -33,10 +33,6 @@ Base.@kwdef struct RembusError <: RembusException
     reason::Union{String,Nothing} = nothing
 end
 
-struct AlreadyConnected <: RembusException
-    cid::String
-end
-
 """
 $(TYPEDEF)
 
@@ -232,12 +228,12 @@ function Base.show(io::IO, n::Node)
 end
 
 struct FutureResponse{T}
-    future::Distributed.Future
+    future::Channel
     sending_ts::Float64
     request::T
     timer::Timer
     FutureResponse(request, timer) = new{typeof(request)}(
-        Distributed.Future(),
+        Channel(1),
         time(),
         request,
         timer

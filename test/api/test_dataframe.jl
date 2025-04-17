@@ -4,7 +4,7 @@ using DataFrames
 myservice(df1, df2) = [df1, df2];
 
 function run()
-    Rembus.request_timeout!(30)
+    request_timeout!(30)
     server = component("dataframe_myserver")
     expose(server, myservice)
 

@@ -56,7 +56,7 @@ try
     pub_url = "ws://127.0.0.1:8010/pub"
     sub_url = "ws://127.0.0.1:8010/sub"
 
-    Rembus.request_timeout!(20)
+    request_timeout!(20)
 
     run(pub_url, sub_url)
 catch e

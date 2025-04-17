@@ -130,8 +130,8 @@ function run(request_url, subscriber_url, exposer_url)
 end
 
 function run()
-    Rembus.ws_ping_interval!(0)
-    Rembus.zmq_ping_interval!(0)
+    ws_ping_interval!(0)
+    zmq_ping_interval!(0)
     for exposer_url in ["zmq://:8002/request_impl", "request_impl"]
         for subscriber_url in ["zmq://:8002/request_sub", "request_sub"]
             for request_url in ["zmq://:8002/request_client", "request_client"]

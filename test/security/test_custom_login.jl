@@ -24,7 +24,7 @@ function custom_login(twin, cid, signature)
 end
 
 function run()
-    Rembus.request_timeout!(10)
+    request_timeout!(10)
     bro = broker(name=broker_name, ws=8000)
 
     bro.router.topic_function["login"] = custom_login
