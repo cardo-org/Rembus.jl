@@ -5,7 +5,7 @@ myservice(val) = val;
 function run()
     # Test requests timeout
     Rembus.error!()
-    request_timeout!(0.1)
+    request_timeout!(0)
     try
         connect("rpc_timeout_component")
     catch e

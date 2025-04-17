@@ -576,9 +576,6 @@ function do_connect(twin::Twin)
     if !isopen(twin.socket)
         router = last_downstream(twin.router)
         if router.settings.connection_mode === authenticated
-            #            if !hasname(twin)
-            #                error("anonymous components not allowed")
-            #            end
             transport_connect(twin)
             await_challenge(router, twin)
         else
