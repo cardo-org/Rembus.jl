@@ -69,7 +69,7 @@ function command(router::Router, req::HTTP.Request, cmd::Dict)
     if response.status == 0
         sts = 200
     end
-    return HTTP.Response(sts, [])
+    return HTTP.Response(sts, ["Access-Control-Allow-Origin" => "*"])
 end
 
 function http_subscribe(router::Router, req::HTTP.Request)
@@ -106,11 +106,20 @@ function http_publish(router::Router, req::HTTP.Request)
             pubsub_msg(router, msg)
             Visor.shutdown(twin.process)
             cleanup(twin, router)
-            return HTTP.Response(200, [])
+            return HTTP.Response(200, ["Access-Control-Allow-Origin" => "*"])
         end
     catch e
         @debug "http::publish: $e"
-        return HTTP.Response(403, [])
+        return HTTP.Response(403, ["Access-Control-Allow-Origin" => "*"])
+    end
+end
+
+function http_response_data(response)
+    data = response_data(response)
+    if isa(data, DataFrame)
+        return arraytable(data)
+    else
+        return JSON3.write(data)
     end
 end
 
@@ -131,7 +140,7 @@ function http_rpc(router::Router, req::HTTP.Request)
             twin.socket = Float()
             fut_response = fpc(twin, topic, content)
             response = fetch(fut_response.future)
-            retval = response_data(response)
+            retval = http_response_data(response)
             if response.status == 0
                 sts = 200
             else
@@ -142,13 +151,16 @@ function http_rpc(router::Router, req::HTTP.Request)
             cleanup(twin, router)
             return HTTP.Response(
                 sts,
-                ["Content_type" => "application/json"],
-                JSON3.write(retval)
+                [
+                    "Content_type" => "application/json",
+                    "Access-Control-Allow-Origin" => "*"
+                ],
+                retval
             )
         end
     catch e
         @error "http::rpc: $e"
-        return HTTP.Response(404, [])
+        return HTTP.Response(404, ["Access-Control-Allow-Origin" => "*"])
     end
 end
 
