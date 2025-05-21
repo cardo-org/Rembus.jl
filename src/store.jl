@@ -41,15 +41,16 @@ Return the dataframe that maps tenants with components.
 =#
 function load_tenant_component(router)
     fn = joinpath(broker_dir(router), TENANT_COMPONENT)
+    df = DataFrame(tenant=String[], component=String[])
     if isfile(fn)
         json_data = open(fn, "r") do f
             JSON3.read(f)
         end
-
-        return DataFrame(json_data)
-    else
-        return DataFrame(tenant=String[], component=String[])
+        if !isempty(json_data)
+            df = DataFrame(json_data)
+        end
     end
+    return df
 end
 
 #=

@@ -4,9 +4,6 @@
 CurrentModule = Rembus
 ```
 
-> A Component is a Broker or a Broker is a Component? This is the question.
-> -- `The Rembus rebus`
-
 Rembus is a Julia package designed for building distributed applications using
 both Publish/Subscribe (Pub/Sub) and Remote Procedure Call (RPC) communication
 patterns. 

@@ -1,4 +1,4 @@
-const VERSION = "0.6.0"
+const VERSION = "1.0.0"
 
 const DATAFRAME_TAG = 80
 

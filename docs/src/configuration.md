@@ -19,7 +19,7 @@ A component is affected by the following environment variables.
 
 When a component is a broker the setup is affected also by the `REMBUS_KEYSTORE`
 variable that define the directory where are stored the private key and the server
-certificate needed for wss and tls secure connections. 
+certificate needed for wss and tls secure connections.
 
 | Variable |Default| Descr |
 |----------|-------|-------|
@@ -76,21 +76,21 @@ variables values.
 The following properties are supported (in parenthesis the corresponding environment
 variable):
 
-- `cache_size (REMBUS_CACHE_SIZE)`: max numbers of pub/sub messages cached in memory; 
-- `connection_mode`: `"authenticated"` or `"anonymous"` for components without name or 
+- `cache_size (REMBUS_CACHE_SIZE)`: max numbers of pub/sub messages cached in memory;
+- `connection_mode`: `"authenticated"` or `"anonymous"` for components without name or
    authentication credentials;
 - `ack_timeout (REMBUS_ACK_TIMEOUT)`: timeout in seconds for pub/sub ack messages;
 - `challenge_timeout (REMBUS_CHALLENGE_TIMEOUT)`: time interval after which the connection
    is closed if a challenge response is not received. This feature holds only if
    `connection_mode` is `authenticated`;
-- `request_timeout (REMBUS_TIMEOUT)`: maximum time in seconds for waiting a rpc response; 
+- `request_timeout (REMBUS_TIMEOUT)`: maximum time in seconds for waiting a rpc response;
 - `overwrite_connection`: If `true` a connecting component with the same name of an
    already connected component connect successfully and the already connected component is
-   disconnected from the broker. 
+   disconnected from the broker.
 - `reconnect_period (REMBUS_RECONNECT_PERIOD)`: reconnection retry period when connection is
    down;
 - `stacktrace`: When an exception occurs the error stack trace is logged if `stacktrace` is
-   `true`. 
+   `true`.
 - `zmq_ping_interval (REMBUS_ZMQ_PING_INTERVAL)`: ZMQ ping interval in seconds;
 - `ws_ping_interval (REMBUS_WS_PING_INTERVAL)`: WebSocket ping interval in seconds;
 

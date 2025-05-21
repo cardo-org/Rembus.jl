@@ -212,6 +212,8 @@ Declare interest for messages published on the `topic` logical channel.
 If the `topic` is not specified the function `fn` is subscribed to the topic
 of the same name of the function.
 
+The subscribed function will be called each time a component produce a message with the[`@publish`](./macro_api.md#publish) macro or the [`publish`](#publish) function.
+
 To enable the reception of published messages, [`reactive`](@ref) must be
 called.
 
@@ -227,20 +229,26 @@ subscribe(rb, mytopic)
 reactive(rb) 
 ```
 
-By default `subscribe` will consume messages published after the component connect
-to the broker, messages sent previously are lost.
+The `from` (default=`Rembus.Now`) argument defines the starting point in time from which
+messages published while the component was offline will be sent upon reconnection.
+Possible `from` values:
+  - **`Rembus.Now`**: Equivalent to `0.0`, ignores old messages, and starts receiving only
+    new messages from now.
+  - **`Rembus.LastReceived`**: Receives all messages published since the last disconnection.
+  - **`n::Float64`**: Receives messages published within the last `n` seconds.
+  - **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
 
-For receiving messages when the component was offline it is mandatory to set a component name and to declare interTYPEDSIGNATURESest in old messages with the `from` argument set to `LastReceived`:
+### Example
 
 ```julia
 rb = connect("myname")
 
-subscribe(rb, mytopic, LastReceived)
+subscribe(rb, mytopic, Rembus.LastReceived)
 
 reactive(rb) 
 ```
 
-The subscribed function will be called each time a component produce a message with the[`@publish`](./macro_api.md#publish) macro or the [`publish`](#publish) function.
+Receive all messages published since the last component disconnection.
 
 ## unsubscribe
 
@@ -256,25 +264,23 @@ Stop the function to receive messages produced with [`publish`](#publish) or
 
 ```julia
 publish(rb::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
-
-# for more details
-help?> subscribe
 ```
 
-Publish a message on the `topic` channel.
+Publish (`Vararg`) data values to a specified `topic`.
 
-```julia
-rb = connect()
+Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
 
-publish(rb, "metric", Dict("name"=>"trento/castello", "var"=>"T", "value"=>21.0))
+The `data` values can be of any type. However, if the components are implemented in
+different languages, the values must be either `DataFrames` or primitive types that are
+CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for
+interoperability.
 
-close(rb)
-```
+The keywork argument `qos` defines the quality of service (QoS) for message delivery.
+Possible values:
 
-`metric` is the message topic and the `Dict` value is the message content.
-
-If the subscribed method expects many arguments send the values as a `Vararg`
-list:
+- `Rembus.QOS0`: (default): At most one message is delivered to the subscriber (message may be lost).
+- `Rembus.QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
+- `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
 
 ```julia
 # subscriber side

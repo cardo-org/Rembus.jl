@@ -106,7 +106,7 @@ function unregister(twin::Twin)
     cid = twin.uid.id
     @debug "unregistering $cid"
 
-    msg = Unregister(twin, cid)
+    msg = Unregister(twin)
     futresponse = send_msg(twin, msg)
     response = fetch(futresponse.future)
     if isa(response, RembusTimeout)
@@ -195,7 +195,8 @@ end
 Unregister a component.
 =#
 function unregister_node(router, msg)
-    @debug "[$router] unregistering $(msg.cid), isauth: $(msg.twin.isauth)"
+    nodeid = rid(msg.twin)
+    @debug "[$router] unregistering $nodeid, isauth: $(msg.twin.isauth)"
     twin = msg.twin
     sts = STS_SUCCESS
     reason = nothing
@@ -204,8 +205,8 @@ function unregister_node(router, msg)
         sts = STS_GENERIC_ERROR
         reason = "invalid operation"
     else
-        remove_pubkey(router, msg.cid)
-        deleteat!(router.component_owner, router.component_owner.component .== msg.cid)
+        remove_pubkey(router, nodeid)
+        deleteat!(router.component_owner, router.component_owner.component .== nodeid)
         save_tenant_component(router, router.component_owner)
     end
     response = ResMsg(twin, msg.id, sts, reason)

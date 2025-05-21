@@ -138,8 +138,7 @@ function broker_parse(twin::Twin, pkt)
         return Register(twin, bytes2id(id), cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
-        cid = decode_internal(io)
-        return Unregister(twin, bytes2id(id), cid)
+        return Unregister(twin, bytes2id(id))
     elseif ptype == TYPE_ATTESTATION
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
@@ -366,8 +365,7 @@ function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
         return Register(twin, mid, cid, tenant, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
-        cid = pkt.header[3]
-        return Unregister(twin, mid, cid)
+        return Unregister(twin, mid)
     elseif ptype == TYPE_ATTESTATION
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
@@ -804,7 +802,7 @@ function transport_send(z::ZDealer, msg::Register)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Unregister)
-    pkt = [TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]
+    pkt = [TYPE_UNREGISTER, id2bytes(msg.id)]
     transport_write(socket, pkt)
     return true
 end
@@ -813,7 +811,7 @@ function transport_send(z::ZDealer, msg::Unregister)
     socket = z.sock
     lock(zmqsocketlock) do
         send(socket, Message(), more=true)
-        send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id), msg.cid]), more=true)
+        send(socket, encode([TYPE_UNREGISTER, id2bytes(msg.id)]), more=true)
         send(socket, DATA_EMPTY, more=true)
         send(socket, MESSAGE_END, more=false)
     end
@@ -1033,10 +1031,9 @@ function encode_partial(io, data::Vector)
         encode(io, data[5]) # pubkey
         encode(io, data[6]) # type
     elseif type == TYPE_UNREGISTER
-        write(io, 0x83)
+        write(io, 0x82)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
-        encode(io, data[3]) # cid
     elseif type == TYPE_ATTESTATION
         write(io, 0x85)
         encode(io, data[1]) # type

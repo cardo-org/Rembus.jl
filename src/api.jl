@@ -479,11 +479,13 @@ Publish (`Vararg`) data values to a specified `topic`.
 
 Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
 
-The `data` values can be of any type. However, if the components are implemented in different languages,
-the values must be either `DataFrames` or primitive types that are CBOR-encodable
-(see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for interoperability.
+The `data` values can be of any type. However, if the components are implemented in
+different languages, the values must be either `DataFrames` or primitive types that are
+CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for
+interoperability.
 
-The keywork argument `qos` defines the quality of service (QoS) for message delivery. Possible values:
+The keywork argument `qos` defines the quality of service (QoS) for message delivery.
+Possible values:
 
 - `Rembus.QOS0`: (default): At most one message is delivered to the subscriber (message may be lost).
 - `Rembus.QOS1`: At least one message is delivered to the subscriber (message may be duplicated).

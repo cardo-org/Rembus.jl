@@ -165,13 +165,12 @@ Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)|$(m.tenant)")
 
 struct Unregister <: RembusMsg
     id::UInt128
-    cid::String # client name
     twin::Twin
-    Unregister(twin::Twin, cid::String) = new(id(), cid, twin)
-    Unregister(twin::Twin, msgid::UInt128, cid::String) = new(msgid, cid, twin)
+    Unregister(twin::Twin) = new(id(), twin)
+    Unregister(twin::Twin, msgid::UInt128) = new(msgid, twin)
 end
 
-Base.show(io::IO, m::Unregister) = show(io, "UNREG|$(m.id)|$(m.cid)")
+Base.show(io::IO, m::Unregister) = show(io, "UNREG|$(m.id)")
 
 struct Attestation <: RembusMsg
     id::UInt128

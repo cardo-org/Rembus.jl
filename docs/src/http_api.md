@@ -11,6 +11,13 @@ bin/broker --http port
 
 ## APIs list
 
+The API endpoints may be grouped in two categories:
+
+- No Auth and Basic Auth APIs
+- Basic Auth APIs
+
+The requests that modify the broker configuration require a Basic-Auth header with a base64 encoded string `admin:password` associated with a component with admin privilege.
+
 ### No Auth and Basic Auth APIs
 
 - GET   `http[s]://broker_host:port/{method_name}`
@@ -27,8 +34,6 @@ bin/broker --http port
 - POST  `https://broker_host:port/public_topic/{topic}`
 - POST  `https://broker_host:port/authorize/{cid}/{topic}`
 - POST  `https://broker_host:port/unauthorize/{cid}/{topic}`
-
-Basic-Auth is required to invoke a REST endpoint that requires client authentication:
 
 Since Basic-Auth send the password unprotected it is strongly advised to use an encrypted https
 connection.

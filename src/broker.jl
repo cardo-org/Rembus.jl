@@ -459,7 +459,7 @@ function router_task(self, router::Router, ready, implementor_rule)
                         close_twin(router.id_twin[twin_id])
                         auth_identity(router, msg)
                     else
-                        @warn "[$(path(twin))] a node with id [$twin_id] is already connected"
+                        @warn "[$(path(twin))] node with id [$twin_id] is already connected"
                         response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "already connected")
                         transport_send(twin, response)
                     end
