@@ -13,11 +13,11 @@ function init(pin)
     end
 
     @info "creating tenants in $broker_dir"
-    df = DataFrame(pin=String[pin])
+    tenant_settings = Dict("." => pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, arraytable(df))
+    Rembus.save_tenants(broker_dir, tenant_settings)
 end
 
 @info "[zmq_resend_attestate] start"

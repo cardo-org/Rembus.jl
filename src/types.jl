@@ -142,6 +142,7 @@ end
 
 mutable struct RbURL
     id::String
+    tenant::String
     hasname::Bool
     protocol::Symbol
     host::String
@@ -152,21 +153,22 @@ mutable struct RbURL
         protocol=:ws,
         host="127.0.0.1",
         port=8000,
-        hasname=true
+        hasname=true,
+        props=Dict()
     )
         if protocol === :repl
-            return new("__repl__", false, :repl, "", 0, Dict())
+            return new("__repl__", ".", false, :repl, "", 0, props)
         else
             if isempty(name)
                 name = string(uuid4())
                 hasname = false
             end
-            return new(name, hasname, protocol, host, port, Dict())
+            return new(name, domain(name), hasname, protocol, host, port, props)
         end
     end
     function RbURL(url::String)
-        (cid, hasname, protocol, host, port, props) = spliturl(url)
-        new(cid, hasname, protocol, host, port, props)
+        (cid, tenant, hasname, protocol, host, port, props) = spliturl(url)
+        new(cid, tenant, hasname, protocol, host, port, props)
     end
 end
 
@@ -203,14 +205,18 @@ If port is equal to zero the node is not eligible to become a broker.
 =#
 struct Node
     cid::String # component id
+    tenant::String
     protocol::Symbol # :ws, :wss, :tcp, :tls, :zmq
     host::String  # hostname or ip address
     port::UInt16  # listening port
     status::NodeStatus
-    Node(cid, proto, host, port, sts) = new(cid, proto, host, port, sts)
+    Node(cid, proto, host, port, sts) = begin
+        tenant = domain(cid)
+        new(cid, tenant, proto, host, port, sts)
+    end
     function Node(url)
-        (cid, _, protocol, host, port, _) = spliturl(url)
-        new(cid, protocol, host, port, unknown)
+        (cid, tenant, _, protocol, host, port, _) = spliturl(url)
+        new(cid, tenant, protocol, host, port, unknown)
     end
 end
 
@@ -480,8 +486,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     zmqsocket::ZMQ.Socket
     zmqcontext::ZMQ.Context
     process::Visor.Process
-    owners::DataFrame
-    component_owner::DataFrame
+    owners::Dict{String,String}
     Router{T}(name, plugin=nothing, context=missing) where {T<:AbstractTwin} = new{T}(
         nothing,
         nothing,
@@ -495,7 +500,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         msg_dataframe(),
         0,
         [],
-        NaN, # start_ts
+        time(), # start_ts
         Set(),
         Dict(),
         Dict(),
@@ -597,6 +602,8 @@ hasname(twin::Twin) = hasname(twin.uid)
 iszmq(twin::Twin) = isa(twin.socket, ZDealer)
 
 failover_queue(twin::Twin) = twin.failover_from > 0.0
+
+domain(twin::Twin) = twin.uid.tenant
 
 """
 $(TYPEDSIGNATURES)

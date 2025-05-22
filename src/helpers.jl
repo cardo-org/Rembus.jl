@@ -3,8 +3,6 @@
 
 always_true(uid) = true
 
-isenabled(router, tenant::Nothing) = true
-
 # COV_EXCL_STOP
 
 function dumperror(twin, e)
@@ -51,6 +49,16 @@ debug!() = init_log("debug")
 info!() = init_log("info")
 warn!() = init_log("warn")
 error!() = init_log("error")
+
+function domain(cid::AbstractString)
+    tnt = "."
+    dot_index = findfirst('.', cid)
+    if dot_index !== nothing
+        tnt = cid[dot_index+1:end]
+    end
+
+    return tnt
+end
 
 #=
 Get the message data payload.
@@ -112,13 +120,14 @@ function spliturl(url::String)
     else
         error("wrong url $url: unknown protocol $proto")
     end
+
     if isempty(name)
         name = string(uuid4())
         hasname = false
     else
         hasname = true
     end
-    return (name, hasname, protocol, host, port, props)
+    return (name, domain(name), hasname, protocol, host, port, props)
 end
 
 function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})

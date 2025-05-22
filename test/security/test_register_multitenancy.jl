@@ -6,11 +6,11 @@ broker_name = "register_multitenancy"
 
 function init(pin)
     broker_dir = Rembus.broker_dir(broker_name)
-    df = DataFrame(pin=String[pin, pin], tenant=String["A", "B"], enabled=Bool[true, true])
+    tenant_settings = Dict("com" => pin, "org" => pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, arraytable(df))
+    Rembus.save_tenants(broker_dir, tenant_settings)
 end
 
 function run(url)
@@ -18,22 +18,21 @@ function run(url)
 
     # trigger a request timeout
     request_timeout!(0)
-    @test_throws RembusTimeout Rembus.register(url, pin, tenant="A")
+    @test_throws RembusTimeout Rembus.register(url, pin)
     request_timeout!(20)
-
 
     # wait a moment, to be sure that the pubkey file is created by the above register
     sleep(0.5)
     remove_keys(broker_name, cmp.id)
 
-    Rembus.register(url, pin, tenant="A")
+    Rembus.register(url, pin)
 
     # private key was created
     @info "[register_multitenancy#1]"
     @test isfile(Rembus.pkfile(cmp.id))
 
     try
-        Rembus.register(url, pin, tenant="A")
+        Rembus.register(url, pin)
     catch e
         @info "[register_multitenancy] expected error: $e"
     end
@@ -53,20 +52,13 @@ function run(url)
     mv(pkfile, "$pkfile.staged", force=true)
     try
         # register again
-        Rembus.register(url, pin, tenant="A")
+        Rembus.register(url, pin)
         @test false
     catch e
         @info "[register_multitenancy#3] expected error: $e"
         @test true
     end
     mv("$pkfile.staged", pkfile, force=true)
-
-    # check configuration
-    # component_owner file contains the component component
-    df = Rembus.load_token_app(broker_name)
-    @info "[register_multitenancy#4,5] component_owner: $df"
-    @test df[df.component.==cmp.id, :component][1] === cmp.id
-    @test df[df.component.==cmp.id, :tenant][1] === "A"
 
     # public key was provisioned
     fname = Rembus.pubkey_file(broker_name, cmp.id)
@@ -91,11 +83,6 @@ function decommission(url)
     try
         Rembus.unregister(client)
 
-        df = Rembus.load_token_app(broker_name)
-        # the component was removed from component_owner file
-        @info "[register_multitenancy#8,9,10]"
-        @test isempty(df[df.component.==cid, :])
-
         # the public key was removed
         @test_throws ErrorException Rembus.pubkey_file(broker_name, cid)
 
@@ -118,10 +105,9 @@ function decommission(url)
     finally
         close(client)
     end
-
 end
 
-cid = "regcomp"
+cid = "regcomp.org"
 pin = "11223344"
 
 setup() = init(pin)

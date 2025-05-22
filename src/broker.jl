@@ -225,12 +225,12 @@ function init(router::Router)
     router.topic_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
 end
 
-function first_up(::Router, topic, implementors)
+function first_up(::Router, tenant, topic, implementors)
     target = nothing
     @debug "[$topic] first_up routing policy"
     for tw in implementors
         @debug "[$topic] candidate target: $tw"
-        if isopen(tw.socket)
+        if isopen(tw.socket) && (domain(tw) == tenant)
             target = tw
             break
         end
@@ -239,7 +239,7 @@ function first_up(::Router, topic, implementors)
     return target
 end
 
-function round_robin(router::Router, topic, implementors)
+function round_robin(router::Router, tenant, topic, implementors)
     target = nothing
     if !isempty(implementors)
         len = length(implementors)
@@ -249,12 +249,12 @@ function round_robin(router::Router, topic, implementors)
         candidate_index = 1
         for (idx, tw) in enumerate(implementors)
             if idx < current_index
-                if isnothing(candidate) && isopen(tw)
+                if isnothing(candidate) && isopen(tw) && (domain(tw) == tenant)
                     candidate = tw
                     candidate_index = idx
                 end
             else
-                if isopen(tw)
+                if isopen(tw) && (domain(tw) == tenant)
                     target = tw
                     router.last_invoked[topic] = idx >= len ? 1 : idx + 1
                     break
@@ -274,8 +274,8 @@ Base.min(t::Twin) = t
 
 Base.isless(t1::Twin, t2::Twin) = length(t1.socket.out) < length(t2.socket.out)
 
-function less_busy(router, topic, implementors)
-    up_and_running = [impl for impl in implementors if isopen(impl)]
+function less_busy(router, tenant, topic, implementors)
+    up_and_running = [t for t in implementors if isopen(t) && domain(t) == tenant]
     return isempty(up_and_running) ? nothing : min(up_and_running...)
 end
 
@@ -289,6 +289,7 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     # The interest * (subscribe to all topics) is enabled
     # only for pubsub messages and not for rpc methods.
     topic = msg.topic
+    src_twin = msg.twin
     twins = get(router.topic_interests, "*", Set{Twin}())
     # Broadcast to twins that are admins and to twins that are authorized to
     # subscribe to topic.
@@ -309,7 +310,7 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
     for tw in authtwins
         # Do not publish back to the receiver channel and to unreactive components.
-        if tw !== msg.twin && tw.reactive
+        if tw !== src_twin && tw.reactive && domain(tw) == domain(src_twin)
             @debug "[$router] broadcasting $msg to $tw"
             put!(tw.process.inbox, msg)
         end
@@ -319,14 +320,15 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
 end
 
 function broadcast_msg(router::Router, msg::ResMsg)
+    src_twin = msg.twin
     authtwins = Set{Twin}()
     if isdefined(msg, :reqdata)
         topic = msg.reqdata.topic
-        msg = PubSubMsg(msg.twin, topic, msg.reqdata.data)
+        msg = PubSubMsg(src_twin, topic, msg.reqdata.data)
         union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
         for tw in authtwins
             # Do not publish back to the receiver channel and to unreactive components.
-            if tw !== msg.twin && tw.reactive
+            if tw !== src_twin && tw.reactive && domain(tw) == domain(src_twin)
                 @debug "[$router] broadcasting $msg to $tw"
                 put!(tw.process.inbox, msg)
             end
@@ -341,15 +343,15 @@ end
 
 Return an online implementor ready to execute the method associated to the topic.
 =#
-function select_twin(router::Router, topic, implementors)
+function select_twin(router::Router, tenant::AbstractString, topic, implementors)
     target = nothing
     @debug "[$topic] broker policy: $(router.policy)"
     if router.policy === :first_up
-        target = first_up(router, topic, implementors)
+        target = first_up(router, tenant, topic, implementors)
     elseif router.policy === :round_robin
-        target = round_robin(router, topic, implementors)
+        target = round_robin(router, tenant, topic, implementors)
     elseif router.policy === :less_busy
-        target = less_busy(router, topic, implementors)
+        target = less_busy(router, tenant, topic, implementors)
     end
 
     return target
@@ -422,12 +424,9 @@ end
 
 Rembus broker main task.
 =#
-function router_task(self, router::Router, ready, implementor_rule)
-    @debug "[broker] starting"
-
+function router_task(self, router::Router, implementor_rule)
     try
         init(router)
-        put!(ready, true)
         for msg in self.inbox
             @debug "[$router:broker] recv: $msg"
             !isshutdown(msg) || break
@@ -525,8 +524,8 @@ function router_task(self, router::Router, ready, implementor_rule)
     end
 end
 
-function broker_task(self, router::Router, ready)
-    router_task(self, router, ready, always_true)
+function broker_task(self, router::Router)
+    router_task(self, router, always_true)
 end
 
 #=
@@ -536,16 +535,17 @@ Server main task.
 
 A server does nor route messages between connected nodes.
 =#
-function server_task(self, router::Router, ready)
-    router_task(self, router, ready, isrepl)
+function server_task(self, router::Router)
+    router_task(self, router, isrepl)
 end
 
 # Find an implementor.
 function find_implementor(router::Router, msg)
     topic = msg.topic
+    twin = msg.twin
     if haskey(router.topic_impls, topic)
         implementors = router.topic_impls[topic]
-        target = select_twin(router, topic, implementors)
+        target = select_twin(router, domain(twin), topic, implementors)
         @debug "[broker] exposer for $topic: [$target]"
         if target === nothing
             resmsg = ResMsg(
@@ -754,8 +754,7 @@ function get_router(;
             router.mode = Rembus.authenticated
         end
         set_policy(router, policy)
-        ready = Channel()
-        bp = process("broker", tsk, args=(router, ready))
+        bp = process("broker", tsk, args=(router,))
         router.process = bp
 
         start_broker(
@@ -764,7 +763,6 @@ function get_router(;
             name=name,
             ws=ws, tcp=tcp, zmq=zmq, http=http, prometheus=prometheus,
         )
-        take!(ready)
     else
         router = broker_process.args[1]
     end

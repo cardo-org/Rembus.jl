@@ -58,7 +58,6 @@ and secret materials.
 ├── router.json
 ├── settings.json
 ├── tenants.json
-├── tenant_component.json
 ├── topic_auth.json
 ├── twins
 │   ├── bar.json
@@ -141,8 +140,8 @@ See [`private_topic`](@ref), [`public_topic`](@ref), [`authorize`](@ref),
 
 ### Component configuration
 
-The `twins` directory contains a configuration file for each component. The name
-of the file is equals to the component name.
+The `twins` directory contains a configuration file for each component. The name of the file
+corresponds to the component name.
 
 the content of the file is a JSON object with the following fields:
 
@@ -179,58 +178,38 @@ components `myconsumer` and `myproducer` are allowed to bind to it.
 }
 ```
 
-### Multi tenancy
+### Multi-Tenancy
 
-The multi-tenancy feature allows to register components with different
-identifiers (names) and to assign them to different tenants. Each tenant
-has its own set of components and can manage them independently.
+The multi-tenancy feature enables the logical isolation of components by assigning them to
+specific tenants.
 
-`tenants.json` file example:
+Communication is restricted: only components belonging to the same tenant
+can interact with each other.
+
+A component's tenant is determined by the domain part of its name. For instance, the
+component `foo.org` belongs to the `org` tenant. Components without a domain
+(e.g., `my_component`) are automatically assigned to the default tenant, represented by
+a single dot (`.`).
+
+To register components, each tenant must possess a unique secret PIN. This PIN is an
+8-character hexadecimal string, configured within the `tenants.json` file.
+
+`tenants.json` File Example (Multi-Tenant Configuration):
 
 ```json
-[
-    {
-        "tenant": "A",
-        "pin": "482dc7eb",
-        "enabled": true
-    },
-    {
-        "tenant": "B",
-        "pin": "58e26283",
-    },
-
-]
+{
+  "org": "deadbeef",
+  "com": "482dc7eb"
+}
 ```
 
-* `tenant` is the tenant identifier;
-
-* `pin` is a secret token used for authentication. Value is 8
-  digits composed of numbers and the characters `[a-f]`;
-
-* `enabled` consent to disable the tenant and this does not allow to register
-  new components. `enabled` is optional and if not present it defaults to `true`.
-
-If the Rembus setup is single tenant then the `tenants.json` file must contain
-only the `pin` value to be used by [`register`](@ref "Component registration").
+For single-tenant Rembus setups, the `tenants.json` file should contain only one PIN value,
+designated for the default tenant. This PIN will be used for all component registrations.
 
 ```json
-[{"pin": "deadbeef"}]
-```
-
-### Components ownership
-
-`tenant_component.json` contains the mapping between the registered component and
-the tenant to which it belong.
-
-`tenant` is the tenant identifier and `component` is the component identifier.
-
-For example if the tenant `A` registered the component `foo` then
-`tenant_component.json` will be:
-
-```json
-[
-    {"tenant": "A","component": "foo"}    
-]
+{
+  ".": "deadbeef"
+}
 ```
 
 ### Published messages database

@@ -6,42 +6,32 @@ using DataFrames
 
 broker_name = "register_multiple_users"
 
-function multiple_users(tenant, pin)
+function multiple_users(pin)
     broker_dir = Rembus.broker_dir(broker_name)
-    df = DataFrame(
-        pin=String[pin, pin],
-        tenant=String[tenant, tenant],
-        name=["Test 1", "Test 2"],
-        enabled=Bool[true, false]
+    tenants_settings = Dict(
+        "t1" => pin,
+        "t2" => pin
     )
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, arraytable(df))
+    Rembus.save_tenants(broker_dir, tenants_settings)
 end
 
-function run(url)
-    nouid = "unkown_foo"
+function run(cid)
+    tenant = Rembus.domain(cid)
     try
-        Rembus.register(url, pin, tenant=nouid)
-    catch e
-        @info "[register_multiple_users] expected error: $e"
-        @test e.reason === "tenant [$nouid] not enabled"
-    end
-
-    try
-        Rembus.register(url, pin, tenant=tenant)
+        Rembus.register(cid, pin)
     catch e
         @info "[register_multiple_users] expected error: $e"
         @test e.reason === "tenant [$tenant] not enabled"
     end
 end
 
-tenant = "A"
-cid = "regcomp"
+cid = "regcomp.t3"
 pin = "11223344"
 
-setup() = multiple_users(tenant, pin)
+setup() = multiple_users(pin)
 try
     execute(() -> run(cid), "register_multiple_users", setup=setup)
 catch e

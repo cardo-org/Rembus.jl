@@ -6,19 +6,9 @@ Return the owners dataframe
 function load_tenants(router)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
     if isfile(fn)
-        json_data = open(fn, "r") do f
-            JSON3.read(f)
-        end
-
-        df = DataFrame(json_data)
-        # if not found then set default tenant
-        if columnindex(df, :tenant) == 0
-            @debug "setting default tenant: [$(router.process.supervisor.id)]"
-            df[!, :tenant] .= router.process.supervisor.id
-        end
-        return df
+        return JSON3.read(fn, Dict{String,String})
     else
-        return DataFrame(pin=String[], tenant=String[], enabled=Bool[])
+        return Dict{String,String}()
     end
 end
 
@@ -27,61 +17,13 @@ end
 
 Save the tenants table.
 =#
-function save_tenants(router, tenants::AbstractString)
+function save_tenants(router, tenants::Dict)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
     open(fn, "w") do f
-        write(f, tenants)
+        JSON3.write(f, tenants)
     end
 end
 
-#=
-    load_tenant_component(router)
-
-Return the dataframe that maps tenants with components.
-=#
-function load_tenant_component(router)
-    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    df = DataFrame(tenant=String[], component=String[])
-    if isfile(fn)
-        json_data = open(fn, "r") do f
-            JSON3.read(f)
-        end
-        if !isempty(json_data)
-            df = DataFrame(json_data)
-        end
-    end
-    return df
-end
-
-#=
-    save_tenant_component(router, df)
-
-Save the tenant_component table.
-=#
-function save_tenant_component(router, df)
-    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    open(fn, "w") do f
-        write(f, arraytable(df))
-    end
-end
-
-#=
-    load_token_app(router)
-
-Return the component_owner dataframe
-=#
-function load_token_app(router)
-    fn = joinpath(broker_dir(router), TENANT_COMPONENT)
-    if isfile(fn)
-        json_data = open(fn, "r") do f
-            JSON3.read(f)
-        end
-        if !isempty(json_data)
-            return DataFrame(json_data)
-        end
-    end
-    return DataFrame(tenant=String[], component=String[])
-end
 
 broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
 broker_dir(name::AbstractString) = joinpath(rembus_dir(), name)
@@ -343,9 +285,6 @@ function load_configuration(router)
         load_topic_auth_table(router)
         load_admins(router)
         router.owners = load_tenants(router)
-        router.component_owner = load_tenant_component(router)
         load_router_config(router)
     end
-
-    router.start_ts = time()
 end

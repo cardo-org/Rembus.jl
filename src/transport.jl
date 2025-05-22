@@ -131,11 +131,10 @@ function broker_parse(twin::Twin, pkt)
     elseif ptype == TYPE_REGISTER
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        tenant = decode_internal(io)
         val = decode_internal(io)
         pubkey = isa(val, Tag) ? val.data : val
         type = decode_internal(io)
-        return Register(twin, bytes2id(id), cid, tenant, pubkey, type)
+        return Register(twin, bytes2id(id), cid, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
         return Unregister(twin, bytes2id(id))
@@ -359,10 +358,9 @@ function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
     elseif ptype == TYPE_REGISTER
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
-        tenant = pkt.header[4]
-        type = pkt.header[5]
+        type = pkt.header[4]
         pubkey::Vector{UInt8} = pkt.data
-        return Register(twin, mid, cid, tenant, pubkey, type)
+        return Register(twin, mid, cid, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
         return Unregister(twin, mid)
@@ -781,7 +779,7 @@ function transport_send(z::ZDealer, msg::Attestation)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Register)
-    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.pubkey, msg.type]
+    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.pubkey, msg.type]
     transport_write(socket, pkt)
     return true
 end
@@ -792,7 +790,7 @@ function transport_send(z::ZDealer, msg::Register)
         send(socket, Message(), more=true)
         send(
             socket,
-            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.tenant, msg.type]),
+            encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.type]),
             more=true
         )
         send(socket, msg.pubkey, more=true)
@@ -1023,13 +1021,12 @@ function encode_partial(io, data::Vector)
         encode(io, data[3]) # status
         add_payload(io, data[4])
     elseif type == TYPE_REGISTER
-        write(io, 0x86)
+        write(io, 0x85)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # cid
-        encode(io, data[4]) # tenant
-        encode(io, data[5]) # pubkey
-        encode(io, data[6]) # type
+        encode(io, data[4]) # pubkey
+        encode(io, data[5]) # type
     elseif type == TYPE_UNREGISTER
         write(io, 0x82)
         encode(io, data[1]) # type

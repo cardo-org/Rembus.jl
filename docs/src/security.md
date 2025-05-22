@@ -76,16 +76,17 @@ More then one component may be assigned the `admin` role:
 
 ## Component registration
 
-Authenticated components may be provisioned with the [`Rembus.register`](@ref)
+Authenticated components can be provisioned with the [`Rembus.register`](@ref)
 method.
 
 ```julia
-register(component_name, pin; tenant=nothing, scheme=SIG_RSA)
+register(component_name, pin; scheme=SIG_RSA)
 ```
 
-* `component_name` is the name of the component;
-* `pin` is a secret PIN code;
-* `tenant` is the name of the tenant;
-* `scheme` may be equal to:
-  * `SIG_RSA` for RSA Encryption;
-  * `SIG_ECDSA` for Elliptic Curve Digital Signature Algorithm;
+* `component_name`: This is the name of the component. The domain part of the name defines
+   its tenant. For example, `foo.xyz` belongs to the `xyz` tenant, while `foo` (wothout a
+   domain) belongs to the default tenant (`.`).
+* `pin`: This is the tenant's secret PIN code.
+* `scheme`: This optional parameter specifies the signature scheme to use and can be:
+  * `SIG_RSA`: for RSA Encryption.
+  * `SIG_ECDSA`: for Elliptic Curve Digital Signature Algorithm.

@@ -9,11 +9,11 @@ function init(pin)
         mkpath(broker_dir)
     end
 
-    df = DataFrame(pin=String[pin])
+    tenant_settings = Dict("." => pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, arraytable(df))
+    Rembus.save_tenants(broker_dir, tenant_settings)
 end
 
 function run()
@@ -39,7 +39,8 @@ function reg(url)
     @test isfile(public_key)
 
     try
-        register(url, pin)
+        # Triggers an invalid token error
+        register("another_comp", "00000000")
         @test false
     catch e
         @info "expected error: $e"

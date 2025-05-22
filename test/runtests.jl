@@ -75,6 +75,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "publish" begin
             include("api/test_publish.jl")
         end
+        @time @safetestset "publish_tenants" begin
+            include("api/test_publish_tenants.jl")
+        end
+        @time @safetestset "rpc_tenants" begin
+            include("api/test_rpc_tenants.jl")
+        end
         @time @safetestset "expose" begin
             include("api/test_expose.jl")
         end

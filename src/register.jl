@@ -31,7 +31,6 @@ end
     register(
         cid::AbstractString,
         pin::AbstractString;
-        tenant=Union{Nothing, AbstractString} = nothing,
         scheme::UInt8
     )
 
@@ -46,7 +45,6 @@ The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
 function register(
     cid::AbstractString,
     pin::AbstractString;
-    tenant::Union{Nothing,AbstractString}=nothing,
     scheme::UInt8=SIG_RSA
 )
     cmp = RbURL(cid)
@@ -68,7 +66,7 @@ function register(
         value = parse(Int, pin, base=16)
         msgid = id() & 0xffffffffffffffffffffffff00000000 + value
 
-        msg = Register(twin, msgid, cmp.id, tenant, pubkey, scheme)
+        msg = Register(twin, msgid, cmp.id, pubkey, scheme)
         futresponse = send_msg(twin, msg)
         response = fetch(futresponse.future)
         if isa(response, Exception)
@@ -120,31 +118,18 @@ function unregister(twin::Twin)
 end
 
 function isenabled(router, tenant_id::AbstractString)
-    df = router.owners[(router.owners.tenant.==tenant_id), :]
-    if isempty(df)
-        @info "unknown tenant [$tenant_id]"
-        return false
-    else
-        if nrow(df) > 1
-            @info "multiple tenants found for [$tenant_id]"
-            return false
-        end
-        return (columnindex(df, :enabled) == 0) ||
-               ismissing(df[1, :enabled]) ||
-               (df[1, :enabled] === true)
-    end
+    return haskey(router.owners, tenant_id)
 end
 
 function get_token(router, tenant, id::UInt128)
     vals = UInt8[(id>>24)&0xff, (id>>16)&0xff, (id>>8)&0xff, id&0xff]
     token = bytes2hex(vals)
-    df = router.owners[(router.owners.pin.==token).&(router.owners.tenant.==tenant), :]
-    if isempty(df)
-        @info "tenant [$tenant]: invalid token"
-        return nothing
-    else
+    if haskey(router.owners, tenant) && router.owners[tenant] == token
         @debug "tenant [$tenant]: token is valid"
         return token
+    else
+        @info "tenant [$tenant]: invalid token"
+        return nothing
     end
 end
 
@@ -154,22 +139,17 @@ end
 Register a component.
 =#
 function register_node(router, msg)
-    @debug "registering pubkey of $(msg.cid), id: $(msg.id), tenant: $(msg.tenant)"
+    tenant = domain(msg.cid)
+    @debug "registering pubkey of $(msg.cid), id: $(msg.id), tenant: $tenant"
 
-    if !isenabled(router, msg.tenant)
+    if !isenabled(router, tenant)
         return ResMsg(
-            msg.twin, msg.id, STS_GENERIC_ERROR, "tenant [$(msg.tenant)] not enabled"
+            msg.twin, msg.id, STS_GENERIC_ERROR, "tenant [$tenant] not enabled"
         )
     end
 
     sts = STS_SUCCESS
     reason = nothing
-    if msg.tenant === nothing
-        tenant = router.process.supervisor.id
-    else
-        tenant = msg.tenant
-    end
-
     token = get_token(router, tenant, msg.id)
     if token === nothing
         sts = STS_GENERIC_ERROR
@@ -181,10 +161,6 @@ function register_node(router, msg)
         kdir = keys_dir(router)
         mkpath(kdir)
         save_pubkey(router, msg.cid, msg.pubkey, msg.type)
-        if !(msg.cid in router.component_owner.component)
-            push!(router.component_owner, [tenant, msg.cid])
-        end
-        save_tenant_component(router, router.component_owner)
     end
     return ResMsg(msg.twin, msg.id, sts, reason)
 end
@@ -206,8 +182,6 @@ function unregister_node(router, msg)
         reason = "invalid operation"
     else
         remove_pubkey(router, nodeid)
-        deleteat!(router.component_owner, router.component_owner.component .== nodeid)
-        save_tenant_component(router, router.component_owner)
     end
     response = ResMsg(twin, msg.id, sts, reason)
     put!(twin.process.inbox, response)

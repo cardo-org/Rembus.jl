@@ -61,7 +61,7 @@ See [Component](@ref) for URL format details.
 
 ### Broker
 
-```juliaTYPEDSIGNATURES
+```julia
 rb = component(ws=8000, tcp=8001)
 ```
 
