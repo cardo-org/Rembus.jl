@@ -6,10 +6,11 @@ broker_name = "register_multitenancy"
 
 function init(pin)
     broker_dir = Rembus.broker_dir(broker_name)
-    tenant_settings = Dict("com" => pin, "org" => pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
+
+    tenant_settings = Dict("com" => pin, "org" => pin)
     Rembus.save_tenants(broker_dir, tenant_settings)
 end
 

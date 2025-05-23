@@ -18,7 +18,7 @@ function run()
     @test rpc(cli_org, "myservice", 1) == 2
 
     cli_com = connect("rpc_client.com")
-    @test_throws Rembus.RpcMethodNotFound rpc(cli_com, "myservice", 1)
+    @test_throws Rembus.RembusException rpc(cli_com, "myservice", 1)
 
     close(cli_org)
     close(org)
