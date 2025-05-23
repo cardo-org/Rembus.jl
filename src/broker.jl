@@ -824,7 +824,8 @@ function start_broker(
                 serve_http,
                 args=(router, http, secure),
                 trace_exception=true,
-                restart=:transient
+                restart=:transient,
+                force_interrupt_after=2.0,
             )
         )
     end
