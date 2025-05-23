@@ -115,9 +115,9 @@ setup() = init(pin)
 try
     url = "zmq://:8002/$cid"
     execute(() -> run(url), "register_multitenancy", setup=setup)
-    execute(() -> decommission(url), "register_multitenancy", setup=setup)
+    execute(() -> decommission(url), "register_multitenancy", reset=false)
     url = cid
-    execute(() -> run(cid), "register_multitenancy", setup=setup)
+    execute(() -> run(cid), "register_multitenancy", reset=false)
 catch e
     @error "[register_multitenancy]: $e"
     @test false
