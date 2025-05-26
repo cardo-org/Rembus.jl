@@ -198,9 +198,6 @@ Setup the router.
 function boot(router::Router)
     if broker_isnamed(router)
         dir = broker_dir(router)
-        if !isdir(dir)
-            mkpath(dir)
-        end
 
         appdir = keys_dir(router)
         if !isdir(appdir)

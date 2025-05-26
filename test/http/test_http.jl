@@ -1,6 +1,12 @@
 include("../utils.jl")
 
 using Base64
+using DataFrames
+
+function mydataframe()
+    @info "[test_http] mydataframe()"
+    return DataFrame(a=1:3, b=["x", "y", "z"])
+end
 
 function mytopic()
     @info "[test_http] mytopic() (NO ARGS)"
@@ -18,6 +24,7 @@ end
 function run()
     rb = connect("http_myapp")
     expose(rb, myservice)
+    expose(rb, mydataframe)
     subscribe(rb, mytopic)
     reactive(rb)
 
@@ -39,6 +46,10 @@ function run()
     response = HTTP.get("http://localhost:9000/myservice", [], JSON3.write([x, y]))
     @info "[test_http] GET response=$(Rembus.body(response))"
     @test Rembus.body(response) == 3
+
+    response = HTTP.get("http://localhost:9000/mydataframe", [])
+    @info "[test_http] GET mydataframe response=$(Rembus.body(response))"
+    @test typeof(Rembus.body(response)) == Vector{Any}
 
     response = HTTP.get("http://localhost:9000/version")
     @info "[test_http] GET response=$(Rembus.body(response))"

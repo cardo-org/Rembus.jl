@@ -644,8 +644,7 @@ end
 function response_data(response)
     data = response.data
     if isa(data, IOBuffer)
-        # data is an IOBuffer if transport is websocket or tcp
-        return decode(data)
+        return eof(data) ? nothing : decode(data)
     else
         return data
     end

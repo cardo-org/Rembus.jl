@@ -41,10 +41,6 @@ end
 
 function pkfile(name; create_dir=false)
     cfgdir = joinpath(rembus_dir(), name)
-    if !isdir(cfgdir) && create_dir
-        mkpath(cfgdir)
-    end
-
     return joinpath(cfgdir, ".secret")
 end
 
@@ -427,11 +423,7 @@ function add_failovers(twin::Twin, failovers)
     try
         !do_connect(twin)
     catch e
-        if isa(e, HTTP.Exceptions.ConnectError)
-            @error "[$twin]: $(e.error.ex)"
-        else
-            @error "[$twin] connect: $e"
-        end
+        @error "[$twin]: $(isa(e, HTTP.Exceptions.ConnectError) ? e.error.ex : e)"
         down_handler(twin)
     finally
     end

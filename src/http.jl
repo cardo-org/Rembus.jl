@@ -115,7 +115,7 @@ function http_publish(router::Router, req::HTTP.Request)
 end
 
 function http_response_data(response)
-    data = response_data(response)
+    data = dataframe_if_tagvalue(response_data(response))
     if isa(data, DataFrame)
         return arraytable(data)
     else
