@@ -41,6 +41,10 @@ end
 
 function pkfile(name; create_dir=false)
     cfgdir = joinpath(rembus_dir(), name)
+    if !isdir(cfgdir) && create_dir
+        mkpath(cfgdir)
+    end
+
     return joinpath(cfgdir, ".secret")
 end
 
