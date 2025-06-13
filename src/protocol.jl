@@ -148,6 +148,7 @@ Base.show(io::IO, m::ResMsg) = show(io, "RES|$(m.id)|status:$(m.status)")
 struct Register <: RembusMsg
     id::UInt128
     cid::String # client name
+    pin::String
     pubkey::Vector{UInt8}
     type::UInt8
     twin::Twin
@@ -155,8 +156,9 @@ struct Register <: RembusMsg
         twin::Twin,
         msgid::UInt128,
         cid::AbstractString,
+        pin::AbstractString,
         pubkey::Vector{UInt8},
-        type::UInt8) = new(msgid, cid, pubkey, type, twin)
+        type::UInt8) = new(msgid, cid, pin, pubkey, type, twin)
 end
 
 Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)")

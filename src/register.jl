@@ -63,10 +63,7 @@ function register(
             pubkey = ecdsa_private_key(cmp.id)
         end
 
-        value = parse(Int, pin, base=16)
-        msgid = id() & 0xffffffffffffffffffffffff00000000 + value
-
-        msg = Register(twin, msgid, cmp.id, pubkey, scheme)
+        msg = Register(twin, id(), cmp.id, pin, pubkey, scheme)
         futresponse = send_msg(twin, msg)
         response = fetch(futresponse.future)
         if isa(response, Exception)
@@ -121,15 +118,13 @@ function isenabled(router, tenant_id::AbstractString)
     return haskey(router.owners, tenant_id)
 end
 
-function get_token(router, tenant, id::UInt128)
-    vals = UInt8[(id>>24)&0xff, (id>>16)&0xff, (id>>8)&0xff, id&0xff]
-    token = bytes2hex(vals)
+function check_token(router, tenant, token::AbstractString)
     if haskey(router.owners, tenant) && router.owners[tenant] == token
         @debug "tenant [$tenant]: token is valid"
-        return token
+        return true
     else
         @info "tenant [$tenant]: invalid token"
-        return nothing
+        return false
     end
 end
 
@@ -150,8 +145,8 @@ function register_node(router, msg)
 
     sts = STS_SUCCESS
     reason = nothing
-    token = get_token(router, tenant, msg.id)
-    if token === nothing
+    token_match = check_token(router, tenant, msg.pin)
+    if token_match === false
         sts = STS_GENERIC_ERROR
         reason = "wrong tenant/pin"
     elseif isregistered(router, msg.cid)
