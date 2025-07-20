@@ -371,8 +371,6 @@ function singleton()
     return component(localcid())
 end
 
-#component() = component(localcid())
-
 function component(
     url::RbURL;
     ws=nothing,
@@ -385,6 +383,12 @@ function component(
     policy="first_up",
     failovers=[]
 )
+    # check for loopbacks
+    if (url.host == "127.0.0.1" || url.host in string.(getipaddrs())) &&
+       url.port in [ws, tcp, zmq, http]
+        error("detected loopback component connection on port $(url.port)")
+    end
+
     if ismissing(name)
         name = rid(url)
     end
@@ -627,13 +631,12 @@ function authenticate(router::Router, twin::Twin)
         return nothing
     end
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
-    reason = nothing
     msg = IdentityMsg(twin, cid(twin), meta)
     response = twin_request(twin, msg, router.settings.request_timeout)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)
         close(twin.socket)
-        throw(RembusError(code=STS_GENERIC_ERROR))
+        throw(RembusError(code=STS_GENERIC_ERROR, reason=response_data(response)))
     elseif (response.status == STS_CHALLENGE)
         msg = attestate(router, twin, response)
         response = twin_request(twin, msg, router.settings.request_timeout)
@@ -644,7 +647,7 @@ function authenticate(router::Router, twin::Twin)
         # to avoid reconnecting attempts.
         twin.process.phase = :closing
         close(twin.socket)
-        rembuserror(code=response.status, reason=reason)
+        rembuserror(code=response.status, reason=response_data(response))
     else
         update_tables(router, twin, response_data(response))
         if iszmq(twin)
