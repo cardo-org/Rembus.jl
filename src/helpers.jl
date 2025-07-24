@@ -317,9 +317,7 @@ function save_message(router, msg::PubSubMsg)
     end
     router.mcounter += 1
 
-    #if isempty(filter(:uid => ==(msg.id), router.msg_df))
     push!(router.msg_df, [router.mcounter, ts, msg.id, msg.topic, data])
-    #end
 
     if (router.mcounter % router.settings.cache_size) == 0
         persist_messages(router)
