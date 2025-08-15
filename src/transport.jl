@@ -450,8 +450,18 @@ function transport_send(z::ZDealer, msg::PingMsg)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::IdentityMsg)
-    pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid, msg.meta]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => "__identity__",
+            "params" => Dict("type" => TYPE_IDENTITY, "cid" => msg.cid, "meta" => msg.meta)
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_IDENTITY, id2bytes(msg.id), msg.cid, msg.meta]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -505,26 +515,59 @@ end
 
 function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
-    content = tagvalue_if_dataframe(msg.data)
-    if msg.flags > QOS0
-        msgid = msg.id
-        r = last_downstream(msg.twin.router)
-        timer = Timer(
-            (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
-        )
+    if msg.twin.enc == JSON && isa(socket, WS)
+        if msg.flags > QOS0
+            msgid = msg.id
+            r = last_downstream(msg.twin.router)
+            timer = Timer(
+                (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
+            )
 
-        ack_cond = FutureResponse(msg, timer)
-        socket.out[msgid] = ack_cond
-        pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
-        transport_write(socket, pkt)
-        outcome = fetch(ack_cond.future)
-        close(ack_cond.timer)
-        delete!(socket.out, msgid)
+            ack_cond = FutureResponse(msg, timer)
+            socket.out[msgid] = ack_cond
+            pkt = JSON3.write(Dict(
+                "jsonrpc" => "2.0",
+                "id" => string(msg.id),
+                "method" => msg.topic,
+                "params" => Dict(
+                    "type" => msg.flags,
+                    "data" => message2data(msg.data)
+                )
+            ))
+            ws_write(socket.sock, pkt)
+
+            outcome = fetch(ack_cond.future)
+            close(ack_cond.timer)
+            delete!(socket.out, msgid)
+        else
+            pkt = JSON3.write(Dict(
+                "jsonrpc" => "2.0",
+                "method" => msg.topic,
+                "params" => message2data(msg.data)
+            ))
+            ws_write(socket.sock, pkt)
+        end
     else
-        pkt = [TYPE_PUB | msg.flags, msg.topic, content]
-        transport_write(socket, pkt)
-    end
+        content = tagvalue_if_dataframe(msg.data)
+        if msg.flags > QOS0
+            msgid = msg.id
+            r = last_downstream(msg.twin.router)
+            timer = Timer(
+                (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
+            )
 
+            ack_cond = FutureResponse(msg, timer)
+            socket.out[msgid] = ack_cond
+            pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
+            transport_write(socket, pkt)
+            outcome = fetch(ack_cond.future)
+            close(ack_cond.timer)
+            delete!(socket.out, msgid)
+        else
+            pkt = [TYPE_PUB | msg.flags, msg.topic, content]
+            transport_write(socket, pkt)
+        end
+    end
     return outcome
 end
 
@@ -570,25 +613,37 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
-    content = tagvalue_if_dataframe(msg.data)
-    if msg.target === nothing
-        pkt = [
-            TYPE_RPC | msg.flags,
-            id2bytes(msg.id),
-            msg.topic,
-            nothing,
-            message2data(content)
-        ]
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => msg.topic,
+            "params" => message2data(msg.data)
+        ))
+        ws_write(socket.sock, pkt)
     else
-        pkt = [
-            TYPE_RPC | msg.flags,
-            id2bytes(msg.id),
-            msg.topic,
-            msg.target,
-            message2data(content)
-        ]
+        content = tagvalue_if_dataframe(msg.data)
+        if msg.target === nothing
+            pkt = [
+                TYPE_RPC | msg.flags,
+                id2bytes(msg.id),
+                msg.topic,
+                nothing,
+                message2data(content)
+            ]
+        else
+            pkt = [
+                TYPE_RPC | msg.flags,
+                id2bytes(msg.id),
+                msg.topic,
+                msg.target,
+                message2data(content)
+            ]
+        end
+
+        transport_write(socket, pkt)
     end
-    transport_write(socket, pkt)
+
     return true
 end
 
@@ -653,22 +708,56 @@ function transport_send(z::ZDealer, msg::ResMsg)
     return true
 end
 
-function transport_send(socket::AbstractPlainSocket, msg::ResMsg, enc=false)
-    content = tagvalue_if_dataframe(msg.data)
-    pkt = [
-        TYPE_RESPONSE | msg.flags,
-        id2bytes(msg.id),
-        msg.status,
-        message2data(content)
-    ]
-    transport_write(socket, pkt)
+function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
+    if msg.twin.enc == JSON && isa(socket, WS)
+
+        if msg.status == STS_SUCCESS || msg.status == STS_CHALLENGE
+            restype = "result"
+        else
+            restype = "error"
+        end
+
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            restype => Dict(
+                "type" => TYPE_RESPONSE,
+                "sts" => msg.status,
+                "data" => message2data(msg.data)
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+
+        content = tagvalue_if_dataframe(msg.data)
+        pkt = [
+            TYPE_RESPONSE | msg.flags,
+            id2bytes(msg.id),
+            msg.status,
+            message2data(content)
+        ]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::AdminReqMsg)
-    content = tagvalue_if_dataframe(msg.data)
-    pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, content]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => msg.topic,
+            "params" => Dict(
+                "type" => TYPE_ADMIN,
+                "data" => message2data(msg.data)
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        content = tagvalue_if_dataframe(msg.data)
+        pkt = [TYPE_ADMIN | msg.flags, id2bytes(msg.id), msg.topic, content]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -700,8 +789,19 @@ function transport_send(z::ZRouter, msg::AdminReqMsg)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::AckMsg)
-    pkt = [TYPE_ACK, id2bytes(msg.id)]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "result" => Dict(
+                "type" => TYPE_ACK,
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_ACK, id2bytes(msg.id)]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -719,8 +819,19 @@ function transport_send(z::ZRouter, msg::AckMsg)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Ack2Msg)
-    pkt = [TYPE_ACK2, id2bytes(msg.id)]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "result" => Dict(
+                "type" => TYPE_ACK2,
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_ACK2, id2bytes(msg.id)]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -760,8 +871,22 @@ function transport_send(z::ZDealer, msg::AckMsg)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Attestation)
-    pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature, msg.meta]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => msg.cid,
+            "params" => Dict(
+                "type" => TYPE_ATTESTATION,
+                "signature" => base64encode(msg.signature),
+                "meta" => msg.meta
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_ATTESTATION, id2bytes(msg.id), msg.cid, msg.signature, msg.meta]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -781,8 +906,24 @@ function transport_send(z::ZDealer, msg::Attestation)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Register)
-    pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.pin, msg.pubkey, msg.type]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => msg.cid,
+            "params" => Dict(
+                "type" => TYPE_REGISTER,
+                "pin" => msg.pin,
+                "key_val" => base64encode(msg.pubkey),
+                "key_type" => msg.type
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+
+        pkt = [TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.pin, msg.pubkey, msg.type]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
@@ -802,8 +943,20 @@ function transport_send(z::ZDealer, msg::Register)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Unregister)
-    pkt = [TYPE_UNREGISTER, id2bytes(msg.id)]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "jsonrpc" => "2.0",
+            "id" => string(msg.id),
+            "method" => "__unregister__",
+            "params" => Dict(
+                "type" => TYPE_UNREGISTER,
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_UNREGISTER, id2bytes(msg.id)]
+        transport_write(socket, pkt)
+    end
     return true
 end
 

@@ -20,6 +20,10 @@ const CONNECTION_ID = 0x12345678961deadbeef123456789
 
 const DEFAULT_WS_PORT::Int = 8000
 
+# Payload encodings for the rembus messages.
+const CBOR::UInt8 = UInt8(0x00)
+const JSON::UInt8 = UInt8(0x01)
+
 # Keywords for handlers functions related to twin lifecycle events.
 const HR_CHALLENGE = "chnge"
 const HR_CONN_DOWN = "cdown"

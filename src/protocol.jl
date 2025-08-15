@@ -135,11 +135,11 @@ mutable struct ResMsg{T} <: RembusMsg
     ) = new{typeof(data)}(id, status, data, flags, twin)
 
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
-        return new{typeof(data)}(req.id, status, data, flags)
+        return new{typeof(data)}(req.id, status, data, flags, req.twin)
     end
 
     function ResMsg(req::AdminReqMsg, status::UInt8, data=nothing, flags=0x0)
-        return new{typeof(data)}(req.id, status, data, flags)
+        return new{typeof(data)}(req.id, status, data, flags, req.twin)
     end
 end
 

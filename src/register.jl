@@ -45,7 +45,8 @@ The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
 function register(
     cid::AbstractString,
     pin::AbstractString;
-    scheme::UInt8=SIG_RSA
+    scheme::UInt8=SIG_RSA,
+    enc::UInt8=CBOR
 )
     cmp = RbURL(cid)
     kfile = pkfile(cmp.id)
@@ -55,6 +56,7 @@ function register(
 
     @debug "connecting register"
     twin = connect(RbURL(protocol=cmp.protocol, host=cmp.host, port=cmp.port))
+    twin.enc = enc
     try
         @debug "registering $cid"
         if scheme === SIG_RSA

@@ -540,6 +540,7 @@ end
 
 mutable struct Twin <: AbstractTwin
     uid::RbURL
+    enc::UInt8
     connected::Union{Nothing,Channel{Bool}}
     shared::Any
     handler::Dict{String,Function}
@@ -556,8 +557,9 @@ mutable struct Twin <: AbstractTwin
     failover_from::Float64
     ackdf::DataFrame
     process::Visor.Process
-    Twin(uid::RbURL, r::AbstractRouter, s=FLOAT) = new(
+    Twin(uid::RbURL, r::AbstractRouter, enc=CBOR, s=FLOAT) = new(
         uid,
+        enc,
         nothing,
         missing,
         Dict(), # handler

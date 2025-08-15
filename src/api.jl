@@ -149,6 +149,7 @@ function component(
     secure=false,
     authenticated=false,
     policy="first_up",
+    enc=CBOR,
     failovers=[]
 )
     uid = RbURL(url)
@@ -162,6 +163,7 @@ function component(
         authenticated=authenticated,
         policy=policy,
         secure=secure,
+        enc=enc,
         failovers=failovers
     )
 end
@@ -176,6 +178,7 @@ function component(;
     secure=false,
     authenticated=false,
     policy="first_up",
+    enc=CBOR,
     failovers=[]
 )
     if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
@@ -195,6 +198,7 @@ function component(;
     )
     set_policy(router, policy)
     twin = bind(router)
+    twin.enc = enc
     return add_failovers(twin, failovers)
 end
 
@@ -209,7 +213,7 @@ A disconnection from the remote endpoint will not trigger automatic reconnection
 
 rb = connect("ws://127.0.0.1:8000/mycomponent")
 """
-connect(url::AbstractString)::Twin = connect(RbURL(url))
+connect(url::AbstractString; enc=CBOR)::Twin = connect(RbURL(url), enc=enc)
 
 function issuccess(response)
     response = fetch(response.future)

@@ -100,6 +100,7 @@ function __init__()
     atexit(shutdown)
 end
 
+
 @setup_workload begin
     warn!()
     ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus_compile")

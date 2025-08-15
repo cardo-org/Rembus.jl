@@ -346,7 +346,8 @@ function component(
     name=missing,
     secure=false,
     authenticated=false,
-    policy="first_up"
+    policy="first_up",
+    enc=CBOR
 )
     if ismissing(name)
         nodeurl = localcid()
@@ -358,7 +359,7 @@ function component(
     )
     set_policy(router, policy)
     for url in urls
-        component(url, router)
+        component(url, router, enc)
     end
     return bind(router)
 end
@@ -381,6 +382,7 @@ function component(
     secure=false,
     authenticated=false,
     policy="first_up",
+    enc=CBOR,
     failovers=[]
 )
     # check for loopbacks
@@ -396,24 +398,26 @@ function component(
         name=name, ws=ws, tcp=tcp, zmq=zmq, http=http, authenticated=authenticated, secure=secure
     )
     set_policy(router, policy)
-    return component(url, router, failovers)
+    return component(url, router, enc, failovers)
 end
 
 function component(
     url::AbstractString,
     router::AbstractRouter,
+    enc=CBOR,
     failovers=[]
 )
     uid = RbURL(url)
-    return component(uid, router, failovers)
+    return component(uid, router, enc, failovers)
 end
 
-function component(url::RbURL, router::AbstractRouter, failovers=[])
+function component(url::RbURL, router::AbstractRouter, enc=CBOR, failovers=[])
     if router.settings.connection_mode === authenticated && !hasname(url)
         error("anonymous components not allowed")
     end
 
     twin = bind(router, url)
+    twin.enc = enc
     return add_failovers(twin, failovers)
 end
 
@@ -439,13 +443,14 @@ function add_failovers(twin::Twin, failovers)
     return twin
 end
 
-function connect(url::RbURL; name=missing)
+function connect(url::RbURL; name=missing, enc=CBOR)
     if ismissing(name)
         name = url.id
     end
 
     router = get_router(name=name)
     twin = bind(router, url)
+    twin.enc = enc
     try
         !do_connect(twin)
     catch
@@ -455,7 +460,7 @@ function connect(url::RbURL; name=missing)
     return twin
 end
 
-connect() = connect(RbURL())
+connect(enc=CBOR) = connect(RbURL(), enc=enc)
 
 function disconnect(twin::Twin)
     if isdefined(twin, :process)
@@ -1102,6 +1107,116 @@ function challenge(router::Router, twin::Twin, msgid)
     return ResMsg(twin, msgid, STS_CHALLENGE, challenge_val)
 end
 
+
+"""
+    jsonrpc_request(pkt::Dict, msg_id, params) -> RembusMsg
+
+Parse a JSON-RPC request and return the appropriate RembusMsg subtype.
+"""
+function jsonrpc_request(twin, pkt::Dict, msg_id, params)
+    if isa(params, Vector)
+        # Default to RPC request
+        return RpcReqMsg(twin, msg_id, pkt["method"], params)
+    else
+        msg_type = get(params, "type", nothing)
+        if msg_type in (QOS1, QOS2)
+            return PubSubMsg(
+                twin,
+                pkt["method"],
+                get(params, "data", nothing),
+                msg_type,
+                msg_id,
+            )
+        elseif msg_type == TYPE_IDENTITY
+            return IdentityMsg(
+                twin,
+                msg_id,
+                params["cid"],
+                get(params, "meta", nothing)
+            )
+        elseif msg_type == TYPE_ADMIN
+            return AdminReqMsg(
+                twin,
+                msg_id,
+                pkt["method"],
+                get(params, "data", nothing)
+            )
+        elseif msg_type == TYPE_ATTESTATION
+            sig = params["signature"]
+            return Attestation(
+                twin,
+                msg_id,
+                pkt["method"],
+                base64decode(sig),
+                get(params, "meta", nothing)
+            )
+        elseif msg_type == TYPE_REGISTER
+            pubkey = get(params, "key_val", nothing)
+            if isa(pubkey, String)
+                pubkey = base64decode(pubkey)
+            end
+            return Register(
+                twin,
+                msg_id,
+                pkt["method"],
+                params["pin"],
+                pubkey,
+                UInt8(get(params, "key_type", SIG_RSA))
+            )
+        elseif msg_type == TYPE_UNREGISTER
+            return Unregister(twin, msg_id)
+        else
+            error("$(pkt): invalid JSON-RPC request")
+        end
+    end
+end
+
+function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
+    """Parse a JSON_RPC success response"""
+
+    msg_type = get(result, "type", missing)
+    if msg_type == TYPE_RESPONSE || ismissing(msg_type)
+        status = get(result, "sts", STS_SUCCESS)
+        return ResMsg(twin, msg_id, status, get(result, "data", nothing))
+    elseif msg_type == TYPE_ACK
+        return AckMsg(twin, msg_id)
+    elseif msg_type == TYPE_ACK2
+        return Ack2Msg(twin, msg_id)
+    end
+
+    error("$pkt:invalid JSON-RPC response")
+end
+
+function json_parse(twin::Twin, payload::String)
+    pkt = JSON3.read(payload, Dict)
+    @debug "[$twin] json_parse: $pkt"
+    uid = get(pkt, "id", missing)
+    if ismissing(uid)
+        # Assume a PubSub message.
+        return PubSubMsg(twin, pkt["method"], get(pkt, "params", nothing))
+    else
+        msg_id = parse(UInt128, uid)
+        # Request-Response message.
+        params = get(pkt, "params", nothing)
+        if !isnothing(params)
+            return jsonrpc_request(twin, pkt, msg_id, params)
+        end
+
+        result = get(pkt, "result", nothing)
+        if !isnothing(result)
+            return jsonprc_response(twin, pkt, msg_id, result)
+        end
+
+        err = get(pkt, "error", nothing)
+        if !isnothing(err)
+            return jsonprc_response(twin, pkt, msg_id, err)
+        end
+    end
+
+    error("$pkt:invalid JSON-RPC payload")
+
+end
+
 #=
     twin_receiver(twin)
 
@@ -1118,7 +1233,15 @@ function twin_receiver(twin::Twin)
                 @debug "component [$twin]: connection closed"
                 break
             end
-            msg::RembusMsg = broker_parse(twin, payload)
+
+            if isa(payload, String)
+                twin.enc = JSON
+                msg::RembusMsg = json_parse(twin, payload)
+            else
+                twin.enc = CBOR
+                msg = broker_parse(twin, payload)
+            end
+
             @debug "[$(path(twin))] twin_receiver << $msg"
             put!(twin.router.process.inbox, msg)
         end

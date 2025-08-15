@@ -53,6 +53,17 @@ const GROUP = get(ENV, "GROUP", "all")
             include("broker/test_setup.jl")
         end
     end
+    if GROUP == "all" || GROUP == "json-rpc"
+        @time @safetestset "jsonrpc" begin
+            include("json-rpc/test_jsonrpc.jl")
+        end
+        @time @safetestset "jsonrpc_pubsub" begin
+            include("json-rpc/test_jsonrpc_pubsub.jl")
+        end
+        @time @safetestset "jsonrpc_register" begin
+            include("json-rpc/test_jsonrpc_register.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "ifdown_block" begin
             include("api/test_ifdown_block.jl")
