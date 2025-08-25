@@ -33,7 +33,7 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install ssh-keygen on Windows
         if: runner.os == 'Windows'
         run: choco install openssh
@@ -54,7 +54,7 @@ jobs:
     name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
     steps:
-      -  uses: actions/checkout@v4
+      -  uses: actions/checkout@v5
       -  uses: julia-actions/setup-julia@v2
          with:
            version: '1.11'
@@ -99,7 +99,7 @@ jobs:
       contents: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
