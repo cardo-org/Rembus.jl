@@ -70,11 +70,21 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
 
     try
         if router.shared === missing
-            result = router.topic_function[msg.topic](getargs(payload)...)
+            args = getargs(payload)
+            if isa(args, Dict)
+                kargs = Dict(Symbol(k) => v for (k, v) in args)
+                result = router.topic_function[msg.topic](; kargs...)
+            else
+                result = router.topic_function[msg.topic](args...)
+            end
         else
-            result = router.topic_function[msg.topic](
-                router.shared, twin, getargs(payload)...
-            )
+            args = getargs(payload)
+            if isa(args, Dict)
+                kargs = Dict(Symbol(k) => v for (k, v) in args)
+                result = router.topic_function[msg.topic](router.shared, twin; kargs...)
+            else
+                result = router.topic_function[msg.topic](router.shared, twin, args...)
+            end
         end
         sts = STS_SUCCESS
     catch e

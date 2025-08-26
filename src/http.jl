@@ -88,6 +88,90 @@ function http_unexpose(router::Router, req::HTTP.Request)
     return command(router, req, Dict(COMMAND => UNEXPOSE_CMD, TOUCHED => []))
 end
 
+function jsonrpc_response(sts, retval)
+    return HTTP.Response(
+        sts,
+        [
+            "Content_type" => "application/json",
+            "Access-Control-Allow-Origin" => "*"
+        ],
+        JSON3.write(retval)
+    )
+end
+
+function http_jsonrpc(router::Router, req::HTTP.Request)
+    (cid, isauth) = authenticate(router, req)
+    @debug "http_jsonrpc: cid=$cid isauth=$isauth"
+
+    retval = Dict{String,Any}(
+        "jsonrpc" => "2.0",
+        "id" => missing
+    )
+
+    if isempty(req.body)
+        retval["error"] = Dict(
+            "code" => -32600,
+            "message" => "invalid JSON: empty content"
+        )
+        return jsonrpc_response(400, retval)
+    end
+
+    sts = 200
+    content = String(req.body)
+
+    if haskey(router.id_twin, cid)
+        sts = 400
+        retval["error"] = Dict(
+            "code" => -32000,
+            "message" => "component $cid not available for rpc via http"
+        )
+    else
+        twin = bind(router, RbURL(cid))
+        twin.isauth = isauth
+        twin.socket = Float()
+
+        try
+            msg::RembusMsg = json_parse(twin, content)
+            @debug "http_jsonrpc: msg=$msg"
+
+            if isa(msg, RpcReqMsg)
+                fut_response = fpc(twin, msg.topic, isnothing(msg.data) ? () : msg.data)
+                response = fetch(fut_response.future)
+                retval["id"] = string(msg.id)
+                if response.status == 0
+                    retval["result"] = jsonrpc_response_data(response)
+                else
+                    sts = 400
+                    retval["error"] = Dict(
+                        "code" => -32000,
+                        "message" => jsonrpc_response_data(response)
+                    )
+                end
+            elseif isa(msg, PubSubMsg)
+                pubsub_msg(router, msg)
+                return HTTP.Response(
+                    sts,
+                    [
+                        "Content_type" => "application/json",
+                        "Access-Control-Allow-Origin" => "*"
+                    ]
+                )
+            end
+        catch e
+            sts = 400
+            retval["error"] = Dict(
+                "code" => -32000,
+                "message" => string(e)
+            )
+        finally
+            Visor.shutdown(twin.process)
+            cleanup(twin, router)
+        end
+    end
+
+    return jsonrpc_response(sts, retval)
+end
+
 function http_publish(router::Router, req::HTTP.Request)
     try
         (cid, isauth) = authenticate(router, req)
@@ -120,6 +204,15 @@ function http_response_data(response)
         return arraytable(data)
     else
         return JSON3.write(data)
+    end
+end
+
+function jsonrpc_response_data(response)
+    data = dataframe_if_tagvalue(response_data(response))
+    if isa(data, DataFrame)
+        return arraytable(data)
+    else
+        return data
     end
 end
 
@@ -265,6 +358,10 @@ function serve_http(td, router::Router, port, issecure=false)
 
     # define REST endpoints to dispatch rembus functions
     http_router = HTTP.Router()
+
+    # json-rpc
+    HTTP.register!(http_router, "POST", "jsonrpc", req -> http_jsonrpc(router, req))
+
     # publish
     HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
     # rpc

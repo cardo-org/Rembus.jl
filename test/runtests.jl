@@ -57,6 +57,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "jsonrpc" begin
             include("json-rpc/test_jsonrpc.jl")
         end
+        @time @safetestset "jsonrpc_http" begin
+            include("json-rpc/test_jsonrpc_http.jl")
+        end
+        @time @safetestset "jsonrpc_http_namedargs" begin
+            include("json-rpc/test_jsonrpc_http_namedargs.jl")
+        end
         @time @safetestset "jsonrpc_pubsub" begin
             include("json-rpc/test_jsonrpc_pubsub.jl")
         end

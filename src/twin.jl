@@ -1114,11 +1114,11 @@ end
 Parse a JSON-RPC request and return the appropriate RembusMsg subtype.
 """
 function jsonrpc_request(twin, pkt::Dict, msg_id, params)
-    if isa(params, Vector)
+    if isa(params, Vector) || isnothing(params)
         # Default to RPC request
         return RpcReqMsg(twin, msg_id, pkt["method"], params)
-    else
-        msg_type = get(params, "type", nothing)
+    elseif isa(params, Dict)
+        msg_type = get(params, "__type__", nothing)
         if msg_type in (QOS1, QOS2)
             return PubSubMsg(
                 twin,
@@ -1166,16 +1166,18 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
         elseif msg_type == TYPE_UNREGISTER
             return Unregister(twin, msg_id)
         else
-            error("$(pkt): invalid JSON-RPC request")
+            return RpcReqMsg(twin, msg_id, pkt["method"], params)
         end
+    else
+        error("$(pkt): invalid JSON-RPC request")
     end
 end
 
 function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
     """Parse a JSON_RPC success response"""
 
-    msg_type = get(result, "type", missing)
-    if msg_type == TYPE_RESPONSE || ismissing(msg_type)
+    msg_type = get(result, "__type__", missing)
+    if ismissing(msg_type) || msg_type == TYPE_RESPONSE
         status = get(result, "sts", STS_SUCCESS)
         return ResMsg(twin, msg_id, status, get(result, "data", nothing))
     elseif msg_type == TYPE_ACK
@@ -1196,12 +1198,6 @@ function json_parse(twin::Twin, payload::String)
         return PubSubMsg(twin, pkt["method"], get(pkt, "params", nothing))
     else
         msg_id = parse(UInt128, uid)
-        # Request-Response message.
-        params = get(pkt, "params", nothing)
-        if !isnothing(params)
-            return jsonrpc_request(twin, pkt, msg_id, params)
-        end
-
         result = get(pkt, "result", nothing)
         if !isnothing(result)
             return jsonprc_response(twin, pkt, msg_id, result)
@@ -1211,10 +1207,11 @@ function json_parse(twin::Twin, payload::String)
         if !isnothing(err)
             return jsonprc_response(twin, pkt, msg_id, err)
         end
+
+        # Request-Response message.
+        params = get(pkt, "params", nothing)
+        return jsonrpc_request(twin, pkt, msg_id, params)
     end
-
-    error("$pkt:invalid JSON-RPC payload")
-
 end
 
 #=

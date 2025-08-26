@@ -628,7 +628,7 @@ function fpc(
     data=(),
     timeout=Inf
 )
-    msg = RpcReqMsg(twin, topic, collect(data))
+    msg = RpcReqMsg(twin, topic, data)
     return send_msg(twin, msg, timeout)
 end
 

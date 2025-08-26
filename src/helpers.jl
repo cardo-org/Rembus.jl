@@ -176,7 +176,7 @@ function getargs(data)
     else
         args = data
     end
-    if (args isa Vector) || (args isa Tuple)
+    if (args isa Vector) || (args isa Tuple) || (args isa Dict)
         return args
     elseif args === nothing
         return []
