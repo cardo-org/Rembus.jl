@@ -140,7 +140,7 @@ end
 
 
 function run()
-    rembus_url = "http://localhost:9000/jsonrpc"
+    rembus_url = "http://localhost:9000"
     x = 10
     y = 20
     ctx = Dict()

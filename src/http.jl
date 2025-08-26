@@ -360,7 +360,7 @@ function serve_http(td, router::Router, port, issecure=false)
     http_router = HTTP.Router()
 
     # json-rpc
-    HTTP.register!(http_router, "POST", "jsonrpc", req -> http_jsonrpc(router, req))
+    HTTP.register!(http_router, "POST", "/", req -> http_jsonrpc(router, req))
 
     # publish
     HTTP.register!(http_router, "POST", "{topic}", req -> http_publish(router, req))
