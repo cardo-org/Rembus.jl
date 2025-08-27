@@ -145,7 +145,6 @@ function run()
     y = 20
     ctx = Dict()
 
-
     srv = component("jsonrpc_server")
     expose(srv, myservice)
     expose(srv, mydataframe)

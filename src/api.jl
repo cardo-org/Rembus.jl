@@ -546,6 +546,24 @@ function rpc(
     return fetch(fpc(twin, topic, data))
 end
 
+#  Just for reference, a way to implement rpc api with keyword arguments.
+#
+# """
+#     rpc(rb, service::AbstractString; data...)
+#
+# Make a request for a remote `service` method using keyword arguments.
+#
+# `rpc(rb, "foo"; x=1, y=2.7, z=9)`
+# """
+# function rpc(
+#     twin::Twin,
+#     topic::AbstractString;
+#     data...
+# )
+#     wait_open(twin) || error("connection down")
+#     return fetch(fpc(twin, topic, Dict(data)))
+# end
+
 function direct(
     twin::Twin,
     target::AbstractString,

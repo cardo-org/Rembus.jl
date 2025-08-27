@@ -2,6 +2,10 @@ include("../utils.jl")
 
 using Base64
 
+function myservice_noctx(; x, y)
+    return x + y
+end
+
 function myservice(ctx, rb; x, y)
     return x + y
 end
@@ -52,16 +56,26 @@ function run()
     y = 20
     ctx = Dict()
 
-
     srv = component("jsonrpc_server")
     expose(srv, myservice)
     inject(srv, ctx)
     subscribe(srv, mytopic)
     reactive(srv)
 
+    srv_noctx = component("jsonrpc_server_no_context")
+    expose(srv_noctx, myservice_noctx)
+
     msgid = "1"
     response = jsonrpc_request(
         rembus_url, "myservice", Dict("x" => x, "y" => y); id=msgid
+    )
+    @test haskey(response, "result")
+    @test response["result"] == x + y
+    @test response["id"] == msgid
+
+    msgid = "2"
+    response = jsonrpc_request(
+        rembus_url, "myservice_noctx", Dict("x" => x, "y" => y); id=msgid
     )
     @test haskey(response, "result")
     @test response["result"] == x + y
@@ -73,6 +87,9 @@ function run()
     )
     sleep(1) # wait for the topic to be processed
     @test ctx["msg"] == msg
+
+    close(srv)
+    close(srv_noctx)
 end
 
 execute(run, "test_jsonrpc_errors", http=9000)
