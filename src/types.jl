@@ -143,7 +143,6 @@ end
 mutable struct RbURL
     id::String
     tenant::String
-    hasname::Bool
     protocol::Symbol
     host::String
     port::UInt16
@@ -153,22 +152,20 @@ mutable struct RbURL
         protocol=:ws,
         host="127.0.0.1",
         port=8000,
-        hasname=true,
         props=Dict()
     )
         if protocol === :repl
-            return new("__repl__", ".", false, :repl, "", 0, props)
+            return new("__repl__", ".", :repl, "", 0, props)
         else
             if isempty(name)
                 name = string(uuid4())
-                hasname = false
             end
-            return new(name, domain(name), hasname, protocol, host, port, props)
+            return new(name, domain(name), protocol, host, port, props)
         end
     end
     function RbURL(url::String)
-        (cid, tenant, hasname, protocol, host, port, props) = spliturl(url)
-        new(cid, tenant, hasname, protocol, host, port, props)
+        (cid, tenant, protocol, host, port, props) = spliturl(url)
+        new(cid, tenant, protocol, host, port, props)
     end
 end
 
@@ -180,7 +177,7 @@ function cid(c::RbURL)
     c.protocol === :repl ? "__repl__" : "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
 end
 
-hasname(c::RbURL) = c.hasname
+hasname(c::RbURL) = !(is_uuid4(c.id) || all(isdigit, c.id))
 
 isrepl(c::RbURL) = c.protocol === :repl
 
@@ -215,7 +212,7 @@ struct Node
         new(cid, tenant, proto, host, port, sts)
     end
     function Node(url)
-        (cid, tenant, _, protocol, host, port, _) = spliturl(url)
+        (cid, tenant, protocol, host, port, _) = spliturl(url)
         new(cid, tenant, protocol, host, port, unknown)
     end
 end

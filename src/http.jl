@@ -64,11 +64,18 @@ function command(router::Router, req::HTTP.Request, cmd::Dict)
     cid = HTTP.getparams(req)["cid"]
     topic = HTTP.getparams(req)["topic"]
     twin = bind(router, RbURL(cid))
-    msg = AdminReqMsg(twin, topic, cmd)
-    response = http_admin_msg(router, twin, msg)
-    if response.status == 0
-        sts = 200
+
+    try
+        msg = AdminReqMsg(twin, topic, cmd)
+        response = http_admin_msg(router, twin, msg)
+        if response.status == 0
+            sts = 200
+        end
+    finally
+        Visor.shutdown(twin.process)
+        cleanup(twin, router)
     end
+
     return HTTP.Response(sts, ["Access-Control-Allow-Origin" => "*"])
 end
 

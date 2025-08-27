@@ -11,9 +11,18 @@ function dumperror(twin, e)
     end
 end
 
+function is_uuid4(s::AbstractString)
+    try
+        u = UUID(s)
+        return uuid_version(u) == 4
+    catch
+        return false
+    end
+end
+
 function getcfg(name::AbstractString)
     dir = joinpath(get(ENV, "REMBUS_DIR", default_rembus_dir()), name)
-    if !isdir(dir)
+    if !isdir(dir) && !is_uuid4(name)
         mkpath(dir)
     end
     cfg_file = joinpath(dir, "settings.json")
@@ -123,11 +132,8 @@ function spliturl(url::String)
 
     if isempty(name)
         name = string(uuid4())
-        hasname = false
-    else
-        hasname = true
     end
-    return (name, domain(name), hasname, protocol, host, port, props)
+    return (name, domain(name), protocol, host, port, props)
 end
 
 function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})

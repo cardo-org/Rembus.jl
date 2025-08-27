@@ -54,6 +54,7 @@ function run(authorized_component)
     catch e
         @info "[$producer] expected error: $e"
     end
+    sleep(0.1)
 
     producer = connect(myproducer)
     # producer is not an admin

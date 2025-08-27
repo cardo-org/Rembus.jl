@@ -426,7 +426,6 @@ function add_failovers(twin::Twin, failovers)
     for failover in failovers
         cid = RbURL(failover)
         cid.id = twin.uid.id
-        cid.hasname = twin.uid.hasname
         push!(twin.failovers, cid)
     end
 

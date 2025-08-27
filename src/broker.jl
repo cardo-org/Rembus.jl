@@ -659,7 +659,6 @@ function zmq_broker_read(router::Router)
             router,
             RbURL(
                 name=string(bytes2zid(id)),
-                hasname=false,
                 protocol=:zmq,
                 port=router.listeners[:zmq].port
             )
