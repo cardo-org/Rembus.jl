@@ -1358,14 +1358,17 @@ function twin_task(self, twin)
     try
         @debug "starting twin [$(rid(twin))]"
         for msg in self.inbox
+            max_retries = last_downstream(twin.router).settings.send_retries
             if isshutdown(msg)
                 self.phase = :closing
                 break
             else
                 if !sendto_origin(twin, msg)
                     done = false
-                    while !done && isopen(twin)
+                    retries = 0
+                    while !done && retries <= max_retries && isopen(twin)
                         done = message_send(twin, msg)
+                        retries += 1
                     end
                 end
             end

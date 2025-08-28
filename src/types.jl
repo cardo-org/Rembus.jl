@@ -385,6 +385,7 @@ mutable struct Settings
     request_timeout::Float64
     challenge_timeout::Float64
     ack_timeout::Float64
+    send_retries::Int
     reconnect_period::Float64
     Settings(name::AbstractString) = begin
         cfg = getcfg(name)
@@ -422,6 +423,11 @@ mutable struct Settings
             "ack_timeout",
             parse(Float64, get(ENV, "REMBUS_ACK_TIMEOUT", "2"))
         )
+        send_retries = get(
+            cfg,
+            "send_retries",
+            parse(Int, get(ENV, "REMBUS_SEND_RETRIES", "3"))
+        )
         reconnect_period = get(
             cfg,
             "reconnect_period",
@@ -441,6 +447,7 @@ mutable struct Settings
             request_timeout,
             challenge_timeout,
             ack_timeout,
+            send_retries,
             reconnect_period
         )
     end
