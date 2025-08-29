@@ -144,7 +144,7 @@ function http_jsonrpc(router::Router, req::HTTP.Request)
             if isa(msg, RpcReqMsg)
                 fut_response = fpc(twin, msg.topic, isnothing(msg.data) ? () : msg.data)
                 response = fetch(fut_response.future)
-                retval["id"] = string(msg.id)
+                retval["id"] = msg.id
                 if response.status == 0
                     retval["result"] = jsonrpc_response_data(response)
                 else

@@ -1196,7 +1196,12 @@ function json_parse(twin::Twin, payload::String)
         # Assume a PubSub message.
         return PubSubMsg(twin, pkt["method"], get(pkt, "params", nothing))
     else
-        msg_id = parse(UInt128, uid)
+        if isa(uid, String)
+            msg_id = parse(UInt128, uid)
+        else
+            msg_id = UInt128(uid)
+        end
+
         result = get(pkt, "result", nothing)
         if !isnothing(result)
             return jsonprc_response(twin, pkt, msg_id, result)

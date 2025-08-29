@@ -34,7 +34,7 @@ function jsonrpc_wrong_request(url::String, method::String, params=nothing)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
         "method" => method,
-        "id" => "999"
+        "id" => 999
     )
     request_obj["params"] = "unexpected_string_instead_of_array"
 
@@ -76,7 +76,7 @@ function jsonrpc_connect_named(url::String, cid::String)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
         "method" => "uptime",
-        "id" => "999"
+        "id" => 999
     )
 
     HTTP.post(
@@ -163,7 +163,7 @@ function run()
         @test isnothing(response["id"])
     end
 
-    msgid = "1"
+    msgid = 1
     response = jsonrpc_request(
         rembus_url, "myservice", [x, y]; id=msgid
     )
@@ -171,7 +171,7 @@ function run()
     @test response["result"] == x + y
     @test response["id"] == msgid
 
-    msgid = "2"
+    msgid = 2
     try
         response = jsonrpc_request(
             rembus_url, "unknow_service"; id=msgid
@@ -202,7 +202,7 @@ function run()
         @test isnothing(response["id"])
     end
 
-    msgid = "3"
+    msgid = 3
     try
         jsonrpc_invalid_type(rembus_url; id=msgid)
     catch e
@@ -212,7 +212,7 @@ function run()
         @test isnothing(response["id"])
     end
 
-    msgid = "4"
+    msgid = 4
     try
         jsonrpc_invalid_response(rembus_url; id=msgid)
     catch e
@@ -229,7 +229,7 @@ function run()
     sleep(1) # wait for the topic to be processed
     @test ctx["msg"] == msg
 
-    msgid = "5"
+    msgid = 5
     response = jsonrpc_request(
         rembus_url, "mydataframe"; id=msgid
     )

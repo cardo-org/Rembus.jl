@@ -65,7 +65,7 @@ function run()
     srv_noctx = component("jsonrpc_server_no_context")
     expose(srv_noctx, myservice_noctx)
 
-    msgid = "1"
+    msgid = 1
     response = jsonrpc_request(
         rembus_url, "myservice", Dict("x" => x, "y" => y); id=msgid
     )
@@ -73,7 +73,7 @@ function run()
     @test response["result"] == x + y
     @test response["id"] == msgid
 
-    msgid = "2"
+    msgid = 2
     response = jsonrpc_request(
         rembus_url, "myservice_noctx", Dict("x" => x, "y" => y); id=msgid
     )
