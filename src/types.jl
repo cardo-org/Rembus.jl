@@ -11,7 +11,8 @@ $(TYPEDFIELDS)
 struct RembusTimeout{T} <: RembusException
     "request message"
     msg::T
-    RembusTimeout{T}(msg) where {T} = new{T}(msg)
+    status::UInt8
+    RembusTimeout{T}(msg) where {T} = new{T}(msg, STS_TIMEOUT)
 end
 
 RembusTimeout(msg) = RembusTimeout{typeof(msg)}(msg)

@@ -179,7 +179,8 @@ A router that has more than one outstanding route: it could be a real broker
 or a pool component.
 =#
 function ismultipath(router)
-    return !isempty(router.listeners) || (length(router.id_twin) > 1)
+    #return !isempty(router.listeners) || (length(router.id_twin) > 1)
+    return true
 end
 
 function admin_command(router::Router, twin, msg::AdminReqMsg)

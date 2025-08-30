@@ -417,7 +417,11 @@ end
 file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
 
 function msg_files(router)
-    return sort(readdir(Rembus.messages_dir(router)), lt=file_lt)
+    mdir = messages_dir(router)
+    if !isdir(mdir)
+        return String[]
+    end
+    return sort(readdir(mdir), lt=file_lt)
 end
 
 msg_files(twin::Twin) = msg_files(twin.router)
