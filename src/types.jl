@@ -147,7 +147,7 @@ mutable struct RbURL
     protocol::Symbol
     host::String
     port::UInt16
-    props::Dict{String,String}
+    props::Dict{String,Any}
     function RbURL(;
         name="",
         protocol=:ws,
@@ -172,7 +172,13 @@ end
 
 nodeurl(c::RbURL) = "$(c.protocol == :zmq ? :tcp : c.protocol)://$(c.host):$(c.port)"
 
-rid(c::RbURL) = c.id
+function rid(c::RbURL)
+    if haskey(c.props, "pool") && c.props["pool"] == true
+        return "$(c.id)@$(c.protocol)://$(c.host):$(c.port)"
+    end
+
+    return c.id
+end
 
 function cid(c::RbURL)
     c.protocol === :repl ? "__repl__" : "$(c.protocol)://$(c.host):$(c.port)/$(c.id)"
@@ -595,7 +601,7 @@ rb = component("ws://myhost.org:8000/myname")
 rid(rb) === "myname"
 ```
 """
-rid(rb::Twin)::String = rb.uid.id
+rid(rb::Twin)::String = rid(rb.uid)
 
 cid(twin::Twin) = cid(twin.uid)
 

@@ -552,22 +552,26 @@ function find_implementor(router::Router, msg)
     twin = msg.twin
     if haskey(router.topic_impls, topic)
         implementors = router.topic_impls[topic]
+        num_impls = length(implementors)
+
+        # remove the requestor from the list of implementors
+        filter!(t -> t != msg.twin, implementors)
         target = select_twin(router, domain(twin), topic, implementors)
         @debug "[broker] exposer for $topic: [$target]"
         if target === nothing
-            resmsg = ResMsg(
-                msg,
-                STS_METHOD_UNAVAILABLE,
-                "$topic: method unavailable"
-            )
-            put!(msg.twin.process.inbox, resmsg)
-        elseif target == msg.twin
-            @warn "[$target]: loopback detected"
-            resmsg = ResMsg(
-                msg,
-                STS_METHOD_LOOPBACK,
-                "$topic: method loopback"
-            )
+            if num_impls != length(implementors)
+                resmsg = ResMsg(
+                    msg,
+                    STS_METHOD_LOOPBACK,
+                    "$topic: method loopback"
+                )
+            else
+                resmsg = ResMsg(
+                    msg,
+                    STS_METHOD_UNAVAILABLE,
+                    "$topic: method unavailable"
+                )
+            end
             put!(msg.twin.process.inbox, resmsg)
         elseif target !== nothing
             put!(target.process.inbox, msg)

@@ -12,11 +12,13 @@ Rembus.info!()
 broker_name = "simo_broker"
 server_name = "simo_server"
 
+postfix = "ws://127.0.0.1:8000"
+
 fixture = Dict(
-    "a" => 1,
-    "b" => 2,
-    "c" => missing,
-    "d" => 4
+    "a@$postfix" => 1,
+    "b@$postfix" => 2,
+    "c@$postfix" => missing,
+    "d@$postfix" => 4
 )
 
 function myservice(ctx, rb, source, val)
@@ -102,7 +104,7 @@ function run()
     @test length(results) === length(pool)
     for (name, result) in results
         @info "[ha_setup] $name => $result"
-        if name === "c"
+        if name === "c@$postfix"
             @test ismissing(result)
         else
             @test result == fixture[name]

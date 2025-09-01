@@ -358,7 +358,9 @@ function component(
         name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
     )
     set_policy(router, policy)
-    for url in urls
+    for url_str in urls
+        url = RbURL(url_str)
+        url.props["pool"] = true
         component(url, router, enc)
     end
     return bind(router)
@@ -977,6 +979,30 @@ function admin_msg(router::Router, msg)
     return true
 end
 
+function manage_target(router, twin, target_twin, msg)
+    if !isopen(target_twin)
+        m = ResMsg(msg, STS_TARGET_DOWN, msg.target)
+        put!(twin.process.inbox, m)
+    else
+        if target_twin == twin
+            local_fn(router, twin, msg)
+        else
+            # check if remote expose the topic
+            if haskey(router.topic_impls, msg.topic)
+                put!(target_twin.process.inbox, msg)
+            else
+                put!(
+                    twin.process.inbox,
+                    ResMsg(
+                        msg, STS_METHOD_NOT_FOUND, "$(msg.topic): method unknown"
+                    )
+                )
+            end
+        end
+    end
+
+end
+
 function rpc_request(router::Router, msg, implementor_rule)
     twin = msg.twin
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
@@ -986,24 +1012,12 @@ function rpc_request(router::Router, msg, implementor_rule)
         # it is a direct rpc
         if haskey(router.id_twin, msg.target)
             target_twin = router.id_twin[msg.target]
-            if !isopen(target_twin)
-                m = ResMsg(msg, STS_TARGET_DOWN, msg.target)
-                put!(twin.process.inbox, m)
-            else
-                if target_twin == twin
-                    local_fn(router, twin, msg)
-                else
-                    # check if remote expose the topic
-                    if haskey(router.topic_impls, msg.topic)
-                        put!(target_twin.process.inbox, msg)
-                    else
-                        put!(
-                            twin.process.inbox,
-                            ResMsg(
-                                msg, STS_METHOD_NOT_FOUND, "$(msg.topic): method unknown"
-                            )
-                        )
-                    end
+            manage_target(router, twin, target_twin, msg)
+        elseif any(id -> startswith(id, msg.target * "@"), keys(router.id_twin))
+            for (tid, target_twin) in router.id_twin
+                if startswith(tid, msg.target * "@")
+                    manage_target(router, twin, target_twin, msg)
+                    break
                 end
             end
         else

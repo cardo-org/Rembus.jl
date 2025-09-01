@@ -166,8 +166,7 @@ Load the persisted twin configuration from disk.
 function load_twin(twin::Twin)
     @debug "[$twin] loading configuration"
     router = last_downstream(twin.router)
-    twinid = rid(twin)
-    fn = joinpath(broker_dir(router), "twins", "$twinid.json")
+    fn = joinpath(broker_dir(router), "twins", "$(twin.uid.id).json")
     if isfile(fn)
         content = read(fn, String)
         cfg = JSON3.read(content, Dict, allow_inf=true)
@@ -249,12 +248,17 @@ function save_twin(router::Router, twin::Twin)
         twin_cfg["exposers"] = exposed_topics(router, twin)
         twin_cfg["mark"] = twin.mark
 
+        if is_uuid4(router.process.supervisor.id)
+            @debug "[$twin] is a pool element: skipping twin configuration save"
+            return nothing
+        end
+
         dir = joinpath(broker_dir(router), "twins")
         if !isdir(dir)
             mkpath(dir)
         end
 
-        fn = joinpath(dir, "$twinid.json")
+        fn = joinpath(dir, "$(twin.uid.id).json")
         open(fn, "w") do io
             write(io, JSON3.write(twin_cfg, allow_inf=true))
         end
