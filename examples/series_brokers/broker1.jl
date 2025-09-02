@@ -2,4 +2,6 @@
 using Rembus
 
 rb = component("ws://localhost:3002/broker2", ws=3001)
+
+println("up and running")
 wait(rb)

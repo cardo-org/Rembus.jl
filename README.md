@@ -25,7 +25,7 @@ Rembus is a middleware to implement high performance and fault-tolerant distribu
 Start the broker:
 
 ```sh
-julia -e "using Rembus; broker()"
+julia -e "using Rembus; brokerd()"
 ```
 
 ## RPC server

@@ -3,7 +3,8 @@ using Rembus
 
 foo(x) = 2x
 
-rb = component(["ws://localhost:3001/broker1", "ws://localhost:3002/broker2"])
+rb = component(["ws://localhost:3001/srv", "ws://localhost:3002/srv"])
 expose(rb, foo)
 
+println("up and running")
 wait(rb)

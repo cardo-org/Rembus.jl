@@ -23,6 +23,8 @@ function run()
     response = direct(rb, "pool_a", "myservice", "hello")
     @test response == "hello"
 
+    @test_throws RembusError direct(rb, "invalid_pool", "myservice", "hello")
+
     futres = Rembus.fpc(rb, "myservice", ("hello",))
     @test Rembus.issuccess(futres)
     @test fetch(futres) == "hello"

@@ -361,7 +361,9 @@ function component(
     for url_str in urls
         url = RbURL(url_str)
         url.props["pool"] = true
-        component(url, router, enc)
+        c = component(url, router, enc)
+        # a local twin of a pool component must be reactive to forward pub/sub messages
+        c.reactive = true
     end
     return bind(router)
 end
@@ -401,16 +403,6 @@ function component(
     )
     set_policy(router, policy)
     return component(url, router, enc, failovers)
-end
-
-function component(
-    url::AbstractString,
-    router::AbstractRouter,
-    enc=CBOR,
-    failovers=[]
-)
-    uid = RbURL(url)
-    return component(uid, router, enc, failovers)
 end
 
 function component(url::RbURL, router::AbstractRouter, enc=CBOR, failovers=[])
@@ -523,8 +515,7 @@ function reconnect(twin::Twin, url::RbURL)
             router = last_downstream(twin.router)
 
             # repost the configuration
-            @debug "[$twin] reposting exposers"
-            twin.reactive = true
+            @debug "[$twin] reposting exposed and subscribed"
 
             if !twin_setup(router, twin)
                 @warn "[$twin] reconnection setup failed"
@@ -1014,12 +1005,9 @@ function rpc_request(router::Router, msg, implementor_rule)
             target_twin = router.id_twin[msg.target]
             manage_target(router, twin, target_twin, msg)
         elseif any(id -> startswith(id, msg.target * "@"), keys(router.id_twin))
-            for (tid, target_twin) in router.id_twin
-                if startswith(tid, msg.target * "@")
-                    manage_target(router, twin, target_twin, msg)
-                    break
-                end
-            end
+            targets = filter(p -> startswith(p.first, msg.target * "@"), router.id_twin)
+            target_twin = select_twin(router, domain(twin), msg.topic, values(targets))
+            manage_target(router, twin, target_twin, msg)
         else
             # target twin is unavailable
             m = ResMsg(msg, STS_TARGET_NOT_FOUND, msg.target)

@@ -184,3 +184,12 @@ end
     meta = Rembus.get_meta(io, header)
     @test haskey(meta, "ws")
 end
+
+@testitem "component_starts_with_slash" begin
+    for str in ["/mycomponent", "//localhost/mycomponent", "mycomponent/"]
+        url = Rembus.RbURL(str)
+        @test url.id === "mycomponent"
+    end
+
+    @test_throws ErrorException Rembus.RbURL("foo/bar")
+end

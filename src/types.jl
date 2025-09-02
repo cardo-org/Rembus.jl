@@ -166,6 +166,17 @@ mutable struct RbURL
     end
     function RbURL(url::String)
         (cid, tenant, protocol, host, port, props) = spliturl(url)
+        if startswith(cid, '/')
+            cid = String(deleteat!(collect(cid), 1))
+        end
+        if endswith(cid, '/')
+            cid = String(deleteat!(collect(cid), length(cid)))
+        end
+
+        if contains(cid, '/')
+            error("invalid character '/' in component id")
+        end
+
         new(cid, tenant, protocol, host, port, props)
     end
 end
@@ -672,7 +683,13 @@ end
 $(TYPEDSIGNATURES)
 Wait for RPC requests and Pub/Sub messages.
 """
-Base.wait(rb::Twin) = isdefined(rb, :process) ? wait(rb.process.task) : nothing
+function Base.wait(rb::Twin)
+    if !isinteractive() && isdefined(rb, :process)
+        wait(rb.process.task)
+    end
+
+    return nothing
+end
 
 isconnected(twin::Twin) = isopen(twin.socket)
 
