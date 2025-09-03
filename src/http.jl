@@ -109,25 +109,22 @@ end
 function http_jsonrpc(router::Router, req::HTTP.Request)
     (cid, isauth) = authenticate(router, req)
     @debug "http_jsonrpc: cid=$cid isauth=$isauth"
-
     retval = Dict{String,Any}(
         "jsonrpc" => "2.0",
         "id" => missing
     )
-
+    sts = 200
     if isempty(req.body)
         retval["error"] = Dict(
             "code" => -32600,
             "message" => "invalid JSON: empty content"
         )
-        return jsonrpc_response(400, retval)
+        return jsonrpc_response(sts, retval)
     end
 
-    sts = 200
     content = String(req.body)
 
     if haskey(router.id_twin, cid)
-        sts = 400
         retval["error"] = Dict(
             "code" => -32000,
             "message" => "component $cid not available for rpc via http"
@@ -148,7 +145,6 @@ function http_jsonrpc(router::Router, req::HTTP.Request)
                 if response.status == 0
                     retval["result"] = jsonrpc_response_data(response)
                 else
-                    sts = 400
                     retval["error"] = Dict(
                         "code" => -32000,
                         "message" => jsonrpc_response_data(response)
@@ -165,7 +161,6 @@ function http_jsonrpc(router::Router, req::HTTP.Request)
                 )
             end
         catch e
-            sts = 400
             retval["error"] = Dict(
                 "code" => -32000,
                 "message" => string(e)

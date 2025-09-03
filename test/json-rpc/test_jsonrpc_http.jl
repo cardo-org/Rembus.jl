@@ -38,18 +38,20 @@ function jsonrpc_wrong_request(url::String, method::String, params=nothing)
     )
     request_obj["params"] = "unexpected_string_instead_of_array"
 
-    HTTP.post(
+    response = HTTP.post(
         url,
         ["Content-Type" => "application/json"],
         JSON3.write(request_obj)
     )
+    return JSON3.read(String(response.body), Dict)
 end
 
 function jsonrpc_empty_request(url::String)
-    HTTP.post(
+    response = HTTP.post(
         url,
         ["Content-Type" => "application/json"],
     )
+    return JSON3.read(String(response.body), Dict)
 end
 
 
@@ -79,12 +81,12 @@ function jsonrpc_connect_named(url::String, cid::String)
         "id" => 999
     )
 
-    HTTP.post(
+    response = HTTP.post(
         url,
         ["Authorization" => auth],
         JSON3.write(request_obj)
     )
-
+    return JSON3.read(String(response.body), Dict)
 end
 
 function jsonrpc_invalid_type(url::String; id)
@@ -152,16 +154,11 @@ function run()
     subscribe(srv, mytopic)
     reactive(srv)
 
-    try
-        response = jsonrpc_wrong_request(
-            rembus_url, "myservice", [x, y]
-        )
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test isnothing(response["id"])
-    end
+    response = jsonrpc_wrong_request(
+        rembus_url, "myservice", [x, y]
+    )
+    @test haskey(response, "error")
+    @test isnothing(response["id"])
 
     msgid = 1
     response = jsonrpc_request(
@@ -172,55 +169,30 @@ function run()
     @test response["id"] == msgid
 
     msgid = 2
-    try
-        response = jsonrpc_request(
-            rembus_url, "unknow_service"; id=msgid
-        )
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test response["id"] == msgid
-    end
+    response = jsonrpc_request(
+        rembus_url, "unknow_service"; id=msgid
+    )
+    @test haskey(response, "error")
+    @test response["id"] == msgid
 
-    try
-        response = jsonrpc_empty_request(rembus_url)
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test isnothing(response["id"])
-    end
+    response = jsonrpc_empty_request(rembus_url)
+    @test haskey(response, "error")
+    @test isnothing(response["id"])
 
     # Try to connect with a component id already in use
-    try
-        jsonrpc_connect_named(rembus_url, "jsonrpc_server")
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test isnothing(response["id"])
-    end
+    jsonrpc_connect_named(rembus_url, "jsonrpc_server")
+    @test haskey(response, "error")
+    @test isnothing(response["id"])
 
     msgid = 3
-    try
-        jsonrpc_invalid_type(rembus_url; id=msgid)
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test isnothing(response["id"])
-    end
+    jsonrpc_invalid_type(rembus_url; id=msgid)
+    @test haskey(response, "error")
+    @test isnothing(response["id"])
 
     msgid = 4
-    try
-        jsonrpc_invalid_response(rembus_url; id=msgid)
-    catch e
-        response = JSON3.read(String(e.response.body), Dict)
-        @test isa(e, HTTP.ExceptionRequest.StatusError)
-        @test haskey(response, "error")
-        @test isnothing(response["id"])
-    end
+    jsonrpc_invalid_response(rembus_url; id=msgid)
+    @test haskey(response, "error")
+    @test isnothing(response["id"])
 
     msg = "hello rembus"
     response = jsonrpc_publish(
@@ -235,6 +207,14 @@ function run()
     )
     @test haskey(response, "result")
     @test response["result"] == arraytable(df)
+    @test response["id"] == msgid
+
+    msgid = 6
+    response = jsonrpc_request(
+        rembus_url, "myservice", [x, y, "unexpected_arg"]; id=msgid
+    )
+    @info "RESPONSE: $response"
+    @test haskey(response, "error")
     @test response["id"] == msgid
 
 end

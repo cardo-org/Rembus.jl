@@ -193,3 +193,20 @@ end
 
     @test_throws ErrorException Rembus.RbURL("foo/bar")
 end
+
+@testitem "wait for shutdown" begin
+    rb = component(ws=9999)
+    t = time()
+    Timer(t -> shutdown(rb), 2)
+    wait(rb)
+    @test time() - t > 2.0
+end
+
+@testitem "no message dir" begin
+    router = Rembus.get_router(name="test_router")
+    mdir = Rembus.messages_dir(router)
+    rm(mdir, recursive=true)
+    @test !isdir(mdir)
+    msgs = Rembus.msg_files(router)
+    @test isempty(msgs)
+end

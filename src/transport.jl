@@ -513,18 +513,25 @@ function handle_ack_timeout(tim, socket, msg, msgid)
     end
 end
 
+
+function create_msg_timer(socket, msg)
+    msgid = msg.id
+    r = last_downstream(msg.twin.router)
+    timer = Timer(
+        (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
+    )
+
+    ack_cond = FutureResponse(msg, timer)
+    socket.out[msgid] = ack_cond
+
+    return ack_cond
+end
+
 function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
     if msg.twin.enc == JSON && isa(socket, WS)
         if msg.flags > QOS0
-            msgid = msg.id
-            r = last_downstream(msg.twin.router)
-            timer = Timer(
-                (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
-            )
-
-            ack_cond = FutureResponse(msg, timer)
-            socket.out[msgid] = ack_cond
+            ack_cond = create_msg_timer(socket, msg)
             pkt = JSON3.write(Dict(
                 "jsonrpc" => "2.0",
                 "id" => string(msg.id),
@@ -538,7 +545,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
 
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
-            delete!(socket.out, msgid)
+            delete!(socket.out, msg.id)
         else
             pkt = JSON3.write(Dict(
                 "jsonrpc" => "2.0",
@@ -550,19 +557,12 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     else
         content = tagvalue_if_dataframe(msg.data)
         if msg.flags > QOS0
-            msgid = msg.id
-            r = last_downstream(msg.twin.router)
-            timer = Timer(
-                (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
-            )
-
-            ack_cond = FutureResponse(msg, timer)
-            socket.out[msgid] = ack_cond
-            pkt = [TYPE_PUB | msg.flags, id2bytes(msgid), msg.topic, content]
+            ack_cond = create_msg_timer(socket, msg)
+            pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
             transport_write(socket, pkt)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
-            delete!(socket.out, msgid)
+            delete!(socket.out, msg.id)
         else
             pkt = [TYPE_PUB | msg.flags, msg.topic, content]
             transport_write(socket, pkt)
@@ -728,7 +728,6 @@ function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
         ))
         ws_write(socket.sock, pkt)
     else
-
         content = tagvalue_if_dataframe(msg.data)
         pkt = [
             TYPE_RESPONSE | msg.flags,

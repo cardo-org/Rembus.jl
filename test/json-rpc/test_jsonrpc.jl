@@ -24,6 +24,13 @@ function run()
     @info "result=$result"
     @test result == x + y
 
+    try
+        rpc(cli, "myservice", x, y, "unexpected_arg")
+    catch e
+        @info "caught expected error: $e"
+        @test occursin("MethodError", string(e))
+    end
+
     sub = component("jsonrpc_subscriber", enc=Rembus.JSON)
     subscribe(sub, mytopic)
     inject(sub, ctx)
