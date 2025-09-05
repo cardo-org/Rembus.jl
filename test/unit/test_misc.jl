@@ -205,7 +205,10 @@ end
 @testitem "no message dir" begin
     router = Rembus.get_router(name="test_router")
     mdir = Rembus.messages_dir(router)
-    rm(mdir, recursive=true)
+    if isdir(mdir)
+        rm(mdir, recursive=true)
+    end
+
     @test !isdir(mdir)
     msgs = Rembus.msg_files(router)
     @test isempty(msgs)

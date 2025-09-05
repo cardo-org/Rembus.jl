@@ -1,6 +1,7 @@
+# 🔵 sub-2.jl
 using Rembus
 
-mytopic(data) = println("[Sub-2] monitor inputs $data")
+mytopic(data) = println("[Sub-2] mytopic:$data")
 
 foo() = "sub-2.jl"
 

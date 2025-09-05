@@ -1,6 +1,7 @@
+# 🔵 sub-1.jl
 using Rembus
 
-mytopic(data) = println("[Sub-1] updating DB with $data")
+mytopic(data) = println("[Sub-1] mytopic:$data")
 
 foo() = "sub-1.jl"
 
