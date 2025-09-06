@@ -3,8 +3,10 @@ using UUIDs
 
 consume(topic, value) = println("$topic = $value")
 
-url = isempty(ARGS) ? string(uuid4()) : ARGS[1]
+url = string(uuid4())
+topic = isempty(ARGS) ? "a/*/c" : ARGS[1]
+
 rb = component(url)
-subscribe(rb, "a/*/c", consume)
+subscribe(rb, topic, consume)
 reactive(rb)
 wait(rb)

@@ -92,4 +92,4 @@ function run()
     close(srv_noctx)
 end
 
-execute(run, "test_jsonrpc_errors", http=9000)
+execute(run, "test_jsonrpc_namedargs", http=9000)

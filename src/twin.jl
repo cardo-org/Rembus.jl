@@ -1108,6 +1108,17 @@ function challenge(router::Router, twin::Twin, msgid)
     return ResMsg(twin, msgid, STS_CHALLENGE, challenge_val)
 end
 
+function create_request(twin, msg_id::UInt128, request::AbstractString, params)
+    if contains(request, '/')
+        target = request[1:(findlast(==('/'), request)-1)]
+        topic = request[(findlast(==('/'), request)+1):end]
+    else
+        target = nothing
+        topic = request
+    end
+
+    return RpcReqMsg(twin, msg_id, topic, params, target)
+end
 
 """
     jsonrpc_request(pkt::Dict, msg_id, params) -> RembusMsg
@@ -1117,7 +1128,7 @@ Parse a JSON-RPC request and return the appropriate RembusMsg subtype.
 function jsonrpc_request(twin, pkt::Dict, msg_id, params)
     if isa(params, Vector) || isnothing(params)
         # Default to RPC request
-        return RpcReqMsg(twin, msg_id, pkt["method"], params)
+        return create_request(twin, msg_id, pkt["method"], params)
     elseif isa(params, Dict)
         msg_type = get(params, "__type__", nothing)
         if msg_type in (QOS1, QOS2)
@@ -1167,7 +1178,7 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
         elseif msg_type == TYPE_UNREGISTER
             return Unregister(twin, msg_id)
         else
-            return RpcReqMsg(twin, msg_id, pkt["method"], params)
+            return create_request(twin, msg_id, pkt["method"], params)
         end
     else
         error("$(pkt): invalid JSON-RPC request")

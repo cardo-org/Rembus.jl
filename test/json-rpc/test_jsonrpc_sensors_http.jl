@@ -4,6 +4,8 @@ using Base64
 using DataFrames
 using JSONTables
 
+node_name = "aaa/bbb/sensor-1"
+
 df = DataFrame(a=1:3, b=["x", "y", "z"])
 
 function myservice(ctx, rb, x, y)
@@ -30,10 +32,10 @@ Send a wrong JSON-RPC request.
 # Returns
 - Parsed JSON response
 """
-function jsonrpc_wrong_request(url::String, method::String, params=nothing)
+function jsonrpc_wrong_request(url::String, params=nothing)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => method,
+        "method" => "$node_name/wrong_method",
         "id" => 999
     )
     request_obj["params"] = "unexpected_string_instead_of_array"
@@ -46,19 +48,11 @@ function jsonrpc_wrong_request(url::String, method::String, params=nothing)
     return JSON3.read(String(response.body), Dict)
 end
 
-function jsonrpc_empty_request(url::String)
-    response = HTTP.post(
-        url,
-        ["Content-Type" => "application/json"],
-    )
-    return JSON3.read(String(response.body), Dict)
-end
-
 
 function jsonrpc_request(url::String, method::String, params=nothing; id)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => method,
+        "method" => "$node_name/$method",
         "id" => id
     )
     if params !== nothing
@@ -77,7 +71,7 @@ function jsonrpc_connect_named(url::String, cid::String)
     auth = Base64.base64encode(cid)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => "uptime",
+        "method" => "$node_name/uptime",
         "id" => 999
     )
 
@@ -89,44 +83,11 @@ function jsonrpc_connect_named(url::String, cid::String)
     return JSON3.read(String(response.body), Dict)
 end
 
-function jsonrpc_invalid_type(url::String; id)
-    request_obj = Dict{String,Any}(
-        "jsonrpc" => "2.0",
-        "params" => Dict(
-            "__type__" => 9999
-        ),
-        "id" => id
-    )
-
-    response = HTTP.post(
-        url,
-        ["Content-Type" => "application/json"],
-        JSON3.write(request_obj)
-    )
-    return JSON3.read(String(response.body), Dict)
-end
-
-function jsonrpc_invalid_response(url::String; id)
-    request_obj = Dict{String,Any}(
-        "jsonrpc" => "2.0",
-        "error" => Dict(
-            "__type__" => 9999
-        ),
-        "id" => id
-    )
-
-    response = HTTP.post(
-        url,
-        ["Content-Type" => "application/json"],
-        JSON3.write(request_obj)
-    )
-    return JSON3.read(String(response.body), Dict)
-end
 
 function jsonrpc_publish(url::String, method::String, params=nothing)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => method
+        "method" => "$node_name/$method"
     )
     if params !== nothing
         request_obj["params"] = params
@@ -147,15 +108,15 @@ function run()
     y = 20
     ctx = Dict()
 
-    srv = component("jsonrpc_server")
+    srv = component(node_name)
     expose(srv, myservice)
     expose(srv, mydataframe)
     inject(srv, ctx)
-    subscribe(srv, mytopic)
+    subscribe(srv, "$node_name/mytopic", mytopic)
     reactive(srv)
 
     response = jsonrpc_wrong_request(
-        rembus_url, "myservice", [x, y]
+        rembus_url, [x, y]
     )
     @test haskey(response, "error")
     @test isnothing(response["id"])
@@ -168,29 +129,8 @@ function run()
     @test response["result"] == x + y
     @test response["id"] == msgid
 
-    msgid = 2
-    response = jsonrpc_request(
-        rembus_url, "unknow_service"; id=msgid
-    )
-    @test haskey(response, "error")
-    @test response["id"] == msgid
-
-    response = jsonrpc_empty_request(rembus_url)
-    @test haskey(response, "error")
-    @test isnothing(response["id"])
-
     # Try to connect with a component id already in use
-    response = jsonrpc_connect_named(rembus_url, "jsonrpc_server")
-    @test haskey(response, "error")
-    @test isnothing(response["id"])
-
-    msgid = 3
-    jsonrpc_invalid_type(rembus_url; id=msgid)
-    @test haskey(response, "error")
-    @test isnothing(response["id"])
-
-    msgid = 4
-    jsonrpc_invalid_response(rembus_url; id=msgid)
+    response = jsonrpc_connect_named(rembus_url, node_name)
     @test haskey(response, "error")
     @test isnothing(response["id"])
 
@@ -201,7 +141,7 @@ function run()
     sleep(1) # wait for the topic to be processed
     @test ctx["msg"] == msg
 
-    msgid = 5
+    msgid = 2
     response = jsonrpc_request(
         rembus_url, "mydataframe"; id=msgid
     )
@@ -209,7 +149,7 @@ function run()
     @test response["result"] == arraytable(df)
     @test response["id"] == msgid
 
-    msgid = 6
+    msgid = 3
     response = jsonrpc_request(
         rembus_url, "myservice", [x, y, "unexpected_arg"]; id=msgid
     )

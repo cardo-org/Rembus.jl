@@ -523,6 +523,41 @@ function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
 end
 
 """
+    put(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
+
+Publish (`Vararg`) data values to a channel with `topic` prefixed with the component name.
+
+Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
+
+The `data` values can be of any type. However, if the components are implemented in
+different languages, the values must be either `DataFrames` or primitive types that are
+CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for
+interoperability.
+
+The keywork argument `qos` defines the quality of service (QoS) for message delivery.
+Possible values:
+
+- `Rembus.QOS0`: (default): At most one message is delivered to the subscriber.
+- `Rembus.QOS1`: At least one message is delivered to the subscriber.
+- `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
+
+# Examples
+
+```
+rb = component("myname")
+put(rb, "mytopic", 1, 2)
+```
+
+The message topic is `myname/mytopic`.
+"""
+function put(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
+    wait_open(twin) || failover_queue(twin) || error("connection down")
+    msg = PubSubMsg(twin, twin.uid.id * "/" * topic, collect(data), qos)
+    return publish_msg(twin, msg)
+end
+
+
+"""
     rpc(rb, service::AbstractString, data...)
 
 Make a request for a remote `service` method using Vararg `data` values as method arguments.

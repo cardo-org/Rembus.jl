@@ -190,8 +190,6 @@ end
         url = Rembus.RbURL(str)
         @test url.id === "mycomponent"
     end
-
-    @test_throws ErrorException Rembus.RbURL("foo/bar")
 end
 
 @testitem "wait for shutdown" begin

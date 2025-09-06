@@ -55,6 +55,7 @@ export
     direct,
     rpc,
     publish,
+    put,
     expose,
     unexpose,
     subscribe,

@@ -49,6 +49,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "simo" begin
             include("broker/test_simo.jl")
         end
+        @time @safetestset "hierarchy" begin
+            include("broker/test_hierarchy.jl")
+        end
         @time @safetestset "setup" begin
             include("broker/test_setup.jl")
         end
@@ -59,6 +62,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "jsonrpc_http" begin
             include("json-rpc/test_jsonrpc_http.jl")
+        end
+        @time @safetestset "jsonrpc_sensors_http" begin
+            include("json-rpc/test_jsonrpc_sensors_http.jl")
         end
         @time @safetestset "jsonrpc_http_namedargs" begin
             include("json-rpc/test_jsonrpc_http_namedargs.jl")

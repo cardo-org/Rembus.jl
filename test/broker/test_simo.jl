@@ -103,7 +103,7 @@ function run()
     results = rpc(rb, "myservice", 1)
     @test length(results) === length(pool)
     for (name, result) in results
-        @info "[ha_setup] $name => $result"
+        @info "[simo] $name => $result"
         if name === "c@$postfix"
             @test ismissing(result)
         else
@@ -114,14 +114,14 @@ function run()
     shutdown()
 end
 
-@info "[ha_setup] start"
+@info "[simo] start"
 try
     request_timeout!(5)
     run()
 catch e
     @test false
-    @error "[ha_setup] error: $e"
+    @error "[simo] error: $e"
 finally
     shutdown()
 end
-@info "[ha_setup] stop"
+@info "[simo] stop"

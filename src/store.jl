@@ -159,6 +159,20 @@ function load_admins(router)
 end
 
 #=
+
+Return the twin filename, transforming the '/'.
+=#
+function twin_file(router, name)
+    parts = split(name, '/')
+    dirs = parts[1:end-1]
+    twin_dir = joinpath(broker_dir(router), "twins", dirs...)
+    if !isdir(twin_dir)
+        mkpath(twin_dir)
+    end
+    return joinpath(twin_dir, last(parts) * ".json")
+end
+
+#=
     load_twin(twin)
 
 Load the persisted twin configuration from disk.
@@ -166,7 +180,7 @@ Load the persisted twin configuration from disk.
 function load_twin(twin::Twin)
     @debug "[$twin] loading configuration"
     router = last_downstream(twin.router)
-    fn = joinpath(broker_dir(router), "twins", "$(twin.uid.id).json")
+    fn = twin_file(router, twin.uid.id)
     if isfile(fn)
         content = read(fn, String)
         cfg = JSON3.read(content, Dict, allow_inf=true)
@@ -258,7 +272,7 @@ function save_twin(router::Router, twin::Twin)
             mkpath(dir)
         end
 
-        fn = joinpath(dir, "$(twin.uid.id).json")
+        fn = twin_file(router, twin.uid.id)
         open(fn, "w") do io
             write(io, JSON3.write(twin_cfg, allow_inf=true))
         end

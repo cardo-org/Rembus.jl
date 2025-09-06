@@ -173,10 +173,6 @@ mutable struct RbURL
             cid = String(deleteat!(collect(cid), length(cid)))
         end
 
-        if contains(cid, '/')
-            error("invalid character '/' in component id")
-        end
-
         new(cid, tenant, protocol, host, port, props)
     end
 end
