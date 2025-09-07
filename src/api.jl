@@ -137,7 +137,8 @@ it to act as a broker. These ports are specified using keyword arguments.
       RPC method.
     - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
     - `"less_busy"`: Chooses the node with fewer outstanding requests.
-
+- `enc=Rembus.CBOR`: wire message format for sending messages
+   Set to `Rembus.JSON` for JSON-RPC-2.0 text encoding.
 """
 function component(
     url::AbstractString;
@@ -479,21 +480,19 @@ end
 """
     publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
-Publish (`Vararg`) data values to a specified `topic`.
+Publish one or more data values to a `topic`.
 
-Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
+Each element in `data` is passed as an argument to the remote method subscribed to
+`topic`.
 
-The `data` values can be of any type. However, if the components are implemented in
-different languages, the values must be either `DataFrames` or primitive types that are
-CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for
-interoperability.
+The `data` arguments may be of any type. For interoperability across components
+implemented in different languages, the values should be either `DataFrame`s or primitive
+types that are CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)).
 
-The keywork argument `qos` defines the quality of service (QoS) for message delivery.
-Possible values:
-
-- `Rembus.QOS0`: (default): At most one message is delivered to the subscriber (message may be lost).
-- `Rembus.QOS1`: At least one message is delivered to the subscriber (message may be duplicated).
-- `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
+The keyword argument `qos` specifies the quality of service (QoS) for message delivery:
+- `Rembus.QOS0` (default): At most once delivery. A message may be delivered zero or one time.
+- `Rembus.QOS1`: At least once delivery. A message is delivered one or more times.
+- `Rembus.QOS2`: Exactly once delivery. A message is delivered once and only once.
 
 # Examples
 
@@ -503,14 +502,14 @@ If the subscriber is a method that expects two arguments:
 mytopic(x, y) = ...  # do something with x and y
 ```
 
-You can publish a message with (`Vararg`) data consisting of two values:
+You can publish a message with two data values::
 
 ```
 rb = component("myname")
 publish(rb, "mytopic", 1, 2)
 ```
 
-If the remote subscribed method has no arguments invoke `publish` as:
+If the remote subscribed method has no arguments, publish without data:
 
 ```
 publish(rb, "mytopic")
@@ -525,21 +524,20 @@ end
 """
     put(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
-Publish (`Vararg`) data values to a channel with `topic` prefixed with the component name.
+Publish one or more data values to a channel identified by `topic`, which is automatically
+prefixed with the component name.
 
-Each item in `data` is mapped to an argument of the remote method subscribed to the `topic`.
+Each element in `data` is passed as an argument to the remote method subscribed to
+`topic`.
 
-The `data` values can be of any type. However, if the components are implemented in
-different languages, the values must be either `DataFrames` or primitive types that are
-CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)) for
-interoperability.
+The `data` arguments may be of any type. For interoperability across components
+implemented in different languages, the values should be either `DataFrame`s or primitive
+types that are CBOR-encodable (see [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html)).
 
-The keywork argument `qos` defines the quality of service (QoS) for message delivery.
-Possible values:
-
-- `Rembus.QOS0`: (default): At most one message is delivered to the subscriber.
-- `Rembus.QOS1`: At least one message is delivered to the subscriber.
-- `Rembus.QOS2`: Exactly one message is delivered to the subscriber.
+The keyword argument `qos` specifies the quality of service (QoS) for message delivery:
+- `Rembus.QOS0` (default): At most once delivery. A message may be delivered zero or one time.
+- `Rembus.QOS1`: At least once delivery. A message is delivered one or more times.
+- `Rembus.QOS2`: Exactly once delivery. A message is delivered once and only once.
 
 # Examples
 
@@ -548,7 +546,7 @@ rb = component("myname")
 put(rb, "mytopic", 1, 2)
 ```
 
-The message topic is `myname/mytopic`.
+This publishes the values 1 and 2 to the topic `myname/mytopic`.
 """
 function put(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
     wait_open(twin) || failover_queue(twin) || error("connection down")

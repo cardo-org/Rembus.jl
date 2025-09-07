@@ -30,6 +30,7 @@ makedocs(;
         "Component API" => "api.md",
         "Macro-based API" => "macro_api.md",
         "HTTP Rest API" => "http_api.md",
+        "JSON-RPC" => "json-rpc.md",
         "Client-Server" => "brokerless.md",
         "Fault-tolerance features" => "fault_tolerance.md",
         "Security" => "security.md",
