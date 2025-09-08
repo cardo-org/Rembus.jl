@@ -96,14 +96,73 @@ function http_unexpose(router::Router, req::HTTP.Request)
 end
 
 function jsonrpc_response(sts, retval)
-    return HTTP.Response(
-        sts,
-        [
-            "Content_type" => "application/json",
-            "Access-Control-Allow-Origin" => "*"
-        ],
-        JSON3.write(retval)
-    )
+    headers = [
+        "Content_type" => "application/json",
+        "Access-Control-Allow-Origin" => "*"
+    ]
+    if isnothing(retval)
+        return HTTP.Response(sts, headers)
+    else
+        return HTTP.Response(sts, headers, JSON3.write(retval))
+    end
+end
+
+function lazy_to_julia(val)
+    if val isa JSON3.Object
+        return Dict{String,Any}(string(k) => lazy_to_julia(v) for (k, v) in val)
+    elseif val isa JSON3.Array
+        return [lazy_to_julia(v) for v in val]
+    else
+        return val
+    end
+end
+
+function http_jsonrpc_parse(router::Router, twin::Twin, payload::String)
+    pkt = lazy_to_julia(JSON3.read(payload))
+
+    if pkt isa Dict
+        msg = json_parse(twin, pkt)
+        retval = http_jsonrpc_eval(router, twin, msg)
+    elseif pkt isa Vector
+        retval = []
+        for obj in Vector(pkt)
+            msg = json_parse(twin, obj)
+            result = http_jsonrpc_eval(router, twin, msg)
+            if result !== nothing
+                push!(retval, result)
+            end
+        end
+        if isempty(retval)
+            retval = nothing
+        end
+    end
+    return retval
+end
+
+function http_jsonrpc_eval(router::Router, twin::Twin, msg::RembusMsg)
+    @debug "http_jsonrpc: msg=$msg"
+    retval = nothing
+
+    if isa(msg, RpcReqMsg)
+        fut_response = fpc(twin, msg.topic, isnothing(msg.data) ? () : msg.data)
+        response = fetch(fut_response.future)
+        retval = Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "id" => msg.id
+        )
+        if response.status == 0
+            retval["result"] = jsonrpc_response_data(response)
+        else
+            retval["error"] = Dict(
+                "code" => -32000,
+                "message" => jsonrpc_response_data(response)
+            )
+        end
+    elseif isa(msg, PubSubMsg)
+        pubsub_msg(router, msg)
+    end
+
+    return retval
 end
 
 function http_jsonrpc(router::Router, req::HTTP.Request)
@@ -135,31 +194,7 @@ function http_jsonrpc(router::Router, req::HTTP.Request)
         twin.socket = Float()
 
         try
-            msg::RembusMsg = json_parse(twin, content)
-            @debug "http_jsonrpc: msg=$msg"
-
-            if isa(msg, RpcReqMsg)
-                fut_response = fpc(twin, msg.topic, isnothing(msg.data) ? () : msg.data)
-                response = fetch(fut_response.future)
-                retval["id"] = msg.id
-                if response.status == 0
-                    retval["result"] = jsonrpc_response_data(response)
-                else
-                    retval["error"] = Dict(
-                        "code" => -32000,
-                        "message" => jsonrpc_response_data(response)
-                    )
-                end
-            elseif isa(msg, PubSubMsg)
-                pubsub_msg(router, msg)
-                return HTTP.Response(
-                    sts,
-                    [
-                        "Content_type" => "application/json",
-                        "Access-Control-Allow-Origin" => "*"
-                    ]
-                )
-            end
+            retval = http_jsonrpc_parse(router, twin, content)
         catch e
             retval["error"] = Dict(
                 "code" => -32000,

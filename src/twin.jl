@@ -1201,8 +1201,7 @@ function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
     error("$pkt:invalid JSON-RPC response")
 end
 
-function json_parse(twin::Twin, payload::String)
-    pkt = JSON3.read(payload, Dict)
+function json_parse(twin::Twin, pkt::Dict)
     @debug "[$twin] json_parse: $pkt"
     uid = get(pkt, "id", missing)
     if ismissing(uid)
@@ -1250,7 +1249,8 @@ function twin_receiver(twin::Twin)
 
             if isa(payload, String)
                 twin.enc = JSON
-                msg::RembusMsg = json_parse(twin, payload)
+                pkt = JSON3.read(payload, Dict)
+                msg::RembusMsg = json_parse(twin, pkt)
             else
                 twin.enc = CBOR
                 msg = broker_parse(twin, payload)

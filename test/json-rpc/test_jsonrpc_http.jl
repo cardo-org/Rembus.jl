@@ -140,6 +140,71 @@ function jsonrpc_publish(url::String, method::String, params=nothing)
     return nothing
 end
 
+function jsonrpc_batch(url::String, method::String, params; id)
+    request_obj = [
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => method,
+            "id" => id,
+            "params" => params
+        ),
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => "uptime",
+            "id" => id + 1
+        )]
+
+    response = HTTP.post(
+        url,
+        ["Content-Type" => "application/json"],
+        JSON3.write(request_obj)
+    )
+    jstr = String(response.body)
+    return JSON3.read(jstr, Vector)
+end
+
+function jsonrpc_batch_mixed(url::String, method::String, params; id)
+    request_obj = [
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => method,
+            "id" => id,
+            "params" => params
+        ),
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => "foo"
+        )]
+
+    response = HTTP.post(
+        url,
+        ["Content-Type" => "application/json"],
+        JSON3.write(request_obj)
+    )
+    jstr = String(response.body)
+    return JSON3.read(jstr, Vector)
+end
+
+function jsonrpc_batch_notify(url::String)
+    request_obj = [
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => "foo"
+        ),
+        Dict{String,Any}(
+            "jsonrpc" => "2.0",
+            "method" => "bar"
+        )]
+
+    response = HTTP.post(
+        url,
+        ["Content-Type" => "application/json"],
+        JSON3.write(request_obj)
+    )
+    content = String(response.body)
+    return content
+end
+
 
 function run()
     rembus_url = "http://localhost:9000"
@@ -215,6 +280,22 @@ function run()
     )
     @test haskey(response, "error")
     @test response["id"] == msgid
+
+    msgid = 7
+    response = jsonrpc_batch(
+        rembus_url, "myservice", [x, y]; id=msgid
+    )
+    @test length(response) == 2
+
+    msgid = 8
+    response = jsonrpc_batch_mixed(
+        rembus_url, "myservice", [x, y]; id=msgid
+    )
+    @test length(response) == 1
+
+    response = jsonrpc_batch_notify(rembus_url)
+    @info "RESPONSE: $response"
+    @test response == ""
 
 end
 
