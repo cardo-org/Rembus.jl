@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-09-09
+
+### Added
+
+- [#53](https://github.com/cardo-org/Rembus.jl/issues/53) JSON_RPC 2.0 API
+
 ## [1.0.0] - 2025-07-20
 
 ### Added
