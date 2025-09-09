@@ -120,7 +120,7 @@ This file may contain:
 * a plaintext shared password string;
 
 To create the RSA or ECDSA  key pairs and send the public key to the broker the
-[`register`](@ref "Component registration") method may be employed.
+[`register`](@ref "Component Registration") method may be employed.
 
 ### Components with admin privilege
 
