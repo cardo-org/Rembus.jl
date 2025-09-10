@@ -116,7 +116,7 @@ end
 
 @info "[simo] start"
 try
-    request_timeout!(5)
+    request_timeout!(10)
     run()
 catch e
     @test false

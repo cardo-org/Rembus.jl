@@ -135,7 +135,7 @@ end
 end
 
 @testitem "topic_auth_storage" begin
-    router = Rembus.get_router(name="myrouter", http=8000)
+    router = Rembus.get_router(name="myrouter", http=6754)
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
     Rembus.save_topic_auth_table(router)
@@ -210,4 +210,6 @@ end
     @test !isdir(mdir)
     msgs = Rembus.msg_files(router)
     @test isempty(msgs)
+
+    shutdown()
 end

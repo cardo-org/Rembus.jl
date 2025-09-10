@@ -576,7 +576,7 @@ function rpc(
     data...
 )
     wait_open(twin) || error("connection down")
-    return fetch(fpc(twin, topic, data))
+    return fetch(fpc(twin, topic, collect(data)))
 end
 
 #  Just for reference, a way to implement rpc api with keyword arguments.
