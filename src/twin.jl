@@ -135,8 +135,7 @@ function keep_alive(twin)
     try
         while true
             sleep(router.settings.ws_ping_interval)
-            (isa(twin.socket, WS) &&
-             isopen(twin.socket.sock.io)) ? WebSockets.ping(twin.socket.sock) : break
+            put!(twin.process.inbox, WsPing())
         end
     catch
     finally
@@ -849,6 +848,14 @@ function end_receiver(twin::Twin)
 end
 
 sendto_origin(::Twin, ::FutureResponse) = false # COV_EXCL_LINE
+
+function sendto_origin(twin::Twin, ::WsPing)
+    if (isa(twin.socket, WS) && isopen(twin.socket.sock.io))
+        WebSockets.ping(twin.socket.sock)
+    end
+
+    return true
+end
 
 function sendto_origin(twin, msg)
     if haskey(twin.socket.direct, msg.id)
