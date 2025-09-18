@@ -77,13 +77,6 @@ end
 
 @info "[test_publish] start"
 try
-    #pub_url = "tcp://:8011/pub"
-    #sub_url = "tcp://:8011/sub"
-    #pub_url = "ws://:8010/pub"
-    #sub_url = "ws://:8010/sub"
-    #pub_url = "zmq://:8012/pub"
-    #sub_url = "zmq://:8012/sub"
-
     rb = broker(ws=8010, tcp=8011, zmq=8012, prometheus=7071, name="publish")
     @test Rembus.islistening(rb, wait=10)
     for pub_url in [

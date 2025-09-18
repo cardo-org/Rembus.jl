@@ -155,11 +155,11 @@ else
 
         cid = "connect_errors_wrong_keys"
         generate_wrong_keys(cid)
-        execute(() -> wrong_keys(cid), broker_name, secure=true, tcp=8001, ws=8000)
+        execute(() -> wrong_keys(cid), broker_name, reset=false, secure=true, tcp=8001, ws=8000)
 
         private_fn = Rembus.pkfile(cid)
         rm(private_fn)
-        execute(() -> missing_keys(cid), broker_name, secure=true, tcp=8001, ws=8000)
+        execute(() -> missing_keys(cid), broker_name, reset=false, secure=true, tcp=8001, ws=8000)
 
         # create a ca cert that does not signed the original certificate
         cacert = joinpath(target_dir, REMBUS_CA)

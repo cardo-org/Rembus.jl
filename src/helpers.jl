@@ -437,6 +437,10 @@ function broker_reset(broker_name="broker")
     rm(messages_dir(broker_name), force=true, recursive=true)
     bdir = broker_dir(broker_name)
     if isdir(bdir)
+        foreach(
+            d -> rm(d, force=true, recursive=true),
+            filter(isdir, readdir(bdir, join=true))
+        )
         foreach(rm, filter(isfile, readdir(bdir, join=true)))
     end
 end
