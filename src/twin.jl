@@ -327,6 +327,8 @@ function transport_connect(rb::Twin)
         wait(isconnected)
     elseif proto === :zmq
         zmq_connect(rb)
+    elseif proto === :mqtt
+        connect(rb, Adapter(:MQTT))
     end
 
     return rb
@@ -623,9 +625,10 @@ end
 The connecting node declare its identity to the broker and authenticate if prompted.
 =#
 function authenticate(router::Router, twin::Twin)
-    if !hasname(twin) || isa(twin.socket, Float)
+    if !hasname(twin) || !requireauthentication(twin.socket)
         return nothing
     end
+
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
     msg = IdentityMsg(twin, cid(twin), meta)
     response = twin_request(twin, msg, router.settings.request_timeout)

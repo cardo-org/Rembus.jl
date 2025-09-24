@@ -123,7 +123,7 @@ function spliturl(url::String)
     if proto == ""
         name = uri.path
         protocol = Symbol(baseuri.scheme)
-    elseif proto in ["ws", "wss", "tcp", "tls", "zmq"]
+    elseif proto in ["ws", "wss", "tcp", "tls", "zmq", "mqtt"]
         name = startswith(uri.path, "/") ? uri.path[2:end] : uri.path
         protocol = Symbol(proto)
     else

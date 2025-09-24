@@ -32,6 +32,11 @@ jobs:
           - windows-latest
         arch:
           - x64
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:2
+        ports:
+          - 1883:1883
     steps:
       - uses: actions/checkout@v5
       - name: Install ssh-keygen on Windows
@@ -43,6 +48,16 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      - name: Wait for Mosquitto
+        if: runner.os == 'Linux' # only needed on ubuntu runners
+        run: |
+          for i in {1..10}; do
+            nc -z localhost 1883 && echo "Mosquitto is up" && exit 0
+            echo "Waiting for Mosquitto..."
+            sleep 2
+          done
+          echo "Mosquitto did not start in time" >&2
+          exit 1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

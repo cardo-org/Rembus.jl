@@ -141,6 +141,10 @@ end
 # if mode is anonymous all connection modes are available.
 @enum ConnectionMode anonymous authenticated
 
+struct Adapter{a} end
+
+Adapter(a) = Adapter{a}()
+
 mutable struct RbURL
     id::String
     tenant::String
@@ -261,11 +265,15 @@ abstract type AbstractSocket end
 
 abstract type AbstractPlainSocket <: AbstractSocket end
 
+requireauthentication(::AbstractPlainSocket) = true
+
 struct Float <: AbstractSocket
     out::Dict{UInt128,FutureResponse}
     direct::Dict{UInt128,FutureResponse}
     Float(out=Dict(), direct=Dict()) = new(out, direct)
 end
+
+requireauthentication(::Float) = false
 
 Base.show(io::IO, s::Float) = print(io, "FLOAT")
 
@@ -325,6 +333,8 @@ struct ZDealer <: AbstractSocket
         )
     end
 end
+
+requireauthentication(::ZDealer) = true
 
 struct ZRouter <: AbstractSocket
     sock::ZMQ.Socket

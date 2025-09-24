@@ -7,14 +7,17 @@ catch e
     @error "coverage: $e"
 finally
     coverage = process_folder()
-    LCOV.writefile("lcov.info", coverage)
+    cov_ext = process_folder("ext")
+    LCOV.writefile("lcov.info", [coverage; cov_ext])
 end
 
 for dir in [
     "src",
+    "ext",
     "test",
     "test/ack",
     "test/api",
+    "test/mqtt",
     "test/broker",
     "test/twin",
     "test/errors",
