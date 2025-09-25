@@ -29,7 +29,7 @@ const GROUP = get(ENV, "GROUP", "all")
             include("offline/test_pubsub_offline.jl")
         end
     end
-    if GROUP == "all" || GROUP == "mqtt"
+    if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "mqtt")
         @time @safetestset "mqtt_publish" begin
             include("mqtt/test_mqtt_publish.jl")
         end

@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches:
@@ -6,50 +7,43 @@ on:
     tags: ['*']
   pull_request:
   workflow_dispatch:
+
 env:
   DEPLOY_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/broker
 
 concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
 jobs:
-  test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
-    runs-on: ${{ matrix.os }}
+  test-linux:
+    name: Julia ${{ matrix.version }} - ubuntu-latest - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+    permissions:
       actions: write
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.11'
-        os:
-          - ubuntu-latest
-          - windows-latest
-        arch:
-          - x64
+        version: ['1.11']
+        arch: [x64]
     services:
       mosquitto:
         image: eclipse-mosquitto:2
         ports:
           - 1883:1883
+    env:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
     steps:
       - uses: actions/checkout@v5
-      - name: Install ssh-keygen on Windows
-        if: runner.os == 'Windows'
-        run: choco install openssh
-        shell: cmd
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - name: Wait for Mosquitto
-        if: runner.os == 'Linux' # only needed on ubuntu runners
         run: |
           for i in {1..10}; do
             nc -z localhost 1883 && echo "Mosquitto is up" && exit 0
@@ -65,24 +59,50 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  test-windows:
+    name: Julia ${{ matrix.version }} - windows-latest - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.11']
+        arch: [x64]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install ssh-keygen on Windows
+        run: choco install openssh
+        shell: cmd
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   push_to_registry:
     name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')  # only run on release tags
+    if: startsWith(github.ref, 'refs/tags/v')
     env:
       DOCKER_IMAGE: rembus/broker
-      IMAGE_TAG: ${{ github.ref_name }}          # e.g., v1.1.1
+      IMAGE_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v5
-
       - name: Extract stripped tag
         run: echo "IMAGE_TAG_STRIPPED=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-
       - name: Set up Julia
         uses: julia-actions/setup-julia@v2
         with:
           version: '1.11'
-  
       - name: Build the app image
         shell: julia --project=. --color=yes {0}
         run: |
@@ -90,16 +110,13 @@ jobs:
           Pkg.add("PackageCompiler")
           using PackageCompiler
           create_app(".", "build"; executables = ["broker"=>"brokerd"], force=true)
-  
       - name: Build sv shim
         run: gcc shims/sv.c -o build/bin/sv
-  
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-  
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -107,12 +124,12 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_STRIPPED }}
-        
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
     permissions:
-      actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      actions: write
       contents: write
       statuses: write
     steps:

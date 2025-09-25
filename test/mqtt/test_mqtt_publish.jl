@@ -10,9 +10,12 @@ end
 
 function run()
     #Rembus.debug!()
+    host = get(ENV, "MQTT_HOST", "localhost")
+    port = parse(Int, get(ENV, "MQTT_PORT", "1883"))
+
     ctx = Dict{String,Any}("count" => 0)
 
-    broker = component("mqtt://:1883/mosca", ws=8000)
+    broker = component("mqtt://$host:$port/mosca", ws=8000)
 
     rb = component("mqtt_subscriber")
     inject(rb, ctx)
