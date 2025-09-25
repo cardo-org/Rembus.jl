@@ -35,13 +35,14 @@ function run()
 
     broker = component("mqtt://$host:$port/mosca", ws=8000)
 
+    # wait for connection establishement
+    @test Rembus.islistening(broker, wait=10)
+
     rb = component("mqtt_subscriber")
     inject(rb, ctx)
     Rembus.subscribe(rb, mytopic)
     reactive(rb)
 
-    sleep(1) # wait for connection establishement
-    @test isopen(broker)
 
     Rembus.publish(broker, "mytopic", "hello mosca")
     wait_for_message(ctx, "count"; timeout=5.0)
