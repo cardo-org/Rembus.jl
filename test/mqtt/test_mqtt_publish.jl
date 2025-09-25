@@ -26,14 +26,14 @@ function run()
     @test isopen(broker)
 
     Rembus.publish(broker, "mytopic", "hello mosca")
-    sleep(2) # wait for message delivery
+    sleep(4) # wait for message delivery
     @info "ctx: $ctx"
     @test ctx["count"] == 1
     @test ctx["msg"] == "hello mosca"
 
     pub = component("mqtt_publisher")
     Rembus.publish(pub, "mytopic", "hello from publisher")
-    sleep(1) # wait for message delivery
+    sleep(4) # wait for message delivery
     @info "ctx: $ctx"
 
     # When a component is not a mqtt component like mosca above
