@@ -1,5 +1,7 @@
 const VERSION = "1.0.0"
 
+const Protocols = Set{String}(["ws", "wss", "tcp", "tls", "zmq"])
+
 const DATAFRAME_TAG = 80
 
 const PING_INTERVAL = 10

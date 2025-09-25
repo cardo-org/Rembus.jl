@@ -411,8 +411,11 @@ mutable struct Settings
     ack_timeout::Float64
     send_retries::Int
     reconnect_period::Float64
+    ext::Dict{String,Any}
     Settings(name::AbstractString) = begin
         cfg = getcfg(name)
+
+        ext = get(cfg, "ext", Dict())
 
         zmq_ping_interval = get(cfg, "zmq_ping_interval",
             parse(Float32, get(ENV, "REMBUS_ZMQ_PING_INTERVAL", "30")))
@@ -472,7 +475,8 @@ mutable struct Settings
             challenge_timeout,
             ack_timeout,
             send_retries,
-            reconnect_period
+            reconnect_period,
+            ext # extensions settings
         )
     end
 end

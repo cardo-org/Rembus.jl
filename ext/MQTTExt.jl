@@ -4,10 +4,12 @@ using Mosquitto
 using DataStructures
 using Rembus
 
-__init__() = println("Extension was loaded!")
+function __init__()
+    push!(Rembus.Protocols, "mqtt")
+end
 
 struct MQTTSock <: Rembus.AbstractSocket
-    sock::Mosquitto.Client
+    sock::Mosquitto.Client_v5
     out::Dict{UInt128,Rembus.FutureResponse}
     direct::Dict{UInt128,Rembus.FutureResponse}
     MQTTSock(sock) = new(
@@ -36,12 +38,14 @@ end
 
 function Rembus.connect(rb::Rembus.Twin, ::Rembus.Adapter{:MQTT})
     @debug "[$rb] connecting to MQTT broker $(Rembus.cid(rb))"
-    client = Client(rb.uid.host, Int(rb.uid.port))
+    client = Client_v5(rb.uid.host, Int(rb.uid.port))
     add_subscription(rb.router, rb, "*")
     rb.reactive = true
     rb.socket = MQTTSock(client)
 
-    topic = "#"
+    mqtt_cfg = get(rb.router.settings.ext, "mqtt", Dict())
+    topic = get(mqtt_cfg, "subscribe_topic", "#")
+    @debug "[$rb] subscribing to topic [$topic]"
     Mosquitto.subscribe(client, topic)
 
     @async mqtt_receiver(rb)
