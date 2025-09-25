@@ -26,7 +26,7 @@ function Base.close(client::MQTTSock)
     Mosquitto.loop_stop(client.sock)
 end
 
-Rembus.requireauthentication(::MQTTSock) = false
+Rembus.requireauthentication(::MQTTSock) = false # COV_EXCL_LINE
 
 function add_subscription(router, twin, topic)
     if !haskey(router.topic_interests, topic)
@@ -36,18 +36,20 @@ function add_subscription(router, twin, topic)
 
 end
 
+function bind_topic(rb::Rembus.Twin, client::Mosquitto.Client_v5)
+    mqtt_cfg = get(rb.router.settings.ext, "mqtt", Dict())
+    topic = get(mqtt_cfg, "subscribe_topic", "#")
+    @debug "[$rb] subscribing to topic [$topic]"
+    Mosquitto.subscribe(client, topic)
+end
+
 function Rembus.connect(rb::Rembus.Twin, ::Rembus.Adapter{:MQTT})
     @debug "[$rb] connecting to MQTT broker $(Rembus.cid(rb))"
     client = Client_v5(rb.uid.host, Int(rb.uid.port))
     add_subscription(rb.router, rb, "*")
     rb.reactive = true
     rb.socket = MQTTSock(client)
-
-    mqtt_cfg = get(rb.router.settings.ext, "mqtt", Dict())
-    topic = get(mqtt_cfg, "subscribe_topic", "#")
-    @debug "[$rb] subscribing to topic [$topic]"
-    Mosquitto.subscribe(client, topic)
-
+    bind_topic(rb, client)
     @async mqtt_receiver(rb)
 end
 
@@ -77,14 +79,13 @@ function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
     return outcome
 end
 
-function onconnect(client)
+function onconnect(rb, client)
     ch = get_connect_channel(client)
     while true
         msg = take!(ch)
         @debug "MQTT connection event: val=$(msg.val) returncode=$(msg.returncode)"
         if msg.returncode == Mosquitto.MosquittoCwrapper.MOSQ_ERR_SUCCESS && msg.val == 1
-            topic = "#"
-            Mosquitto.subscribe(client, topic)
+            bind_topic(rb, client)
         end
     end
 end
@@ -95,7 +96,7 @@ function mqtt_receiver(rb::Rembus.Twin)
     msg_channel = get_messages_channel(client)
     Mosquitto.loop_start(client)
 
-    @async onconnect(client)
+    @async onconnect(rb, client)
     @debug "[$rb] started mqtt receiver"
 
     while true

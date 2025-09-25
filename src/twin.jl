@@ -132,14 +132,9 @@ end
 function keep_alive(twin)
     router = last_downstream(twin.router)
     router.settings.ws_ping_interval == 0 && return
-    try
-        while true
-            sleep(router.settings.ws_ping_interval)
-            put!(twin.process.inbox, WsPing())
-        end
-    catch
-    finally
-        @debug "socket connection closed, keep alive done"
+    while true
+        sleep(router.settings.ws_ping_interval)
+        put!(twin.process.inbox, WsPing())
     end
 end
 

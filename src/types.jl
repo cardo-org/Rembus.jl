@@ -265,7 +265,7 @@ abstract type AbstractSocket end
 
 abstract type AbstractPlainSocket <: AbstractSocket end
 
-requireauthentication(::AbstractPlainSocket) = true
+requireauthentication(::AbstractPlainSocket) = true # COV_EXCL_LINE
 
 struct Float <: AbstractSocket
     out::Dict{UInt128,FutureResponse}
@@ -273,7 +273,7 @@ struct Float <: AbstractSocket
     Float(out=Dict(), direct=Dict()) = new(out, direct)
 end
 
-requireauthentication(::Float) = false
+requireauthentication(::Float) = false # COV_EXCL_LINE
 
 Base.show(io::IO, s::Float) = print(io, "FLOAT")
 
@@ -334,7 +334,7 @@ struct ZDealer <: AbstractSocket
     end
 end
 
-requireauthentication(::ZDealer) = true
+requireauthentication(::ZDealer) = true # COV_EXCL_LINE
 
 struct ZRouter <: AbstractSocket
     sock::ZMQ.Socket
