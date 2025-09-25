@@ -43,6 +43,7 @@ function run()
     Rembus.subscribe(rb, mytopic)
     reactive(rb)
 
+    sleep(2)
 
     Rembus.publish(broker, "mytopic", "hello mosca")
     wait_for_message(ctx, "count"; timeout=5.0)
