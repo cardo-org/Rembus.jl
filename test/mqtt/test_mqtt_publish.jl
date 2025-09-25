@@ -26,7 +26,13 @@ function run()
     @test isopen(broker)
 
     Rembus.publish(broker, "mytopic", "hello mosca")
-    sleep(4) # wait for message delivery
+    for i in 1:100
+        if ctx["count"] == 1
+            break
+        end
+        sleep(0.1)
+    end
+
     @info "ctx: $ctx"
     @test ctx["count"] == 1
     @test ctx["msg"] == "hello mosca"
