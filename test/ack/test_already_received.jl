@@ -43,8 +43,7 @@ function run(pub_url, sub_url)
     msg = Rembus.PubSubMsg(pub, "foo", "data", Rembus.QOS2)
     @info "[already_received] msgid: $([msg.id])"
     while count < messages
-        #publish(pub, "foo", count, qos=Rembus.QOS2)
-        msg.counter = Rembus.save_message(pub.router, msg)
+        push!(pub.router.archiver.inbox, msg)
         Rembus.message_send(pub, msg)
         count += 1
     end

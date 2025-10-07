@@ -18,6 +18,7 @@ for dir in [
     "test/ack",
     "test/api",
     "test/mqtt",
+    "test/offline",
     "test/broker",
     "test/twin",
     "test/errors",

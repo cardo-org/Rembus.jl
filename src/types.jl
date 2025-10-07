@@ -403,7 +403,7 @@ mutable struct Settings
     stacktrace::Bool  # log stacktrace on error
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
-    save_messages::Bool
+    archiver_interval::UInt
     cache_size::UInt
     connection_mode::ConnectionMode
     request_timeout::Float64
@@ -460,6 +460,11 @@ mutable struct Settings
             "reconnect_period",
             parse(Float64, get(ENV, "REMBUS_RECONNECT_PERIOD", "1"))
         )
+        messages_timer_interval = get(
+            cfg,
+            "archiver_interval",
+            parse(UInt, get(ENV, "REMBUS_ARCHIVER_INTERVAL", "60"))
+        )
         new(
             zmq_ping_interval,
             ws_ping_interval,
@@ -468,7 +473,7 @@ mutable struct Settings
             stacktrace,
             connection_retry_period,
             nothing,
-            true,
+            messages_timer_interval,
             cache_size,
             connection_mode,
             request_timeout,
@@ -496,7 +501,6 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     policy::Symbol
     metrics::Union{Nothing,RembusMetrics}
     msg_df::DataFrame
-    mcounter::UInt64
     network::Vector{Node}
     start_ts::Float64
     servers::Set{String}
@@ -518,6 +522,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     zmqsocket::ZMQ.Socket
     zmqcontext::ZMQ.Context
     process::Visor.Process
+    archiver::Visor.Process
     owners::Dict{String,String}
     Router{T}(name, plugin=nothing, context=missing) where {T<:AbstractTwin} = new{T}(
         nothing,
@@ -530,7 +535,6 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         :first_up,
         nothing,
         msg_dataframe(),
-        0,
         [],
         time(), # start_ts
         Set(),
@@ -713,7 +717,7 @@ Base.show(io::IO, r::Router) = print(io, "$(r.id)")
 Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
 
 msg_dataframe() = DataFrame(
-    ptr=UInt[], ts=UInt[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
+    ptr=UInt[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
 )
 mutable struct RouterCollector <: Prometheus.Collector
     router::Router

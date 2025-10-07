@@ -1,7 +1,13 @@
 include("../utils.jl")
 
+
+mark = Rembus.uts()
+
 function pubsub(rb, msg)
-    msg.counter = Rembus.save_message(rb.router, msg)
+    push!(rb.router.archiver.inbox, msg)
+
+    msg.counter = mark
+
     Rembus.message_send(rb, msg)
 end
 
@@ -13,8 +19,8 @@ function run()
 
     msg = Rembus.PubSubMsg(rb, "topic", "data")
     pubsub(rb, msg)
-    @test rb.mark == 1
-    @test msg.counter == 1
+    @test rb.mark == mark
+    @test msg.counter == mark
 
     msg = Rembus.RpcReqMsg(rb, "topic", "data")
     Rembus.message_send(rb, msg)

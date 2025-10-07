@@ -164,9 +164,12 @@ Return the twin filename, transforming the '/'.
 =#
 function twin_file(router, name)
     parts = split(name, '/')
+
     dirs = parts[1:end-1]
-    twin_dir = joinpath(broker_dir(router), "twins", dirs...)
-    if !isdir(twin_dir)
+    bdir = broker_dir(router)
+    twin_dir = joinpath(bdir, "twins", dirs...)
+
+    if !isdir(twin_dir) && !is_uuid4(name)
         mkpath(twin_dir)
     end
     return joinpath(twin_dir, last(parts) * ".json")
@@ -219,27 +222,6 @@ function load_twin(twin::Twin)
     end
 end
 
-#=
-Persist router configuration.
-
-at the moment the only persisted value is the pubsub message counter.
-=#
-function save_router_config(router)
-    @debug "saving twin marks"
-    fn = joinpath(broker_dir(router), "router.json")
-    twin_mark = Dict{String,UInt64}("__counter__" => router.mcounter)
-    JSON3.write(fn, twin_mark)
-end
-
-function load_router_config(router)
-    @debug "loading twin marks"
-    fn = joinpath(broker_dir(router), "router.json")
-    if isfile(fn)
-        content = read(fn, String)
-        twinid_mark = JSON3.read(content, Dict{String,UInt64})
-        router.mcounter = pop!(twinid_mark, "__counter__")
-    end
-end
 
 function exposed_topics(router::Router, twin::Twin)
     topics = []
@@ -293,7 +275,6 @@ function save_configuration(router::Router)
         for twin in values(router.id_twin)
             save_twin(router, twin)
         end
-        save_router_config(router)
     end
 end
 
@@ -303,6 +284,5 @@ function load_configuration(router)
         load_topic_auth_table(router)
         load_admins(router)
         router.owners = load_tenants(router)
-        load_router_config(router)
     end
 end

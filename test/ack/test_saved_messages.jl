@@ -36,15 +36,13 @@ end
 function produce(pub_url)
     pub = connect(Rembus.RbURL(pub_url), name="saved_messages_pub")
 
-    for round in 1:2
-        count = 0
-        while count < messages
-            publish(pub, "foo", count, qos=Rembus.QOS2)
-            publish(pub, "bar", count)
-            count += 1
-        end
-        sleep(1)
+    count = 0
+    while count < messages
+        publish(pub, "foo", count, qos=Rembus.QOS2)
+        publish(pub, "bar", count)
+        count += 1
     end
+    sleep(1)
     shutdown(pub)
 end
 

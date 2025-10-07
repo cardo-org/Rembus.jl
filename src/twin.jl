@@ -908,11 +908,12 @@ function pubsub_msg(router::Router, msg)
                 add_pubsub_id(twin, msg)
             end
         end
-        if router.settings.save_messages
-            msg.counter = save_message(router, msg)
+        if router.settings.archiver_interval > 0
+            push!(router.archiver.inbox, msg)
         end
         # Publish to interested twins.
         local_subscribers(router, msg.twin, msg)
+        msg.counter = uts()
         # Relay to subscribers of this broker.
         broadcast_msg(router, msg)
         if router.metrics !== nothing
@@ -1342,13 +1343,6 @@ function detach(twin)
     # Remove the connected message bookmarker
     if !isnothing(twin.connected)
         take!(twin.connected)
-    end
-
-    # Forward the message counter to the last message received when online
-    # because these messages get already a chance to be delivered.
-    if twin.reactive
-        twin.mark = last_downstream(twin.router).mcounter
-        ## twin.reactive = false
     end
 
     # save the state to disk

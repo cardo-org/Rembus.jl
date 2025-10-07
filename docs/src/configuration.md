@@ -13,6 +13,7 @@ A component is affected by the following environment variables.
 |`REMBUS_CHALLENGE_TIMEOUT`|5|  Time interval after which the connection is closed if a challenge response is not received when `connection_mode` is `authenticated`
 |`REMBUS_RECONNECT_PERIOD`|1| Reconnection retry period|
 |`REMBUS_CACHE_SIZE`|1000000| Max numbers of pub/sub messages cached in memory|
+|`REMBUS_ARCHIVER_INTERVAL`|60| Defines how often (in seconds) Pub/Sub messages are written to disk by the archiver.|
 |`HTTP_CA_BUNDLE`|\$REMBUS\_DIR/ca/rembus-ca.crt|CA certificate|
 
 ## Broker only environment variables
@@ -55,7 +56,6 @@ and secret materials.
     ├── 1345
     ├── 345456
     └── 867687
-├── router.json
 ├── settings.json
 ├── tenants.json
 ├── topic_auth.json
@@ -75,6 +75,8 @@ variables values.
 The following properties are supported (in parenthesis the corresponding environment
 variable):
 
+- `archiver_interval (REMBUS_ARCHIVER_INTERVAL)`: Interval (in seconds) for
+   persisting Pub/Sub messages to disk.
 - `cache_size (REMBUS_CACHE_SIZE)`: max numbers of pub/sub messages cached in memory;
 - `connection_mode`: `"authenticated"` or `"anonymous"` for components without name or
    authentication credentials;
@@ -95,6 +97,7 @@ variable):
 
 ```json
 {
+    "archiver_interval": 60,
     "cache_size": 1000000,
     "connection_mode": "anonymous",
     "ack_timeout": 2,

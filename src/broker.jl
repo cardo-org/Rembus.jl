@@ -519,13 +519,6 @@ function router_task(self, router::Router, implementor_rule)
     finally
         if broker_isnamed(router)
             save_configuration(router)
-            if router.settings.save_messages
-                persist_messages(router)
-            end
-            #filter!(router.id_twin) do (id, tw)
-            #    cleanup(tw, router)
-            #    return true
-            #end
         end
         @debug "$(router.process.supervisor) shutted down"
     end
@@ -812,7 +805,10 @@ function start_broker(
     prometheus=nothing,
     name="broker",
 )
+    router.archiver = process(save_message, args=(router,), restart=:transient)
+
     tasks = [
+        router.archiver,
         router.process,
         supervisor("twins", terminateif=:shutdown)
     ]

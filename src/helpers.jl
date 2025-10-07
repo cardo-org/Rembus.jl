@@ -308,31 +308,55 @@ function encode_message(msg::PubSubMsg)
     return take!(io)
 end
 
+function uts()
+    tv = Libc.TimeVal()
+    return tv.sec * 1_000_000 + tv.usec
+end
+
+function persist(router)
+    if !isempty(router.msg_df)
+        persist_messages(router)
+        router.msg_df = msg_dataframe()
+    end
+end
+
 #=
     Save pubsub message to in-memory cache and return the message pointer.
 
     For QOS1 or QOS2 levels the message id is used to match ACK and ACK2 messages.
 =#
-function save_message(router, msg::PubSubMsg)
-    tv = Libc.TimeVal()
-    ts = tv.sec * 1_000_000 + tv.usec
-    if isa(msg.data, IOBuffer)
-        data = msg.data.data
-    else
-        data = encode_message(msg)
+function save_message(pd, router)
+    # Start the message persistence timer
+    period = router.settings.archiver_interval
+    tmr = Timer((_tmr) -> push!(pd.inbox, :persist), period, interval=period)
+
+    try
+        for msg in pd.inbox
+            if isa(msg, PubSubMsg)
+                if isa(msg.data, IOBuffer)
+                    data = msg.data.data
+                else
+                    data = encode_message(msg)
+                end
+
+                push!(router.msg_df, [msg.counter, msg.id, msg.topic, data])
+            elseif msg === :persist
+                @debug "[$router] persisting cached messages"
+                persist(router)
+            elseif isshutdown(msg)
+                persist(router)
+                break
+            else
+                @warn "[$router] save_message unknown message type: $msg"
+            end
+        end
+    catch e
+        @error "save_message error: $e"
+    finally
+        close(tmr)
     end
-    router.mcounter += 1
-
-    push!(router.msg_df, [router.mcounter, ts, msg.id, msg.topic, data])
-
-    if (router.mcounter % router.settings.cache_size) == 0
-        persist_messages(router)
-        @debug "persisted $(router.mcounter) file"
-        router.msg_df = msg_dataframe()
-    end
-
-    return router.mcounter
 end
+
 
 function get_data(pkt)
     payload = decode(pkt)
@@ -353,7 +377,6 @@ function data_at_rest(; from=LastReceived, broker="broker")
     files = messages_files(broker, to_microseconds(from))
     result = DataFrame(
         ptr=UInt64[],
-        ts=UInt64[],
         uid=UInt128[],
         topic=String[],
         pkt=Vector{UInt8}[],
@@ -376,7 +399,7 @@ function send_messages(twin::Twin, df)
         tmark = twin.mark
         if row.ptr > tmark
             if haskey(twin.msg_from, row.topic) &&
-               row.ts > (nowts - twin.msg_from[row.topic])
+               row.ptr > (nowts - twin.msg_from[row.topic])
                 Rembus.from_cbor(twin, row.ptr, row.pkt)
             end
         end
@@ -409,7 +432,6 @@ function from_disk_messages(twin::Twin, fn)
 end
 
 function from_memory_messages(twin::Twin)
-    #@debug "[$twin] in-memory messages df:\n$(twin.router.msg_df)"
     router = last_downstream(twin.router)
     send_messages(twin, router.msg_df)
 end
@@ -427,7 +449,7 @@ end
 msg_files(twin::Twin) = msg_files(twin.router)
 
 function persist_messages(router)
-    fn = messages_fn(router, router.mcounter)
+    fn = messages_fn(router, uts())
     @debug "[broker] persisting messages on disk: $fn"
 
     save_object(fn, router.msg_df)

@@ -756,7 +756,8 @@ function publish_msg(twin, msg)
         put!(twin.router.process.inbox, msg)
     else
         if failover_queue(twin)
-            msg.counter = save_message(last_downstream(twin.router), msg)
+            r = last_downstream(twin.router)
+            push!(r.archiver.inbox, msg)
         end
         cast(twin.process, msg)
     end
