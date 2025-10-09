@@ -232,6 +232,11 @@ function init(router::Router)
     router.topic_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
 end
 
+function archiver!(router::Router, archiver::Archiver)
+    @debug "[$router] injecting $archiver"
+    router.store_type = archiver
+end
+
 function first_up(::Router, tenant, topic, implementors)
     target = nothing
     @debug "[$topic] first_up routing policy"

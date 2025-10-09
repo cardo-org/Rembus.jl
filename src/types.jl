@@ -145,6 +145,10 @@ struct Adapter{a} end
 
 Adapter(a) = Adapter{a}()
 
+abstract type Archiver end
+
+struct FileStore <: Archiver end
+
 mutable struct RbURL
     id::String
     tenant::String
@@ -495,6 +499,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     downstream::Union{Nothing,Rembus.AbstractRouter}
     id::String
     eid::UInt64 # ephemeral unique id
+    store_type::Archiver
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -529,6 +534,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         nothing,
         name,
         rand(Xoshiro(time_ns()), UInt64),
+        FileStore(),
         Settings(name),
         anonymous,
         ReentrantLock(),
@@ -655,7 +661,8 @@ end
 function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
-    send_queue(twin, twin.failover_from)
+    router = last_downstream(twin.router)
+    send_queue(twin, msg_from, router.store_type)
     return nothing
 end
 
@@ -717,7 +724,7 @@ Base.show(io::IO, r::Router) = print(io, "$(r.id)")
 Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
 
 msg_dataframe() = DataFrame(
-    ptr=UInt[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
+    ptr=UInt[], qos=UInt8[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
 )
 mutable struct RouterCollector <: Prometheus.Collector
     router::Router

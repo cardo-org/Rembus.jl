@@ -315,7 +315,7 @@ end
 
 function persist(router)
     if !isempty(router.msg_df)
-        persist_messages(router)
+        persist_messages(router, router.store_type)
         router.msg_df = msg_dataframe()
     end
 end
@@ -339,7 +339,7 @@ function save_message(pd, router)
                     data = encode_message(msg)
                 end
 
-                push!(router.msg_df, [msg.counter, msg.id, msg.topic, data])
+                push!(router.msg_df, [msg.counter, msg.flags, msg.id, msg.topic, data])
             elseif msg === :persist
                 @debug "[$router] persisting cached messages"
                 persist(router)
@@ -377,6 +377,7 @@ function data_at_rest(; from=LastReceived, broker="broker")
     files = messages_files(broker, to_microseconds(from))
     result = DataFrame(
         ptr=UInt64[],
+        qos=UInt8[],
         uid=UInt128[],
         topic=String[],
         pkt=Vector{UInt8}[],
@@ -448,10 +449,9 @@ end
 
 msg_files(twin::Twin) = msg_files(twin.router)
 
-function persist_messages(router)
+function persist_messages(router, ::FileStore)
     fn = messages_fn(router, uts())
     @debug "[broker] persisting messages on disk: $fn"
-
     save_object(fn, router.msg_df)
 end
 

@@ -531,7 +531,7 @@ function reconnect(twin::Twin, url::RbURL)
                 end
 
                 isconnected = true
-                send_queue(twin, twin.failover_from)
+                send_queue(twin, twin.failover_from, twin.router.store_type)
             end
         end
     catch e
@@ -1054,7 +1054,7 @@ function messages_files(node, from_msg)
     return files
 end
 
-function send_queue(twin::Twin, from_msg::Float64)
+function send_queue(twin::Twin, from_msg::Float64, ::FileStore)
     if hasname(twin) && (from_msg > 0.0)
         files = messages_files(twin, from_msg)
         for fn in files
@@ -1072,7 +1072,8 @@ end
 function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
-    return send_queue(twin, from_msg)
+    router = last_downstream(twin.router)
+    return send_queue(twin, from_msg, router.store_type)
 end
 
 #=
