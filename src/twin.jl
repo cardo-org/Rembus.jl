@@ -141,12 +141,12 @@ end
 acks_file(r::Router, id::AbstractString) = joinpath(rembus_dir(), r.id, "$id.acks")
 
 #=
-    load_pubsub_received(component::RbURL)
+    load_received_acks(router::Router, component::RbURL, ::FileStore)
 
-Load from file the ids of received Pub/Sub messages
+Load from file the ids of received acks of Pub/Sub messages
 awaiting Ack2 acknowledgements.
 =#
-function load_pubsub_received(router::Router, component::RbURL)
+function load_received_acks(router::Router, component::RbURL, ::FileStore)
     if hasname(component)
         path = acks_file(router, component.id)
         if isfile(path)
@@ -157,12 +157,12 @@ function load_pubsub_received(router::Router, component::RbURL)
 end
 
 #=
-    save_pubsub_received(rb::RBHandle)
+    save_received_acks(rb::RBHandle, ::FileStore)
 
-Save to file the ids of received Pub/Sub messages
+Save to file the ids of received acks of Pub/Sub messages
 waitings Ack2 acknowledgements.
 =#
-function save_pubsub_received(twin::Twin)
+function save_received_acks(twin::Twin, ::FileStore)
     router = last_downstream(twin.router)
     path = acks_file(router, twin.uid.id)
     save_object(path, twin.ackdf)
@@ -531,7 +531,7 @@ function reconnect(twin::Twin, url::RbURL)
                 end
 
                 isconnected = true
-                send_queue(twin, twin.failover_from, twin.router.store_type)
+                send_data_at_rest(twin, twin.failover_from, twin.router.store_type)
             end
         end
     catch e
@@ -664,7 +664,7 @@ function setidentity(router::Router, twin::Twin, msg; isauth=false)
     router.id_twin[rid(twin)] = twin
     setname(twin.process, rid(twin))
     twin.isauth = isauth
-    load_twin(twin)
+    load_twin(router, twin, router.store_type)
     return nothing
 end
 
@@ -1054,7 +1054,7 @@ function messages_files(node, from_msg)
     return files
 end
 
-function send_queue(twin::Twin, from_msg::Float64, ::FileStore)
+function send_data_at_rest(twin::Twin, from_msg::Float64, ::FileStore)
     if hasname(twin) && (from_msg > 0.0)
         files = messages_files(twin, from_msg)
         for fn in files
@@ -1073,7 +1073,7 @@ function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
     router = last_downstream(twin.router)
-    return send_queue(twin, from_msg, router.store_type)
+    return send_data_at_rest(twin, from_msg, router.store_type)
 end
 
 #=
@@ -1347,19 +1347,20 @@ function detach(twin)
     end
 
     # save the state to disk
-    save_twin(last_downstream(twin.router), twin)
+    router = last_downstream(twin.router)
+    save_twin(router, twin, router.store_type)
 
     # Move the outstanding requests to the floating socket
     # This will trigger the requests timeout ...
     twin.socket = Float(twin.socket.out, twin.socket.direct)
 
     if !isempty(twin.ackdf)
-        save_pubsub_received(twin)
+        save_received_acks(twin, router.store_type)
     end
 
     # Remove the twin from the router tables.
     if !hasname(twin)
-        cleanup(twin, last_downstream(twin.router))
+        cleanup(twin, router)
     end
 
     return nothing

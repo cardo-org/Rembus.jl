@@ -51,13 +51,13 @@ end
     url = Rembus.RbURL(comp)
     twin = Rembus.Twin(url, router)
     msg = Rembus.PubSubMsg(twin, "topic", "data", Rembus.QOS2)
-    twin.ackdf = Rembus.load_pubsub_received(router, url)
+    twin.ackdf = Rembus.load_received_acks(router, url, router.store_type)
     Rembus.add_pubsub_id(twin, msg)
     Rembus.detach(twin)
 
     # reload the acks file
     twin2 = Rembus.Twin(url, router)
-    twin2.ackdf = Rembus.load_pubsub_received(router, url)
+    twin2.ackdf = Rembus.load_received_acks(router, url, router.store_type)
     @test nrow(twin2.ackdf) == 1
     @test twin.ackdf[1, :] == twin2.ackdf[1, :]
 end
@@ -138,10 +138,10 @@ end
     router = Rembus.get_router(name="myrouter", http=6754)
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
-    Rembus.save_topic_auth_table(router)
+    Rembus.save_topic_auth(router, router.store_type)
 
     router.topic_auth = Dict()
-    Rembus.load_topic_auth_table(router)
+    Rembus.load_topic_auth(router, router.store_type)
     @test router.topic_auth == cfg
 
     shutdown()

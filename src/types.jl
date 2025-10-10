@@ -662,7 +662,7 @@ function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
     router = last_downstream(twin.router)
-    send_queue(twin, msg_from, router.store_type)
+    send_data_at_rest(twin, msg_from, router.store_type)
     return nothing
 end
 

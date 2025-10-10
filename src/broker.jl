@@ -17,13 +17,13 @@ end
 
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
-        df = load_pubsub_received(router, url)
+        df = load_received_acks(router, url, router.store_type)
         if haskey(router.id_twin, rid(url))
             twin = router.id_twin[rid(url)]
         else
             twin = Twin(url, first_upstream(router))
             twin.ackdf = df
-            load_twin(twin)
+            load_twin(router, twin, router.store_type)
         end
 
         if !isdefined(twin, :process) || istaskdone(twin.process.task)

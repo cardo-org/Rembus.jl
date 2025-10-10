@@ -1,9 +1,9 @@
 #=
-    load_tenants()
+    load_tenants(router, ::FileStore)
 
 Return the owners dataframe
 =#
-function load_tenants(router)
+function load_tenants(router, ::FileStore)
     fn = joinpath(broker_dir(router), TENANTS_FILE)
     if isfile(fn)
         return JSON3.read(fn, Dict{String,String})
@@ -23,7 +23,6 @@ function save_tenants(router, tenants::Dict)
         JSON3.write(f, tenants)
     end
 end
-
 
 broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
 broker_dir(name::AbstractString) = joinpath(rembus_dir(), name)
@@ -77,28 +76,6 @@ function key_file(broker_name::AbstractString, cid::AbstractString)
     return fullname(basename)
 end
 
-function save_topic_auth_table(router)
-    @debug "saving topic_auth table"
-    fn = joinpath(broker_dir(router), "topic_auth.json")
-
-    d = Dict()
-    for (topic, cids) in router.topic_auth
-        d[topic] = keys(cids)
-    end
-
-    open(fn, "w") do io
-        write(io, JSON3.write(d))
-    end
-end
-
-function save_admins(router)
-    @debug "saving admins"
-    fn = joinpath(broker_dir(router), "admins.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(router.admins))
-    end
-end
-
 function save_pubkey(router, cid::AbstractString, pubkey, type)
     name = key_base(router, cid)
     format = "der"
@@ -136,7 +113,7 @@ end
 
 isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
 
-function load_topic_auth_table(router)
+function load_topic_auth(router, ::FileStore)
     @debug "loading topic_auth table"
     fn = joinpath(broker_dir(router), "topic_auth.json")
     if isfile(fn)
@@ -149,12 +126,34 @@ function load_topic_auth_table(router)
     end
 end
 
-function load_admins(router)
+function save_topic_auth(router, ::FileStore)
+    @debug "saving topic_auth table"
+    fn = joinpath(broker_dir(router), "topic_auth.json")
+
+    d = Dict()
+    for (topic, cids) in router.topic_auth
+        d[topic] = keys(cids)
+    end
+
+    open(fn, "w") do io
+        write(io, JSON3.write(d))
+    end
+end
+
+function load_admins(router, ::FileStore)
     fn = joinpath(broker_dir(router), "admins.json")
     @debug "loading $fn"
     if isfile(fn)
         content = read(fn, String)
         router.admins = JSON3.read(content, Set)
+    end
+end
+
+function save_admins(router, ::FileStore)
+    @debug "saving admins"
+    fn = joinpath(broker_dir(router), "admins.json")
+    open(fn, "w") do io
+        write(io, JSON3.write(router.admins))
     end
 end
 
@@ -176,13 +175,12 @@ function twin_file(router, name)
 end
 
 #=
-    load_twin(twin)
+    load_twin(router::Router, twin::Twin, ::FileStore)
 
 Load the persisted twin configuration from disk.
 =#
-function load_twin(twin::Twin)
+function load_twin(router::Router, twin::Twin, ::FileStore)
     @debug "[$twin] loading configuration"
-    router = last_downstream(twin.router)
     fn = twin_file(router, twin.uid.id)
     if isfile(fn)
         content = read(fn, String)
@@ -234,7 +232,7 @@ function exposed_topics(router::Router, twin::Twin)
     return topics
 end
 
-function save_twin(router::Router, twin::Twin)
+function save_twin(router::Router, twin::Twin, ::FileStore)
     @debug "[$twin] saving methods configuration"
     twinid = rid(twin)
     twin_cfg = Dict()
@@ -269,11 +267,11 @@ Persist router configuration on disk.
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "[$router] saving configuration to $(broker_dir(router))"
-        save_topic_auth_table(router)
-        save_admins(router)
+        save_topic_auth(router, router.store_type)
+        save_admins(router, router.store_type)
 
         for twin in values(router.id_twin)
-            save_twin(router, twin)
+            save_twin(router, twin, router.store_type)
         end
     end
 end
@@ -281,8 +279,8 @@ end
 function load_configuration(router)
     callback_or(router, :load_configuration) do
         @debug "[$router] loading configuration from $(broker_dir(router))"
-        load_topic_auth_table(router)
-        load_admins(router)
-        router.owners = load_tenants(router)
+        load_topic_auth(router, router.store_type)
+        load_admins(router, router.store_type)
+        router.owners = load_tenants(router, router.store_type)
     end
 end

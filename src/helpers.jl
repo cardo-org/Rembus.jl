@@ -315,7 +315,7 @@ end
 
 function persist(router)
     if !isempty(router.msg_df)
-        persist_messages(router, router.store_type)
+        save_data_at_rest(router, router.store_type)
         router.msg_df = msg_dataframe()
     end
 end
@@ -449,7 +449,7 @@ end
 
 msg_files(twin::Twin) = msg_files(twin.router)
 
-function persist_messages(router, ::FileStore)
+function save_data_at_rest(router, ::FileStore)
     fn = messages_fn(router, uts())
     @debug "[broker] persisting messages on disk: $fn"
     save_object(fn, router.msg_df)
