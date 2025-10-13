@@ -1348,7 +1348,9 @@ function detach(twin)
 
     # save the state to disk
     router = last_downstream(twin.router)
-    save_twin(router, twin, router.store_type)
+    if !isrepl(twin.uid)
+        save_twin(router, twin, router.store_type)
+    end
 
     # Move the outstanding requests to the floating socket
     # This will trigger the requests timeout ...

@@ -270,9 +270,10 @@ function save_configuration(router::Router)
         save_topic_auth(router, router.store_type)
         save_admins(router, router.store_type)
 
-        for twin in values(router.id_twin)
-            save_twin(router, twin, router.store_type)
-        end
+        # twins configurations are saved in detach(twin)
+        #for twin in values(router.id_twin)
+        #    save_twin(router, twin, router.store_type)
+        #end
     end
 end
 
