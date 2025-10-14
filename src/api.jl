@@ -141,7 +141,8 @@ it to act as a broker. These ports are specified using keyword arguments.
    Set to `Rembus.JSON` for JSON-RPC-2.0 text encoding.
 """
 function component(
-    url::AbstractString;
+    url::AbstractString,
+    db=FileStore();
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -156,6 +157,7 @@ function component(
     uid = RbURL(url)
     return component(
         uid,
+        db,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -169,7 +171,7 @@ function component(
     )
 end
 
-function component(;
+function component(db=FileStore();
     name::AbstractString="broker",
     ws=nothing,
     tcp=nothing,
@@ -187,6 +189,7 @@ function component(;
     end
 
     router = get_router(
+        db,
         name=name,
         ws=ws,
         tcp=tcp,
@@ -294,7 +297,7 @@ returned as an RPC exception.
 """
 function expose(twin::Twin, name::AbstractString, func::Function)
     router = twin.router
-    router.topic_function[name] = func
+    router.local_function[name] = func
     msg = AdminReqMsg(twin, name, Dict{String,Any}(COMMAND => EXPOSE_CMD), rid(twin))
     return send_msg(twin, msg) |> fetch
 end
@@ -308,7 +311,7 @@ Stop servicing RPC requests targeting `service`.
 """
 function unexpose(twin::Twin, topic::AbstractString)
     router = twin.router
-    delete!(router.topic_function, topic)
+    delete!(router.local_function, topic)
     msg = AdminReqMsg(twin, topic, Dict{String,Any}(COMMAND => UNEXPOSE_CMD))
     return send_msg(twin, msg) |> fetch
 end
@@ -331,8 +334,8 @@ function subscribe(
 )
     from_now = to_microseconds(from)
     router = twin.router
-    router.topic_function[name] = func
-    router.subinfo[name] = from_now
+    router.local_function[name] = func
+    router.local_subscriber[name] = from_now
 
     msg = AdminReqMsg(
         twin,
@@ -392,8 +395,8 @@ Stops delivering messages published on the specified `topic` to the `rb` compone
 """
 function unsubscribe(twin::Twin, topic::AbstractString)
     router = twin.router
-    delete!(router.topic_function, topic)
-    delete!(router.subinfo, topic)
+    delete!(router.local_function, topic)
+    delete!(router.local_subscriber, topic)
     msg = AdminReqMsg(twin, topic, Dict{String,Any}(COMMAND => UNSUBSCRIBE_CMD))
     return send_msg(twin, msg) |> fetch
 end

@@ -34,6 +34,11 @@ const GROUP = get(ENV, "GROUP", "all")
             include("mqtt/test_mqtt_publish.jl")
         end
     end
+    if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
+        @time @safetestset "dusckdb" begin
+            include("duckdb/test_duckdb.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "broker"
         @time @safetestset "anonymous_twin" begin
             include("broker/test_anonymous_twin.jl")

@@ -27,7 +27,7 @@ function run()
     request_timeout!(10)
     bro = broker(name=broker_name, ws=8000)
 
-    bro.router.topic_function["login"] = custom_login
+    bro.router.local_function["login"] = custom_login
 
     @test_throws RembusError connect(node)
 end

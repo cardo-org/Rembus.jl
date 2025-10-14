@@ -335,7 +335,8 @@ end
 Start a component that connects to a pool of nodes defined by the `urls` array.
 """
 function component(
-    urls::Vector;
+    urls::Vector,
+    db=FileStore();
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -351,7 +352,7 @@ function component(
     end
 
     router = get_router(
-        name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
+        db, name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
     )
     set_policy(router, policy)
     for url_str in urls
@@ -373,7 +374,8 @@ function singleton()
 end
 
 function component(
-    url::RbURL;
+    url::RbURL,
+    db=FileStore();
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -395,7 +397,14 @@ function component(
         name = rid(url)
     end
     router = get_router(
-        name=name, ws=ws, tcp=tcp, zmq=zmq, http=http, authenticated=authenticated, secure=secure
+        db,
+        name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        http=http,
+        authenticated=authenticated,
+        secure=secure
     )
     set_policy(router, policy)
     return component(url, router, enc, failovers)
@@ -729,17 +738,17 @@ function _topics(results, target::Twin, topic_map)
 end
 
 function topic_impls(router::Router, target::Twin)
-    results = filter(keys(router.topic_function)) do topic
+    results = filter(keys(router.local_function)) do topic
         # filter out the built-in methods from the list of exposers
-        !haskey(router.subinfo, topic) && !isbuiltin(topic)
+        !haskey(router.local_subscriber, topic) && !isbuiltin(topic)
     end
 
     return _topics(results, target, router.topic_impls)
 end
 
 function topic_interests(router::Router, target::Twin)
-    results = filter(keys(router.topic_function)) do topic
-        haskey(router.subinfo, topic)
+    results = filter(keys(router.local_function)) do topic
+        haskey(router.local_subscriber, topic)
     end
 
     return _topics(results, target, router.topic_interests)

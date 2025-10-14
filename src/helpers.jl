@@ -260,9 +260,9 @@ end
 
 function twin_configuration(router, twin)
     cfg = Dict("exposers" => [], "subscribers" => [])
-    for topic in keys(router.topic_function)
+    for topic in keys(router.local_function)
         isbuiltin(topic) && continue
-        if haskey(router.subinfo, topic)
+        if haskey(router.local_subscriber, topic)
             push!(cfg["subscribers"], topic)
         else
             push!(cfg["exposers"], topic)

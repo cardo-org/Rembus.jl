@@ -21,3 +21,4 @@ paper.blg
 
 *.ducklake
 *.ducklake.files
+.env

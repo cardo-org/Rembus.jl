@@ -4,7 +4,7 @@
 Return the owners dataframe
 =#
 function load_tenants(router, ::FileStore)
-    fn = joinpath(broker_dir(router), TENANTS_FILE)
+    fn = joinpath(broker_dir(router.id), TENANTS_FILE)
     if isfile(fn)
         return JSON3.read(fn, Dict{String,String})
     else
@@ -115,7 +115,7 @@ isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
 
 function load_topic_auth(router, ::FileStore)
     @debug "loading topic_auth table"
-    fn = joinpath(broker_dir(router), "topic_auth.json")
+    fn = joinpath(broker_dir(router.id), "topic_auth.json")
     if isfile(fn)
         content = read(fn, String)
         topics = Dict()
@@ -141,7 +141,7 @@ function save_topic_auth(router, ::FileStore)
 end
 
 function load_admins(router, ::FileStore)
-    fn = joinpath(broker_dir(router), "admins.json")
+    fn = joinpath(broker_dir(router.id), "admins.json")
     @debug "loading $fn"
     if isfile(fn)
         content = read(fn, String)
@@ -222,7 +222,7 @@ end
 
 
 function exposed_topics(router::Router, twin::Twin)
-    topics = []
+    topics = String[]
     for (topic, twins) in router.topic_impls
         if twin in twins
             push!(topics, topic)

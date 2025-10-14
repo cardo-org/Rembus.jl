@@ -499,7 +499,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     downstream::Union{Nothing,Rembus.AbstractRouter}
     id::String
     eid::UInt64 # ephemeral unique id
-    store_type::Archiver
+    store_type::Any
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -517,8 +517,8 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     last_invoked::Dict{String,Int} # topic => twin index last called
     topic_interests::Dict{String,Set{T}} # topic => twins subscribed to topic
     id_twin::Dict{String,T} # id => twin
-    topic_function::Dict{String,Function}
-    subinfo::Dict{String,Float64}
+    local_function::Dict{String,Function}
+    local_subscriber::Dict{String,Float64}
     topic_auth::Dict{String,Dict{String,Bool}} # topic => {rid(twin) => true}
     admins::Set{String}
     tcp_server::Sockets.TCPServer
@@ -552,8 +552,8 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         Dict(), # last_invoked
         Dict(), # topic_interests
         Dict(), # id_twin
-        Dict(), # topic_function
-        Dict(), # subinfo
+        Dict(), # local_function
+        Dict(), # local_subscriber
         Dict(), # topic_auth
         Set(), # admins
     )

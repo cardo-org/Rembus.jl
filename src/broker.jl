@@ -73,17 +73,17 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
             args = getargs(payload)
             if isa(args, Dict)
                 kargs = Dict(Symbol(k) => v for (k, v) in args)
-                result = router.topic_function[msg.topic](; kargs...)
+                result = router.local_function[msg.topic](; kargs...)
             else
-                result = router.topic_function[msg.topic](args...)
+                result = router.local_function[msg.topic](args...)
             end
         else
             args = getargs(payload)
             if isa(args, Dict)
                 kargs = Dict(Symbol(k) => v for (k, v) in args)
-                result = router.topic_function[msg.topic](router.shared, twin; kargs...)
+                result = router.local_function[msg.topic](router.shared, twin; kargs...)
             else
-                result = router.topic_function[msg.topic](router.shared, twin, args...)
+                result = router.local_function[msg.topic](router.shared, twin, args...)
             end
         end
         sts = STS_SUCCESS
@@ -96,12 +96,12 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
             try
                 if router.shared === missing
                     result = Base.invokelatest(
-                        router.topic_function[msg.topic],
+                        router.local_function[msg.topic],
                         getargs(payload)...
                     )
                 else
                     result = Base.invokelatest(
-                        router.topic_function[msg.topic],
+                        router.local_function[msg.topic],
                         router.shared,
                         twin,
                         getargs(payload)...
@@ -118,7 +118,7 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
         @error "[$(msg.topic)] local eval: $result"
     end
 
-    if !haskey(router.subinfo, msg.topic)
+    if !haskey(router.local_subscriber, msg.topic)
         resmsg = ResMsg(msg, sts, result)
         @debug "[broker] response: $resmsg ($(resmsg.data))"
         respond(router, resmsg, twin)
@@ -137,9 +137,9 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
     end
     try
         if router.shared === missing
-            result = router.topic_function["*"](msg.topic, getargs(payload)...)
+            result = router.local_function["*"](msg.topic, getargs(payload)...)
         else
-            result = router.topic_function["*"](
+            result = router.local_function["*"](
                 router.shared, twin, msg.topic, getargs(payload)...
             )
         end
@@ -153,12 +153,12 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
             try
                 if router.shared === missing
                     result = Base.invokelatest(
-                        router.topic_function[msg.topic],
+                        router.local_function[msg.topic],
                         getargs(payload)...
                     )
                 else
                     result = Base.invokelatest(
-                        router.topic_function[msg.topic],
+                        router.local_function[msg.topic],
                         router.shared,
                         twin,
                         getargs(payload)...
@@ -179,7 +179,7 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
 end
 
 function local_fn(router::Router, twin::Twin, msg)
-    if haskey(router.topic_function, msg.topic)
+    if haskey(router.local_function, msg.topic)
         Threads.@spawn local_eval(router, twin, msg)
         return true
     end
@@ -187,9 +187,9 @@ function local_fn(router::Router, twin::Twin, msg)
 end
 
 function local_subscribers(router::Router, twin::Twin, msg::RembusMsg)
-    if haskey(router.topic_function, msg.topic)
+    if haskey(router.local_function, msg.topic)
         Threads.@spawn local_eval(router, twin, msg)
-    elseif haskey(router.topic_function, "*")
+    elseif haskey(router.local_function, "*")
         Threads.@spawn glob_eval(router, twin, msg)
     end
     return nothing
@@ -205,16 +205,16 @@ end
 
 Setup the router.
 =#
-function boot(router::Router)
+function boot(router::Router, ::FileStore)
     if broker_isnamed(router)
-        dir = broker_dir(router)
+        dir = broker_dir(router.id)
 
-        appdir = keys_dir(router)
+        appdir = keys_dir(router.id)
         if !isdir(appdir)
             mkdir(appdir)
         end
 
-        msg_dir = messages_dir(router)
+        msg_dir = messages_dir(router.id)
         if !isdir(msg_dir)
             mkdir(msg_dir)
         end
@@ -226,15 +226,10 @@ function boot(router::Router)
 end
 
 function init(router::Router)
-    boot(router)
-    router.topic_function["rid"] = (ctx=missing, twin=nothing) -> router.id
-    router.topic_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
-    router.topic_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
-end
-
-function archiver!(router::Router, archiver::Archiver)
-    @debug "[$router] injecting $archiver"
-    router.store_type = archiver
+    boot(router, router.store_type)
+    router.local_function["rid"] = (ctx=missing, twin=nothing) -> router.id
+    router.local_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
+    router.local_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
 end
 
 function first_up(::Router, tenant, topic, implementors)
@@ -438,7 +433,6 @@ Rembus broker main task.
 =#
 function router_task(self, router::Router, implementor_rule)
     try
-        init(router)
         for msg in self.inbox
             @debug "[$router:broker] recv: $msg"
             !isshutdown(msg) || break
@@ -743,7 +737,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
     end
 end
 
-function get_router(;
+function get_router(db=FileStore();
     name=localcid(),
     ws=nothing,
     tcp=nothing,
@@ -758,12 +752,14 @@ function get_router(;
     broker_process = from("$name.broker")
     if broker_process === nothing
         router = Router{Twin}(name, nothing, missing)
+        router.store_type = db
         if authenticated
             router.mode = Rembus.authenticated
         end
         set_policy(router, policy)
         bp = process("broker", tsk, args=(router,))
         router.process = bp
+        init(router)
 
         start_broker(
             router,

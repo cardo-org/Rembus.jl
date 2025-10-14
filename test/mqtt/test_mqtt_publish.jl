@@ -8,7 +8,7 @@ using Test
 Wait until `ctx[key]` becomes nonzero (meaning a message arrived),
 or throw an error if nothing arrives within `timeout` seconds.
 
-Useful fortest-duckdb MQTT tests in CI where broker or subscriber might be slow.
+Useful for MQTT tests in CI where broker or subscriber might be slow.
 """
 function wait_for_message(ctx::Dict, key::String; timeout::Float64=5.0, interval::Float64=0.1)
     start = time()
