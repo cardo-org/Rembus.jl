@@ -105,7 +105,7 @@ end
 @setup_workload begin
     warn!()
     ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus_compile")
-    ENV["REMBUS_TIMEOUT"] = "20"
+    ENV["REMBUS_TIMEOUT"] = "30"
     ENV["REMBUS_ZMQ_PING_INTERVAL"] = "0"
     ENV["REMBUS_WS_PING_INTERVAL"] = "0"
     @compile_workload begin
