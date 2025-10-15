@@ -39,8 +39,8 @@ DuckDB = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
 Mosquitto = "db317de6-444b-4dfa-9d0e-fbf3d8dd78ea"
 
 [extensions]
-MQTTExt = "Mosquitto"
 DuckDBExt = "DuckDB"
+MQTTExt = "Mosquitto"
 
 [compat]
 ArgParse = "1"
@@ -70,6 +70,7 @@ ZMQ = "1"
 julia = "1.10"
 
 [extras]
+DuckDB = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
 Mosquitto = "db317de6-444b-4dfa-9d0e-fbf3d8dd78ea"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
@@ -77,4 +78,4 @@ TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 
 [targets]
-test = ["Mosquitto", "Test", "SafeTestsets", "TestItems", "TestItemRunner"]
+test = ["DuckDB", "Mosquitto", "Test", "SafeTestsets", "TestItems", "TestItemRunner"]

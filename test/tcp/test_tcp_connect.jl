@@ -3,7 +3,7 @@ include("../utils.jl")
 function testcase(issecure)
     try
         if issecure
-            node_url = "tls://:8011/pub"
+            node_url = "tls://$(gethostname()):8011/pub"
             rb = broker(secure=true, tcp=8011)
         else
             node_url = "tcp://:8011/pub"
@@ -40,7 +40,7 @@ else
     ENV["REMBUS_KEYSTORE"] = test_keystore
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
-        Base.run(`$script -k $test_keystore`)
+        Base.run(`$script -k $test_keystore -n $(gethostname())`)
         testcase(true)
     catch e
         @error "[tcp_connect] error: $e"

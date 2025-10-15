@@ -98,22 +98,23 @@ try
     if Base.Sys.iswindows()
         @info "Windows platform detected: skipping test_https"
     else
+        hname = gethostname()
         # create keystore
         test_keystore = joinpath(tempdir(), "keystore")
         script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
         ENV["REMBUS_KEYSTORE"] = test_keystore
         ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
         try
-            Base.run(`$script -k $test_keystore`)
+            Base.run(`$script -k $test_keystore -n $hname`)
             rb = broker(secure=true, ws=6010, tcp=6011, zmq=6012, name="publish")
             @test Rembus.islistening(rb, wait=10)
             for pub_url in [
-                "tls://127.0.0.1:6011/publish_pub",
-                "wss://127.0.0.1:6010/publish_pub"
+                "tls://$hname:6011/publish_pub",
+                "wss://$hname:6010/publish_pub"
             ]
                 for sub_url in [
-                    "tls://127.0.0.1:6011/publish_tcpsub",
-                    "wss://127.0.0.1:6010/publish_wssub"
+                    "tls://$hname:6011/publish_tcpsub",
+                    "wss://$hname:6010/publish_wssub"
                 ]
                     ctx = run(pub_url, sub_url)
                     url = Rembus.RbURL(sub_url)

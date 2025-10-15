@@ -53,7 +53,7 @@ end
     msg = Rembus.PubSubMsg(twin, "topic", "data", Rembus.QOS2)
     twin.ackdf = Rembus.load_received_acks(router, url, router.store_type)
     Rembus.add_pubsub_id(twin, msg)
-    Rembus.detach(twin)
+    Rembus.save_received_acks(twin, router.store_type)
 
     # reload the acks file
     twin2 = Rembus.Twin(url, router)

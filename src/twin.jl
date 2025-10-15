@@ -220,6 +220,13 @@ function zmq_connect(rb)
     return nothing
 end
 
+# Add missing hostname setter for MbedTLS.jl
+function mbedtls_set_hostname!(ctx::MbedTLS.SSLContext, hostname::AbstractString)
+    ptr = hasfield(typeof(ctx), :ctx) ? getfield(ctx, :ctx) : getfield(ctx, :data)
+    ccall((:mbedtls_ssl_set_hostname, MbedTLS.libmbedtls), Cint,
+        (Ptr{Cvoid}, Cstring), ptr, hostname)
+end
+
 function tcp_connect(rb, isconnected::Condition)
     try
         url = nodeurl(rb)
@@ -253,6 +260,7 @@ function tcp_connect(rb, isconnected::Condition)
 
             sock = Sockets.connect(uri.host, parse(Int, uri.port))
             MbedTLS.setup!(ctx, sslconf)
+            mbedtls_set_hostname!(ctx, uri.host)
             MbedTLS.set_bio!(ctx, sock)
             MbedTLS.handshake(ctx)
 
@@ -846,7 +854,6 @@ function destroy_twin(twin::Twin, router::Router)
 end
 
 function end_receiver(twin::Twin)
-    ## twin.reactive = false
     if hasname(twin)
         detach(twin)
     else
@@ -1361,17 +1368,19 @@ function detach(twin)
         save_twin(router, twin, router.store_type)
     end
 
-    # Move the outstanding requests to the floating socket
-    # This will trigger the requests timeout ...
-    twin.socket = Float(twin.socket.out, twin.socket.direct)
+    if !isa(twin.socket, Float)
+        # Move the outstanding requests to the floating socket
+        # This will trigger the requests timeout ...
+        twin.socket = Float(twin.socket.out, twin.socket.direct)
 
-    if !isempty(twin.ackdf)
-        save_received_acks(twin, router.store_type)
-    end
+        if !isempty(twin.ackdf)
+            save_received_acks(twin, router.store_type)
+        end
 
-    # Remove the twin from the router tables.
-    if !hasname(twin)
-        cleanup(twin, router)
+        # Remove the twin from the router tables.
+        if !hasname(twin)
+            cleanup(twin, router)
+        end
     end
 
     return nothing

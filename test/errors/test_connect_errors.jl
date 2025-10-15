@@ -44,7 +44,11 @@ end
 
 function connect_secure()
     try
-        for cid in ["tls://:8001/connect_errors_aaa", "wss://:8000/connect_errors_bbb"]
+        hname = gethostname()
+        for cid in [
+            "tls://$hname:8001/connect_errors_aaa",
+            "wss://$hname:8000/connect_errors_bbb"
+        ]
             rb = connect(cid)
 
             @test isopen(rb) === true
@@ -60,15 +64,16 @@ function connect_secure()
 end
 
 function no_cacert()
+    host = gethostname()
     try
-        connect("tls://:8001")
+        connect("tls://$host:8001")
         @test false
     catch e
         @test isa(e, Rembus.CABundleNotFound)
     end
 
     try
-        connect("wss://:8000")
+        connect("wss://$host:8000")
         @test false
     catch e
         @test isa(e, Rembus.CABundleNotFound)
@@ -77,8 +82,9 @@ function no_cacert()
 end
 
 function invalid_cacert()
+    host = gethostname()
     try
-        connect("tls://:8001")
+        connect("tls://$host:8001")
         @test false
     catch e
         @test isa(e, Base.IOError)
@@ -86,7 +92,7 @@ function invalid_cacert()
     end
 
     try
-        connect("wss://:8000")
+        connect("wss://$host:8000")
         @test false
     catch e
         @test isa(e, HTTP.Exceptions.ConnectError)
@@ -95,8 +101,9 @@ function invalid_cacert()
 end
 
 function wrong_keys(cid)
+    host = gethostname()
     try
-        connect("tls://:8001/$cid")
+        connect("tls://$host:8001/$cid")
         @test false
     catch e
         @test isa(e, Rembus.RembusError)
@@ -104,7 +111,7 @@ function wrong_keys(cid)
     end
 
     try
-        connect("wss://:8000/$cid")
+        connect("wss://$host:8000/$cid")
         @test false
     catch e
         @test isa(e, Rembus.RembusError)
@@ -113,15 +120,16 @@ function wrong_keys(cid)
 end
 
 function missing_keys(cid)
+    host = gethostname()
     try
-        connect("tls://:8001/$cid")
+        connect("tls://$host:8001/$cid")
         @test false
     catch e
         @test isa(e, ErrorException)
     end
 
     try
-        connect("wss://:8000/$cid")
+        connect("wss://$host:8000/$cid")
         @test false
     catch e
         @test isa(e, ErrorException)
@@ -135,13 +143,14 @@ connect_fail()
 if Base.Sys.iswindows()
     @info "Windows platform detected: skipping test_tls_connect"
 else
+    hname = gethostname()
     # create keystore
     test_keystore = joinpath(tempdir(), "keystore")
     script = joinpath(@__DIR__, "..", "..", "bin", "init_keystore")
     ENV["REMBUS_KEYSTORE"] = test_keystore
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
-        Base.run(`$script -k $test_keystore`)
+        Base.run(`$script -k $test_keystore -n $hname`)
         execute(connect_secure, broker_name, secure=true, tcp=8001, ws=8000)
 
         delete!(ENV, "HTTP_CA_BUNDLE")
