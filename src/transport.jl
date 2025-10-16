@@ -394,18 +394,18 @@ function pong(z::ZRouter, mid, identity)
     send(socket, MESSAGE_END, more=false)
 end
 
-function id2bytes(id::UInt128)::Vector{UInt8}
-    io = IOBuffer(maxsize=16)
+function id2bytes(id::Msgid)::Vector{UInt8}
+    io = IOBuffer(maxsize=MSGID_SZ)
     write(io, id)
     take!(io)
 end
 
 function bytes2id(buff::Vector{UInt8})
-    read(IOBuffer(buff), UInt128)
+    read(IOBuffer(buff), Msgid)
 end
 
 function bytes2zid(buff::Vector{UInt8})
-    UInt128(read(IOBuffer(buff[2:end]), UInt32))
+    Msgid(read(IOBuffer(buff[2:end]), UInt32))
 end
 
 # COV_EXCL_START

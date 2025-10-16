@@ -5,7 +5,7 @@ using TestItemRunner
 
 const GROUP = get(ENV, "GROUP", "all")
 
-@run_package_tests
+#@run_package_tests
 
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"

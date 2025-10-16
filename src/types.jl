@@ -1,3 +1,5 @@
+const Msgid = UInt64
+
 abstract type RembusException <: Exception end
 
 """
@@ -208,7 +210,7 @@ struct AckState
     timer::Timer
 end
 
-ack_dataframe() = DataFrame(ts=UInt64[], id=UInt128[])
+ack_dataframe() = DataFrame(ts=UInt64[], id=Msgid[])
 
 # Wrong tcp packet received.
 struct WrongTcpPacket <: Exception
@@ -272,8 +274,8 @@ abstract type AbstractPlainSocket <: AbstractSocket end
 requireauthentication(::AbstractPlainSocket) = true # COV_EXCL_LINE
 
 struct Float <: AbstractSocket
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     Float(out=Dict(), direct=Dict()) = new(out, direct)
 end
 
@@ -283,8 +285,8 @@ Base.show(io::IO, s::Float) = print(io, "FLOAT")
 
 struct WS <: AbstractPlainSocket
     sock::HTTP.WebSockets.WebSocket
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     WS(sock) = new(
         sock,
         Dict(), # out
@@ -296,8 +298,8 @@ Base.show(io::IO, s::WS) = print(io, "WS:$(isopen(s))")
 
 struct TCP <: AbstractPlainSocket
     sock::Sockets.TCPSocket
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     TCP(sock) = new(
         sock,
         Dict(), # out
@@ -309,8 +311,8 @@ Base.show(io::IO, s::TCP) = print(io, "TCP:$(isopen(s))")
 
 struct TLS <: AbstractPlainSocket
     sock::MbedTLS.SSLContext
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     TLS(sock) = new(
         sock,
         Dict(), # out
@@ -323,8 +325,8 @@ Base.show(io::IO, s::TLS) = print(io, "TLS:$(isopen(s))")
 struct ZDealer <: AbstractSocket
     sock::ZMQ.Socket
     context::ZMQ.Context
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     function ZDealer()
         context = ZMQ.Context()
         sock = ZMQ.Socket(context, DEALER)
@@ -343,8 +345,8 @@ requireauthentication(::ZDealer) = true # COV_EXCL_LINE
 struct ZRouter <: AbstractSocket
     sock::ZMQ.Socket
     zaddress::Vector{UInt8}
-    out::Dict{UInt128,FutureResponse}
-    direct::Dict{UInt128,FutureResponse}
+    out::Dict{Msgid,FutureResponse}
+    direct::Dict{Msgid,FutureResponse}
     ZRouter(sock, address) = new(
         sock,
         address,
@@ -724,7 +726,7 @@ Base.show(io::IO, r::Router) = print(io, "$(r.id)")
 Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
 
 msg_dataframe() = DataFrame(
-    ptr=UInt[], qos=UInt8[], uid=UInt128[], topic=String[], pkt=Vector{UInt8}[]
+    ptr=UInt[], qos=UInt8[], uid=Msgid[], topic=String[], pkt=Vector{UInt8}[]
 )
 mutable struct RouterCollector <: Prometheus.Collector
     router::Router

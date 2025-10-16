@@ -1131,7 +1131,7 @@ function challenge(router::Router, twin::Twin, msgid)
     return ResMsg(twin, msgid, STS_CHALLENGE, challenge_val)
 end
 
-function create_request(twin, msg_id::UInt128, request::AbstractString, params)
+function create_request(twin, msg_id::Msgid, request::AbstractString, params)
     if contains(request, '/')
         target = request[1:(findlast(==('/'), request)-1)]
         topic = request[(findlast(==('/'), request)+1):end]
@@ -1232,9 +1232,9 @@ function json_parse(twin::Twin, pkt::Dict)
         return PubSubMsg(twin, pkt["method"], get(pkt, "params", nothing))
     else
         if isa(uid, String)
-            msg_id = parse(UInt128, uid)
+            msg_id = parse(Msgid, uid)
         else
-            msg_id = UInt128(uid)
+            msg_id = Msgid(uid)
         end
 
         result = get(pkt, "result", nothing)

@@ -12,8 +12,8 @@ function pubsub(rb, msg)
 end
 
 function run()
+    rb = connect("test_socket_send")
     request_timeout!(0.001)
-    rb = connect()
 
     sleep(1)
 

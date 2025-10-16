@@ -378,7 +378,7 @@ function data_at_rest(; from=LastReceived, broker="broker")
     result = DataFrame(
         ptr=UInt64[],
         qos=UInt8[],
-        uid=UInt128[],
+        uid=Msgid[],
         topic=String[],
         pkt=Vector{UInt8}[],
         data=Any[]

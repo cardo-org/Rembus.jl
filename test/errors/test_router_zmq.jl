@@ -109,7 +109,7 @@ end
 
 function empty_cid(socket)
     send(socket, Message(), more=true)
-    send(socket, encode([Rembus.TYPE_IDENTITY, Rembus.id2bytes(UInt128(1)), ""]), more=true)
+    send(socket, encode([Rembus.TYPE_IDENTITY, Rembus.id2bytes(Rembus.Msgid(1)), ""]), more=true)
     send(socket, Rembus.DATA_EMPTY, more=true)
     send(socket, Rembus.MESSAGE_END, more=false)
 end

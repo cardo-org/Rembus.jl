@@ -12,17 +12,17 @@ const probeCollector = Dict{String,Vector{ProbedMsg}}()
 abstract type RembusTopicMsg <: RembusMsg end
 
 struct PingMsg <: RembusMsg
-    id::UInt128
+    id::Msgid
     cid::String
     twin::Twin
-    PingMsg(twin::Twin, id::UInt128, cid::String) = new(id, cid, twin)
+    PingMsg(twin::Twin, id::Msgid, cid::String) = new(id, cid, twin)
     PingMsg(twin::Twin, cid::String) = new(id(), cid, twin)
 end
 
 Base.show(io::IO, m::PingMsg) = show(io, "PING|$(m.id)|$(m.cid)")
 
 struct IdentityMsg <: RembusMsg
-    id::UInt128
+    id::Msgid
     cid::String
     meta::Dict
     twin::Twin
@@ -33,7 +33,7 @@ struct IdentityMsg <: RembusMsg
     ) = new(id(), cid, meta, twin)
     IdentityMsg(
         twin::Twin,
-        msgid::UInt128,
+        msgid::Msgid,
         cid::AbstractString,
         meta=Dict()
     ) = new(msgid, cid, meta, twin)
@@ -45,7 +45,7 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     topic::String
     data::T
     flags::UInt8
-    id::UInt128
+    id::Msgid
     twin::Twin
     counter::Int
     function PubSubMsg(twin::Twin, topic, data=nothing, flags=0x0, mid=0)
@@ -59,7 +59,7 @@ end
 Base.show(io::IO, m::PubSubMsg) = show(io, "PUB|$(m.id)|$(m.topic)|$(m.flags)")
 
 mutable struct RpcReqMsg{T} <: RembusTopicMsg
-    id::UInt128
+    id::Msgid
     topic::String
     data::T
     target::Union{Nothing,String}
@@ -72,7 +72,7 @@ mutable struct RpcReqMsg{T} <: RembusTopicMsg
 
     function RpcReqMsg(
         twin::Twin,
-        msgid::UInt128,
+        msgid::Msgid,
         topic::AbstractString,
         data,
         target=nothing,
@@ -85,14 +85,14 @@ end
 Base.show(io::IO, m::RpcReqMsg) = show(io, "RPC|$(m.id)|$(m.topic)|$(m.target)")
 
 mutable struct AdminReqMsg{T} <: RembusTopicMsg
-    id::UInt128
+    id::Msgid
     topic::String
     data::T
     target::Union{Nothing,String}
     flags::UInt8
     twin::Twin
 
-    function AdminReqMsg(twin::Twin, msgid::UInt128, topic, data, target=nothing, flags=0x0)
+    function AdminReqMsg(twin::Twin, msgid::Msgid, topic, data, target=nothing, flags=0x0)
         return new{typeof(data)}(msgid, topic, data, target, flags, twin)
     end
 
@@ -104,26 +104,26 @@ end
 Base.show(io::IO, m::AdminReqMsg) = show(io, "ADM|$(m.id)|$(m.topic)|$(m.data)")
 
 struct EnableReactiveMsg <: RembusMsg
-    id::UInt128
+    id::Msgid
     msg_from::Float64
 end
 
 struct AckMsg <: RembusMsg
     twin::Twin
-    id::UInt128
+    id::Msgid
 end
 
 Base.show(io::IO, m::AckMsg) = show(io, "ACK|$(m.id)")
 
 struct Ack2Msg <: RembusMsg
     twin::Twin
-    id::UInt128
+    id::Msgid
 end
 
 Base.show(io::IO, m::Ack2Msg) = show(io, "ACK2|$(m.id)")
 
 mutable struct ResMsg{T} <: RembusMsg
-    id::UInt128
+    id::Msgid
     status::UInt8
     data::T
     flags::UInt8
@@ -131,7 +131,7 @@ mutable struct ResMsg{T} <: RembusMsg
     reqdata::Any
 
     ResMsg(
-        twin::Twin, id::UInt128, status, data, flags=0x0
+        twin::Twin, id::Msgid, status, data, flags=0x0
     ) = new{typeof(data)}(id, status, data, flags, twin)
 
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
@@ -146,7 +146,7 @@ end
 Base.show(io::IO, m::ResMsg) = show(io, "RES|$(m.id)|status:$(m.status)")
 
 struct Register <: RembusMsg
-    id::UInt128
+    id::Msgid
     cid::String # client name
     pin::String
     pubkey::Vector{UInt8}
@@ -154,7 +154,7 @@ struct Register <: RembusMsg
     twin::Twin
     Register(
         twin::Twin,
-        msgid::UInt128,
+        msgid::Msgid,
         cid::AbstractString,
         pin::AbstractString,
         pubkey::Vector{UInt8},
@@ -164,16 +164,16 @@ end
 Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)")
 
 struct Unregister <: RembusMsg
-    id::UInt128
+    id::Msgid
     twin::Twin
     Unregister(twin::Twin) = new(id(), twin)
-    Unregister(twin::Twin, msgid::UInt128) = new(msgid, twin)
+    Unregister(twin::Twin, msgid::Msgid) = new(msgid, twin)
 end
 
 Base.show(io::IO, m::Unregister) = show(io, "UNREG|$(m.id)")
 
 struct Attestation <: RembusMsg
-    id::UInt128
+    id::Msgid
     cid::String # client name
     signature::Vector{UInt8}
     meta::Dict
@@ -185,7 +185,7 @@ struct Attestation <: RembusMsg
     end
 
     function Attestation(
-        twin::Twin, msgid::UInt128, cid::AbstractString, signature::Vector{UInt8}, meta::Dict
+        twin::Twin, msgid::Msgid, cid::AbstractString, signature::Vector{UInt8}, meta::Dict
     )
         return new(msgid, cid, signature, meta, twin)
     end
@@ -203,7 +203,8 @@ end
 
 function id()
     tv = Libc.TimeVal()
-    UInt128(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
+    #Rembus.Msgid(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
+    Msgid(uuid4().value & 0xffffffffffffffff)
 end
 
 function response_timeout(twin, msg::RembusMsg)
@@ -219,7 +220,7 @@ function response_timeout(twin, msg::RembusMsg)
 end
 
 function twin_future_request(twin::Twin, msg::RembusMsg, timeout)
-    mid::UInt128 = msg.id
+    mid::Msgid = msg.id
     timer = Timer((tim) -> response_timeout(twin, msg), timeout)
     resp_cond = FutureResponse(msg, timer)
     twin.socket.direct[mid] = resp_cond

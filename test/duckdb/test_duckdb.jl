@@ -44,7 +44,7 @@ function run()
 
     # set some received acks awaiting ack2
     tw = bro.router.id_twin["duckdb_pub"]
-    tw.ackdf = DataFrame(:ts => UInt64[1], :id => UInt128[2])
+    tw.ackdf = DataFrame(:ts => UInt64[1], :id => Rembus.Msgid[2])
 
     sleep(1)
     close(sub)

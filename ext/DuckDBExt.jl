@@ -17,7 +17,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
             name TEXT,
             ptr UBIGINT,
             qos UTINYINT,
-            uid UHUGEINT,
+            uid UBIGINT,
             topic TEXT,
             data TEXT
         )""",
@@ -62,7 +62,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
             name TEXT,
             twin TEXT,
             ts UBIGINT,
-            id UHUGEINT
+            id UBIGINT
         )
         """
     ]

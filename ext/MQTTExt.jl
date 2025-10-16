@@ -10,8 +10,8 @@ end
 
 struct MQTTSock <: Rembus.AbstractSocket
     sock::Mosquitto.Client_v5
-    out::Dict{UInt128,Rembus.FutureResponse}
-    direct::Dict{UInt128,Rembus.FutureResponse}
+    out::Dict{Rembus.Msgid,Rembus.FutureResponse}
+    direct::Dict{Rembus.Msgid,Rembus.FutureResponse}
     MQTTSock(sock) = new(
         sock,
         Dict(),
