@@ -196,12 +196,12 @@ function zmq_receive(twin::Twin)
             msg = zmq_load(twin, twin.socket.sock)
             put!(twin.router.process.inbox, msg)
         catch e
-            if isa(e, EOFError)
+            if isa(e, EOFError) || isa(e, ZMQ.StateError)
                 # Assume that an EOFError is thrown only when a zmq socket
                 # is explicitly closed.
                 break
             else
-                @error "[$twin] zmq_receive: $e"
+                @error "[$twin] zmq_receive $(typeof(e)): $e"
                 dumperror(twin, e)
             end
         end
