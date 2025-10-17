@@ -203,7 +203,7 @@ end
 
 function id()
     tv = Libc.TimeVal()
-    #Rembus.Msgid(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
+    #UInt128(tv.sec * 1_000_000 + tv.usec) << 64 + (uuid4().value & 0xffffffffffffffff)
     Msgid(uuid4().value & 0xffffffffffffffff)
 end
 

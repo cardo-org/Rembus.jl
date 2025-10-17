@@ -913,10 +913,11 @@ function pubsub_msg(router::Router, msg)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
         return false
     else
-        if msg.flags > QOS0
+        qos = msg.flags & QOS2
+        if qos > QOS0
             put!(twin.process.inbox, AckMsg(twin, msg.id))
         end
-        if msg.flags == QOS2
+        if qos == QOS2
             if already_received(twin, msg)
                 @info "[$twin] skipping already received message $msg"
                 return true
