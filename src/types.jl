@@ -726,7 +726,7 @@ Base.show(io::IO, r::Router) = print(io, "$(r.id)")
 Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
 
 msg_dataframe() = DataFrame(
-    ptr=UInt[], qos=UInt8[], uid=Msgid[], topic=String[], pkt=Vector{UInt8}[]
+    ptr=UInt[], ts=UInt32[], qos=UInt8[], uid=Msgid[], topic=String[], pkt=Vector{UInt8}[]
 )
 mutable struct RouterCollector <: Prometheus.Collector
     router::Router

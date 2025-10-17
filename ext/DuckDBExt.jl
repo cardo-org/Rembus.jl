@@ -16,6 +16,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         CREATE TABLE IF NOT EXISTS message (
             name TEXT,
             ptr UBIGINT,
+            ts UINTEGER,
             qos UTINYINT,
             uid UBIGINT,
             topic TEXT,
@@ -80,12 +81,13 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
     @debug "[$router] Persisting messages to DuckDB"
     df = select(
         router.msg_df,
-        :ptr, :qos, :uid, :topic, :pkt => ByRow(p -> JSON3.write(decode(p)[end])) => :data
+        :ptr, :ts, :qos, :uid, :topic,
+        :pkt => ByRow(p -> JSON3.write(decode(p)[end])) => :data
     )
     df[!, :name] .= router.id
     DuckDB.register_data_frame(con, df, "df_view")
     DuckDB.execute(
-        con, "INSERT INTO message SELECT name, ptr, qos, uid, topic, data FROM df_view"
+        con, "INSERT INTO message SELECT name, ptr, ts, qos, uid, topic, data FROM df_view"
     )
 end
 

@@ -339,7 +339,11 @@ function save_message(pd, router)
                     data = encode_message(msg)
                 end
 
-                push!(router.msg_df, [msg.counter, msg.flags, msg.id, msg.topic, data])
+                ts::UInt32 = 0
+                if (msg.flags & TS_FLAG) == TS_FLAG
+                    ts = UInt32(msg.id & 0xffffffff)
+                end
+                push!(router.msg_df, [msg.counter, ts, msg.flags, msg.id, msg.topic, data])
             elseif msg === :persist
                 @debug "[$router] persisting cached messages"
                 persist(router)
@@ -377,6 +381,7 @@ function data_at_rest(; from=LastReceived, broker="broker")
     files = messages_files(broker, to_microseconds(from))
     result = DataFrame(
         ptr=UInt64[],
+        ts=UInt32[],
         qos=UInt8[],
         uid=Msgid[],
         topic=String[],

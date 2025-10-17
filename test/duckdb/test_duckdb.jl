@@ -9,13 +9,16 @@ subtopic1(val) = nothing
 subtopic2() = nothing
 service1() = nothing
 
+function nowts()
+    t = Libc.TimeVal().sec
+    return UInt32(t - t % 900)
+end
+
 function run()
     con = DuckDB.DB()
     bro = component(con)
-
     # set admin role for sub component
     push!(bro.router.admins, "duckdb_pub")
-
 
     pub = component("duckdb_pub")
 
@@ -27,7 +30,7 @@ function run()
     authorize(pub, "duckdb_sub", "subtopic2")
     authorize(pub, "duckdb_othersub", "subtopic1")
 
-    publish(pub, "subtopic1", 1)
+    publish(pub, "subtopic1", 1, ts=nowts())
     publish(pub, "subtopic1", 2, qos=Rembus.QOS1)
     sleep(0.5)
 
@@ -58,7 +61,7 @@ function run()
     @test nrow(df) == 2
     df = DataFrame(DuckDB.execute(con, "select * from mark"))
     @test nrow(df) == 3
-
+    close(con)
 end
 
 
@@ -69,7 +72,7 @@ try
 
     # reload the configuration saved in the previous run
     run()
-
+    sleep(1.5)
 catch e
     @test false
     @error "[duckdb] server error: $e"

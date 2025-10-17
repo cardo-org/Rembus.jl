@@ -91,7 +91,6 @@ function broker_parse(twin::Twin, pkt)
     end
     ptype = type & 0x0f
     flags = type & 0xf0
-
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
@@ -530,7 +529,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
     outcome = true
     if msg.twin.enc == JSON && isa(socket, WS)
-        if msg.flags > QOS0
+        if (msg.flags & QOS2) > QOS0
             ack_cond = create_msg_timer(socket, msg)
             pkt = JSON3.write(Dict(
                 "jsonrpc" => "2.0",
@@ -546,6 +545,17 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
+        elseif (msg.flags & TS_FLAG) == TS_FLAG
+            pkt = JSON3.write(Dict(
+                "jsonrpc" => "2.0",
+                "id" => string(msg.id),
+                "method" => msg.topic,
+                "params" => Dict(
+                    "__type__" => msg.flags,
+                    "data" => message2data(msg.data)
+                )
+            ))
+            ws_write(socket.sock, pkt)
         else
             pkt = JSON3.write(Dict(
                 "jsonrpc" => "2.0",
@@ -556,13 +566,16 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
         end
     else
         content = tagvalue_if_dataframe(msg.data)
-        if msg.flags > QOS0
+        if (msg.flags & QOS2) > QOS0
             ack_cond = create_msg_timer(socket, msg)
             pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
             transport_write(socket, pkt)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
+        elseif (msg.flags & TS_FLAG) == TS_FLAG
+            pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
+            transport_write(socket, pkt)
         else
             pkt = [TYPE_PUB | msg.flags, msg.topic, content]
             transport_write(socket, pkt)
@@ -583,7 +596,7 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
     socket = z.sock
     data = data2message(msg.data)
     outcome = true
-    if msg.flags > QOS0
+    if (msg.flags & QOS2) > QOS0
         r = last_downstream(msg.twin.router)
         timer = Timer((t) -> handle_ack_timeout(t, z, msg, msg.id), r.settings.ack_timeout)
         ack_cond = FutureResponse(msg, timer)
@@ -598,6 +611,15 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
         end
         outcome = fetch(ack_cond.future)
         delete!(z.out, msg.id)
+    elseif (msg.flags & TS_FLAG) == TS_FLAG
+        header = encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic])
+        lock(zmqsocketlock) do
+            isa(z, ZRouter) && send(socket, z.zaddress, more=true)
+            send(socket, Message(), more=true)
+            send(socket, header, more=true)
+            send(socket, data, more=true)
+            send(socket, MESSAGE_END, more=false)
+        end
     else
         header = encode([TYPE_PUB | msg.flags, msg.topic])
         lock(zmqsocketlock) do
@@ -1135,13 +1157,13 @@ end
 function encode_partial(io, data::Vector)
     type = data[1] & 0x0f
     if type == TYPE_PUB
-        if (data[1] & QOS1) == QOS1
+        if (data[1] & 0x70) != 0x0
             write(io, 0x84)
         else
             write(io, 0x83)
         end
         encode(io, data[1]) # type
-        if (data[1] & QOS1) == QOS1
+        if (data[1] & 0x70) != 0x0
             encode(io, data[2]) # msgid
             encode(io, data[3]) # topic
             add_payload(io, data[4])
