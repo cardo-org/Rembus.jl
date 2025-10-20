@@ -38,9 +38,12 @@ function run(pub_url, sub_url)
 
     val = 1
 
+    publish(pub, "bar", val, slot=0x2000000)
+    sleep(0.5)
+
     Rembus.reset_probe!(sub)
     Rembus.reset_probe!(pub)
-    publish(pub, "foo", val, qos=Rembus.Rembus.QOS2)
+    publish(pub, "foo", val, qos=Rembus.Rembus.QOS2, slot=0x1000000)
 
     @test wait_message() do
         haskey(ctx, rid(sub)) && ctx[rid(sub)] == val
@@ -81,7 +84,8 @@ try
     @test Rembus.islistening(rb, wait=10)
     for pub_url in [
         "tcp://127.0.0.1:8011/publish_tcppub",
-        "ws://127.0.0.1:8010/publish_pub"
+        "ws://127.0.0.1:8010/publish_pub",
+        "zmq://127.0.0.1:8012/publish_zmqpub"
     ]
         for sub_url in [
             "tcp://127.0.0.1:8011/publish_tcpsub",

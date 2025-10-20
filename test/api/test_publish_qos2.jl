@@ -34,7 +34,7 @@ function run(pub_url, sub_url)
     @test wait_message() do
         haskey(ctx, rid(sub)) && ctx[rid(sub)] == val
     end
-    sleep(0.1)
+    sleep(0.2)
 
     @info "[publish_qos2] shutting down"
     shutdown(sub)

@@ -6,9 +6,16 @@ using JSON3
 using Rembus
 
 function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
-    db_name = joinpath(Rembus.rembus_dir(), router.id)
+    data_dir = joinpath(Rembus.rembus_dir(), router.id)
+    if haskey(ENV, "DATABASE_URL")
+        dburl = ENV["DATABASE_URL"]
+        db_name = "postgres:$dburl"
+    else
+        db_name = "$data_dir.ducklake"
+    end
+
     DuckDB.execute(con, "INSTALL ducklake")
-    DuckDB.execute(con, "ATTACH 'ducklake:$db_name.ducklake' AS rl")
+    DuckDB.execute(con, "ATTACH 'ducklake:$db_name' AS rl (DATA_PATH '$data_dir')")
     DuckDB.execute(con, "USE rl")
 
     tables = [
@@ -16,7 +23,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         CREATE TABLE IF NOT EXISTS message (
             name TEXT,
             ptr UBIGINT,
-            ts UINTEGER,
+            slot UINTEGER,
             qos UTINYINT,
             uid UBIGINT,
             topic TEXT,
@@ -81,13 +88,13 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
     @debug "[$router] Persisting messages to DuckDB"
     df = select(
         router.msg_df,
-        :ptr, :ts, :qos, :uid, :topic,
+        :ptr, :slot, :qos, :uid, :topic,
         :pkt => ByRow(p -> JSON3.write(decode(p)[end])) => :data
     )
     df[!, :name] .= router.id
     DuckDB.register_data_frame(con, df, "df_view")
     DuckDB.execute(
-        con, "INSERT INTO message SELECT name, ptr, ts, qos, uid, topic, data FROM df_view"
+        con, "INSERT INTO message SELECT name, ptr, slot, qos, uid, topic, data FROM df_view"
     )
 end
 

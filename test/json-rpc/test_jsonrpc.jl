@@ -38,6 +38,7 @@ function run()
 
     msg = "hello world"
     publish(cli, "mytopic", msg)
+    publish(cli, "mytopic", msg, slot=0x11223344)
 
     sleep(2) # wait for JIT
     @test ctx["msg"] == msg

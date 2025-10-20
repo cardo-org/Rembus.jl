@@ -48,10 +48,10 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     id::Msgid
     twin::Twin
     counter::Int
-    function PubSubMsg(twin::Twin, topic, data=nothing, flags=0x0, mid=0, ts=0)
-        if ts != 0
-            flags |= TS_FLAG
-            mid = tsid(ts)
+    function PubSubMsg(twin::Twin, topic, data=nothing, flags=0x0, mid=0, slot=0)
+        if slot != 0
+            flags |= SLOT_FLAG
+            mid = tsid(slot)
         elseif mid == 0 && flags > QOS0
             mid = id()
         end
@@ -209,8 +209,8 @@ function id()
     Msgid(uuid4().value & 0xffffffffffffffff)
 end
 
-function tsid(ts::UInt32)
-    Msgid((uuid4().value & 0xffffffff00000000) | ts)
+function tsid(slot::UInt32)
+    Msgid((uuid4().value & 0xffffffff00000000) | slot)
 end
 
 function response_timeout(twin, msg::RembusMsg)

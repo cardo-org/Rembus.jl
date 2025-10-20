@@ -16,7 +16,7 @@ const MESSAGE_CHANNEL_SZ = 1000
 const QOS0 = UInt8(0x00) # at most once
 const QOS1 = UInt8(0x10) # at least once
 const QOS2 = UInt8(0x30) # exactly once
-const TS_FLAG = UInt8(0x40) # the message id contains a timestamp (time sync point)
+const SLOT_FLAG = UInt8(0x40) # the message id contains a timestamp (time sync point)
 
 const SIG_RSA = 0x1
 const SIG_ECDSA = 0x2

@@ -30,7 +30,7 @@ function run()
     authorize(pub, "duckdb_sub", "subtopic2")
     authorize(pub, "duckdb_othersub", "subtopic1")
 
-    publish(pub, "subtopic1", 1, ts=nowts())
+    publish(pub, "subtopic1", 1, slot=nowts())
     publish(pub, "subtopic1", 2, qos=Rembus.QOS1)
     sleep(0.5)
 
@@ -49,7 +49,6 @@ function run()
     tw = bro.router.id_twin["duckdb_pub"]
     tw.ackdf = DataFrame(:ts => UInt64[1], :id => Rembus.Msgid[2])
 
-    sleep(1)
     close(sub)
     close(othersub)
     close(pub)

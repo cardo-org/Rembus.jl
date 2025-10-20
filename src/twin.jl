@@ -950,7 +950,7 @@ function ack_msg(msg)
     if haskey(sock.out, msgid)
         close(sock.out[msgid].timer)
 
-        if sock.out[msgid].request.flags === QOS2
+        if (sock.out[msgid].request.flags & QOS2) == QOS2
             # send the ACK2 message to the component
             put!(
                 twin.process.inbox,

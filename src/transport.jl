@@ -545,7 +545,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
-        elseif (msg.flags & TS_FLAG) == TS_FLAG
+        elseif (msg.flags & SLOT_FLAG) == SLOT_FLAG
             pkt = JSON3.write(Dict(
                 "jsonrpc" => "2.0",
                 "id" => string(msg.id),
@@ -573,7 +573,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
-        elseif (msg.flags & TS_FLAG) == TS_FLAG
+        elseif (msg.flags & SLOT_FLAG) == SLOT_FLAG
             pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
             transport_write(socket, pkt)
         else
@@ -611,7 +611,7 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
         end
         outcome = fetch(ack_cond.future)
         delete!(z.out, msg.id)
-    elseif (msg.flags & TS_FLAG) == TS_FLAG
+    elseif (msg.flags & SLOT_FLAG) == SLOT_FLAG
         header = encode([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic])
         lock(zmqsocketlock) do
             isa(z, ZRouter) && send(socket, z.zaddress, more=true)
@@ -1127,6 +1127,8 @@ end
 function isconnectionerror(::AbstractPlainSocket, e)
     return isa(e, EOFError) || isa(e, Base.IOError) || isa(e, WrongTcpPacket)
 end
+
+close_is_ok(::Float) = true # COV_EXCL_LINE
 
 function close_is_ok(::WS, e)
     HTTP.WebSockets.isok(e)

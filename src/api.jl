@@ -518,9 +518,9 @@ If the remote subscribed method has no arguments, publish without data:
 publish(rb, "mytopic")
 ```
 """
-function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0, ts=0)
+function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0, slot=0)
     wait_open(twin) || failover_queue(twin) || error("connection down")
-    msg = PubSubMsg(twin, topic, collect(data), qos, 0, ts)
+    msg = PubSubMsg(twin, topic, collect(data), qos, 0, slot)
     return publish_msg(twin, msg)
 end
 

@@ -40,6 +40,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "broker"
+        @time @safetestset "upload_message" begin
+            include("broker/test_upload_messages.jl")
+        end
         @time @safetestset "anonymous_twin" begin
             include("broker/test_anonymous_twin.jl")
         end
@@ -69,6 +72,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "setup" begin
             include("broker/test_setup.jl")
+        end
+        @time @safetestset "twin_timeout" begin
+            include("broker/test_twin_timeout.jl")
         end
     end
     if GROUP == "all" || GROUP == "json-rpc"
