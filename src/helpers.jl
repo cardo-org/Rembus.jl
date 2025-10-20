@@ -350,8 +350,6 @@ function save_message(pd, router)
             elseif isshutdown(msg)
                 persist(router)
                 break
-            else
-                @warn "[$router] save_message unknown message type: $msg"
             end
         end
     catch e

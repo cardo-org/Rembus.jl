@@ -32,6 +32,7 @@ function run()
 
     publish(pub, "subtopic1", 1, slot=nowts())
     publish(pub, "subtopic1", 2, qos=Rembus.QOS1)
+    publish(pub, "subtopic1", 3)
     sleep(0.5)
 
     sub = component("duckdb_sub")

@@ -247,11 +247,6 @@ function save_twin(router::Router, twin::Twin, ::FileStore)
             return nothing
         end
 
-        dir = joinpath(broker_dir(router), "twins")
-        if !isdir(dir)
-            mkpath(dir)
-        end
-
         fn = twin_file(router, twin.uid.id)
         open(fn, "w") do io
             write(io, JSON3.write(twin_cfg, allow_inf=true))

@@ -8,8 +8,7 @@ using Rembus
 function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     data_dir = joinpath(Rembus.rembus_dir(), router.id)
     if haskey(ENV, "DATABASE_URL")
-        dburl = ENV["DATABASE_URL"]
-        db_name = "postgres:$dburl"
+        db_name = "postgres:" * ENV["DATABASE_URL"]
     else
         db_name = "$data_dir.ducklake"
     end
