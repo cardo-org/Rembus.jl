@@ -738,6 +738,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
 end
 
 function get_router(db=FileStore();
+    schema=Dict(),
     name=localcid(),
     ws=nothing,
     tcp=nothing,
@@ -747,11 +748,11 @@ function get_router(db=FileStore();
     authenticated=false,
     secure=false,
     policy="first_up",
-    tsk=broker_task
+    tsk=broker_task,
 )
     broker_process = from("$name.broker")
     if broker_process === nothing
-        router = Router{Twin}(name, nothing, missing)
+        router = Router{Twin}(name, nothing, missing, schema)
         router.store_type = db
         if authenticated
             router.mode = Rembus.authenticated
@@ -806,7 +807,11 @@ function start_broker(
     prometheus=nothing,
     name="broker",
 )
-    router.archiver = process(save_message, args=(router,), restart=:transient)
+    router.archiver = process(
+        save_message,
+        args=(router,),
+        restart=:transient,
+        force_interrupt_after=30.0)
 
     tasks = [
         router.archiver,

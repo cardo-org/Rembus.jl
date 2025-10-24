@@ -35,6 +35,12 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
+        @time @safetestset "duckdb_schema" begin
+            include("duckdb/test_duckdb_schema.jl")
+        end
+        @time @safetestset "duckdb_df" begin
+            include("duckdb/test_duckdb_df.jl")
+        end
         @time @safetestset "duckdb" begin
             include("duckdb/test_duckdb.jl")
         end

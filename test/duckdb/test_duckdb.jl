@@ -68,6 +68,12 @@ end
 @info "[duckdb] start"
 try
     ENV["REMBUS_ARCHIVER_INTERVAL"] = 1
+    if haskey(ENV, "PGDATABASE")
+        dbname = "rembus_test"
+        user = get(ENV, "PGUSER", "postgres")
+        pwd = get(ENV, "PGPASSWORD", "postgres")
+        ENV["DATABASE_URL"] = "postgresql://$user:$pwd@127.0.0.1/$dbname"
+    end
     run()
 
     # reload the configuration saved in the previous run

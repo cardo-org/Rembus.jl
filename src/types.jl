@@ -492,6 +492,29 @@ mutable struct Settings
     end
 end
 
+struct TableDef
+    name::String
+    format::String
+    fields::Vector{Pair{String,String}}
+    keys::Vector{String}
+    extras::Dict{String,Any}
+    TableDef(;
+        table,
+        columns,
+        primary_keys=String[],
+        format="sequence",
+        extras=Dict()
+    ) = new(table, format, columns, primary_keys, extras)
+end
+
+struct ColumnDef
+    type::String
+    nullable::Bool
+    default::Union{Nothing,Any}
+    ColumnDef(type; nullable=true, default=nothing) = new(type, nullable, default)
+end
+
+
 abstract type AbstractRouter end
 
 abstract type AbstractTwin end
@@ -502,6 +525,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id::String
     eid::UInt64 # ephemeral unique id
     store_type::Any
+    schema::Dict{String,TableDef}
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -531,12 +555,13 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     process::Visor.Process
     archiver::Visor.Process
     owners::Dict{String,String}
-    Router{T}(name, plugin=nothing, context=missing) where {T<:AbstractTwin} = new{T}(
+    Router{T}(name, plugin=nothing, context=missing, schema=Dict()) where {T<:AbstractTwin} = new{T}(
         nothing,
         nothing,
         name,
         rand(Xoshiro(time_ns()), UInt64),
         FileStore(),
+        schema,
         Settings(name),
         anonymous,
         ReentrantLock(),

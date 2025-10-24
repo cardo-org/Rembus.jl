@@ -3,7 +3,7 @@ Start the twin process and add to the router id_twin map.
 =#
 function start_twin(router::Router, twin::Twin)
     id = rid(twin)
-    spec = process(id, twin_task, args=(twin,))
+    spec = process(id, twin_task, args=(twin,), force_interrupt_after=30.0)
     twin.process = spec
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
@@ -560,7 +560,7 @@ end
 
 function reconnect(twin::Twin)
     twin.process.phase === :closing && return
-    @debug "reconnecting..."
+    @debug "[$twin] reconnecting..."
     period = last_downstream(twin.router).settings.reconnect_period
     while true
         for url in twin.failovers
@@ -1357,12 +1357,10 @@ Disconnect the twin from the ws/tcp/zmq channel.
 =#
 function detach(twin)
     close(twin.socket)
-
     # Remove the connected message bookmarker
     if !isnothing(twin.connected)
         take!(twin.connected)
     end
-
     # save the state to disk
     router = last_downstream(twin.router)
     if !isrepl(twin.uid)

@@ -261,7 +261,7 @@ Persist router configuration on disk.
 =#
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
-        @debug "[$router] saving configuration to $(broker_dir(router))"
+        @debug "[$router] saving configuration to $(broker_dir(router.id))"
         save_topic_auth(router, router.store_type)
         save_admins(router, router.store_type)
 
@@ -274,7 +274,7 @@ end
 
 function load_configuration(router)
     callback_or(router, :load_configuration) do
-        @debug "[$router] loading configuration from $(broker_dir(router))"
+        @debug "[$router] loading configuration from $(broker_dir(router.id))"
         load_topic_auth(router, router.store_type)
         load_admins(router, router.store_type)
         router.owners = load_tenants(router, router.store_type)

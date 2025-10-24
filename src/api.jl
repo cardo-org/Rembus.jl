@@ -182,14 +182,15 @@ function component(db=FileStore();
     authenticated=false,
     policy="first_up",
     enc=CBOR,
-    failovers=[]
+    failovers=[],
+    schema=[]
 )
     if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
         ws = DEFAULT_WS_PORT
     end
-
     router = get_router(
         db,
+        schema=Dict(obj.name => obj for obj in schema),
         name=name,
         ws=ws,
         tcp=tcp,

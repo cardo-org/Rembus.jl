@@ -5,6 +5,23 @@ using DuckDB
 using JSON3
 using Rembus
 
+const typemap = Dict(
+    "TEXT" => String,
+    "UTINYINT" => Int8,
+    "SMALLINT" => Int16,
+    "INTEGER" => Int32,
+    "HUGEINT" => Int128,
+    "UTINYINT" => UInt8,
+    "USMALLINT" => UInt16,
+    "UINTEGER" => UInt32,
+    "UBIGINT" => UInt64,
+    "UHUGEINT" => UInt128,
+    "FLOAT" => Float32,
+    "DOUBLE" => Float64,
+)
+
+const ducklock = ReentrantLock()
+
 function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     data_dir = joinpath(Rembus.rembus_dir(), router.id)
     if haskey(ENV, "DATABASE_URL")
@@ -20,54 +37,54 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     tables = [
         """
         CREATE TABLE IF NOT EXISTS message (
-            name TEXT,
+            name TEXT NOT NULL,
             ptr UBIGINT,
             slot UINTEGER,
             qos UTINYINT,
             uid UBIGINT,
-            topic TEXT,
+            topic TEXT NOT NULL,
             data TEXT
         )""",
         """
         CREATE TABLE IF NOT EXISTS exposer (
-            name TEXT,
-            twin TEXT,
-            topic TEXT,
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
+            topic TEXT NOT NULL,
         )""",
         """
         CREATE TABLE IF NOT EXISTS subscriber (
-            name TEXT,
-            twin TEXT,
-            topic TEXT,
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
+            topic TEXT NOT NULL,
             msg_from DOUBLE
         )""",
         """
         CREATE TABLE IF NOT EXISTS mark (
-            name TEXT,
-            twin TEXT,
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
             mark UBIGINT,
         )""",
         """
         CREATE TABLE IF NOT EXISTS admin (
-            name TEXT,
+            name TEXT NOT NULL,
             twin TEXT
         )""",
         """
         CREATE TABLE IF NOT EXISTS topic_auth (
-            name TEXT,
-            twin TEXT,
-            topic TEXT
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
+            topic TEXT NOT NULL
         )""",
         """
         CREATE TABLE IF NOT EXISTS tenant (
-            name TEXT,
-            twin TEXT,
-            secret TEXT
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
+            secret TEXT NOT NULL
         )""",
         """
         CREATE TABLE IF NOT EXISTS wait_ack2 (
-            name TEXT,
-            twin TEXT,
+            name TEXT NOT NULL,
+            twin TEXT NOT NULL,
             ts UBIGINT,
             id UBIGINT
         )
@@ -78,9 +95,163 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         DuckDB.execute(con, table)
     end
 
+    for (tname, tabledef) in router.schema
+        fields = join(["$(t.first) $(t.second)" for t in tabledef.fields], ",")
+        if haskey(tabledef.extras, "recv_ts")
+            cn = tabledef.extras["recv_ts"]
+            fields *= ", $cn UBIGINT"
+        end
+        if haskey(tabledef.extras, "slot")
+            cn = tabledef.extras["slot"]
+            fields *= ", $cn UINTEGER"
+        end
+
+        @debug "[DuckDB] CREATE TABLE IF NOT EXISTS $tname ($fields)"
+        DuckDB.execute(con, "CREATE TABLE IF NOT EXISTS $tname ($fields)")
+    end
+
     Rembus.load_configuration(router)
 
     return con
+end
+
+function append(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
+    topic = tabledef.name
+    format = tabledef.format
+    tblfields = [t.first for t in tabledef.fields]
+    appender = DuckDB.Appender(con, topic)
+    for row in eachrow(df)
+        values = decode(row.pkt)[end]
+        if format == "key_value"
+            obj = values[1]
+            if all(k -> haskey(obj, k), tblfields)
+                fields = [obj[f] for f in tblfields]
+            else
+                @warn "[$topic] unsaved $obj with one or more missing $tblfields fields"
+                continue
+            end
+        elseif format == "dataframe"
+            df = Rembus.dataframe_if_tagvalue(values[1])
+            if names(df) == tblfields
+                df_extras(tabledef, df, row)
+                DuckDB.register_data_frame(con, df, "df_view")
+                DuckDB.execute(
+                    con,
+                    "INSERT INTO $topic SELECT * FROM df_view"
+                )
+            else
+                @warn "[$topic] unsaved $df with mismatched fields"
+            end
+            continue
+        else
+            if length(values) == length(tblfields)
+                fields = values
+            else
+                @warn "[$topic] unsaved $values with mismatched num of fields"
+                continue
+            end
+        end
+
+        add_extras(tabledef, fields, row)
+        for field in fields
+            DuckDB.append(appender, field)
+        end
+        DuckDB.end_row(appender)
+    end
+    DuckDB.close(appender)
+end
+
+function add_extras(tabledef::Rembus.TableDef, fields::Vector, row)
+    if haskey(tabledef.extras, "recv_ts")
+        push!(fields, row.ptr)
+    end
+    if haskey(tabledef.extras, "slot")
+        push!(fields, row.slot)
+    end
+end
+
+function df_extras(tabledef::Rembus.TableDef, df, row)
+    if haskey(tabledef.extras, "recv_ts")
+        df[!, tabledef.extras["recv_ts"]] .= row.ptr
+    end
+    if haskey(tabledef.extras, "slot")
+        df[!, tabledef.extras["slot"]] .= row.slot
+    end
+end
+
+
+function upsert(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
+    tname = tabledef.name
+    format = tabledef.format
+    fields = [t.first for t in tabledef.fields]
+    indexes = tabledef.keys
+    nfields = length(fields)
+    types = [typemap[t.second] for t in tabledef.fields]
+    if haskey(tabledef.extras, "recv_ts")
+        push!(fields, tabledef.extras["recv_ts"])
+        push!(types, UInt64)
+    end
+    if haskey(tabledef.extras, "slot")
+        push!(fields, tabledef.extras["slot"])
+        push!(types, UInt32)
+    end
+
+    tdf = DataFrame(Symbol.(fields) .=> [Vector{T}() for T in types])
+
+    for row in eachrow(df)
+        data = decode(row.pkt)
+        if format == "key_value"
+            obj = data[end][1]
+            if all(k -> haskey(obj, k), fields)
+                if haskey(tabledef.extras, "recv_ts")
+                    obj[tabledef.extras["recv_ts"]] = row.ptr
+                end
+                if haskey(tabledef.extras, "slot")
+                    obj[tabledef.extras["slot"]] = row.slot
+                end
+
+                push!(tdf, obj)
+            else
+                @warn "[$tname] unsaved $obj with one or more missing $fields fields"
+                continue
+            end
+        elseif format == "dataframe"
+            df = Rembus.dataframe_if_tagvalue(data[end][1])
+            df_extras(tabledef, df, row)
+            append!(tdf, df)
+        else
+            vals = data[end]
+            if length(vals) == nfields
+                add_extras(tabledef, vals, row)
+                push!(tdf, vals)
+            else
+                @warn "[$tname] unsaved $vals with mismatched num of fields"
+                continue
+            end
+        end
+    end
+
+    if isempty(tdf)
+        return
+    end
+    tdf = combine(groupby(tdf, indexes)) do g
+        g[end, :]  # take the last record of each group
+    end
+
+    @debug "[$tname] upserting:\n$tdf"
+    DuckDB.register_data_frame(con, tdf, "df_view")
+    conds = String[]
+    for key in tabledef.keys
+        push!(conds, "df_view.$key=$tname.$key")
+    end
+    cond_str = join(conds, " AND ")
+    DuckDB.execute(
+        con,
+        """MERGE INTO $(tabledef.name) USING df_view ON $cond_str
+           WHEN MATCHED THEN UPDATE
+           WHEN NOT MATCHED THEN INSERT
+        """
+    )
 end
 
 function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
@@ -91,10 +262,31 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
         :pkt => ByRow(p -> JSON3.write(decode(p)[end])) => :data
     )
     df[!, :name] .= router.id
-    DuckDB.register_data_frame(con, df, "df_view")
+    DuckDB.register_data_frame(con, df, "df_msg")
     DuckDB.execute(
-        con, "INSERT INTO message SELECT name, ptr, slot, qos, uid, topic, data FROM df_view"
+        con,
+        "INSERT INTO message SELECT name, ptr, slot, qos, uid, topic, data FROM df_msg"
     )
+
+    try
+        for topic in unique(df.topic)
+            if haskey(router.schema, topic)
+                topicdf = filter(:topic => top -> top == topic, router.msg_df, view=true)
+                tabledef = router.schema[topic]
+                if isempty(tabledef.keys)
+                    append(con, tabledef, topicdf)
+                else
+                    upsert(con, tabledef, topicdf)
+                end
+            end
+        end
+    catch e
+        @error "Error saving data at rest: $e"
+        showerror(stdout, e, catch_backtrace())
+    end
+
+    # clear the in-memory message dataframe
+    empty!(router.msg_df)
 end
 
 function encmsg(flags, uid, topic, data)
@@ -162,6 +354,7 @@ function sync_table(con, table_name, current_df, new_df)
             """DELETE FROM $table_name t WHERE EXISTS
             (SELECT 1 FROM df WHERE $cond_str)
             """)
+        DuckDB.unregister_data_frame(con, "df")
     end
 
     # all rows from new_df that do not have an identical (name, topic, msg_from)
@@ -171,7 +364,9 @@ function sync_table(con, table_name, current_df, new_df)
     if !isempty(diff_df)
         DuckDB.register_data_frame(con, diff_df, "df")
         DuckDB.execute(con, "INSERT INTO $table_name SELECT * from df")
+        DuckDB.unregister_data_frame(con, "df")
     end
+
     #DuckDB.execute(con, "COMMIT")
     #catch e
     #    DuckDB.execute(con, "ROLLBACK")
@@ -180,12 +375,14 @@ function sync_table(con, table_name, current_df, new_df)
 end
 
 function sync_twin(con, router_name, twin_name, table_name, new_df)
+    lock(ducklock)
     current_df = DataFrame(
         DuckDB.execute(
             con,
             "SELECT * FROM $table_name WHERE name='$router_name' AND twin='$twin_name'")
     )
     sync_table(con, table_name, current_df, new_df)
+    unlock(ducklock)
 end
 
 function sync_cfg(con, router_name, table_name, new_df)
@@ -194,7 +391,6 @@ function sync_cfg(con, router_name, table_name, new_df)
     )
     sync_table(con, table_name, current_df, new_df)
 end
-
 
 function Rembus.save_twin(router, twin, con::DuckDB.DB)
     tid = rid(twin)

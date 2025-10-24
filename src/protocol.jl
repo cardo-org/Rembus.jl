@@ -51,7 +51,7 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     function PubSubMsg(twin::Twin, topic, data=nothing, flags=0x0, mid=0, slot=0)
         if slot != 0
             flags |= SLOT_FLAG
-            mid = tsid(slot)
+            mid = tsid(UInt32(slot))
         elseif mid == 0 && flags > QOS0
             mid = id()
         end
