@@ -492,26 +492,36 @@ mutable struct Settings
     end
 end
 
-struct TableDef
+struct Column
     name::String
-    format::String
-    fields::Vector{Pair{String,String}}
-    keys::Vector{String}
-    extras::Dict{String,Any}
-    TableDef(;
-        table,
-        columns,
-        primary_keys=String[],
-        format="sequence",
-        extras=Dict()
-    ) = new(table, format, columns, primary_keys, extras)
-end
-
-struct ColumnDef
     type::String
     nullable::Bool
     default::Union{Nothing,Any}
-    ColumnDef(type; nullable=true, default=nothing) = new(type, nullable, default)
+    Column(
+        name, type; nullable=true, default=nothing
+    ) = new(name, type, nullable, default)
+end
+
+struct Table
+    name::String
+    format::String
+    fields::Vector{Column}
+    keys::Vector{String}
+    extras::Dict{String,Any}
+    delete_topic::Union{Nothing,String}
+    Table(;
+        table,
+        columns,
+        keys=String[],
+        format="sequence",
+        extras=Dict(),
+        delete_topic=nothing
+    ) = new(table, format, columns, keys, extras, delete_topic)
+    Table(
+        name,
+        format,
+        delete_topic
+    ) = new(name, format, Column[], String[], Dict(), delete_topic)
 end
 
 
@@ -525,7 +535,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id::String
     eid::UInt64 # ephemeral unique id
     store_type::Any
-    schema::Dict{String,TableDef}
+    schema::Dict{String,Table}
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -751,7 +761,7 @@ Base.show(io::IO, r::Router) = print(io, "$(r.id)")
 Base.show(io::IO, t::Twin) = print(io, "$(path(t))")
 
 msg_dataframe() = DataFrame(
-    ptr=UInt[], slot=UInt32[], qos=UInt8[], uid=Msgid[], topic=String[], pkt=Vector{UInt8}[]
+    recv=UInt[], slot=UInt32[], qos=UInt8[], uid=Msgid[], topic=String[], pkt=Vector{UInt8}[]
 )
 mutable struct RouterCollector <: Prometheus.Collector
     router::Router

@@ -19,15 +19,15 @@ function run(con)
     bro = component(
         con,
         schema=[
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic1",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "tinyint" => "TINYINT",
-                    "smallint" => "SMALLINT",
-                    "integer" => "INTEGER",
-                    "bigint" => "BIGINT"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("tinyint", "TINYINT"),
+                    Rembus.Column("smallint", "SMALLINT"),
+                    Rembus.Column("integer", "INTEGER"),
+                    Rembus.Column("bigint", "BIGINT")
                 ],
                 format="dataframe",
                 extras=Dict(
@@ -35,43 +35,44 @@ function run(con)
                     "slot" => "rop"
                 )
             ),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic2",
+                delete_topic="topic2_delete",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "utinyint" => "UTINYINT",
-                    "usmallint" => "USMALLINT",
-                    "uinteger" => "UINTEGER",
-                    "ubigint" => "UBIGINT"],
-                primary_keys=["name"],
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("utinyint", "UTINYINT"),
+                    Rembus.Column("usmallint", "USMALLINT"),
+                    Rembus.Column("uinteger", "UINTEGER"),
+                    Rembus.Column("ubigint", "UBIGINT")],
+                keys=["name"],
                 format="dataframe",
                 extras=Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )
             ),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic3",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "float" => "FLOAT",
-                    "double" => "DOUBLE"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("float", "FLOAT"),
+                    Rembus.Column("double", "DOUBLE")
                 ],
                 format="dataframe",
                 extras=Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic4",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "value" => "TEXT"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("value", "TEXT")
                 ],
-                primary_keys=["name", "type"],
+                keys=["name", "type"],
                 format="dataframe"
             )
         ])
@@ -115,6 +116,20 @@ function run(con)
     )
     publish(pub, "topic4", df)
 
+    df = DataFrame(
+        "name" => ["a", "b", "d"],
+        "unknown_field" => ["t1", "t2", "t4"],
+        "value" => ["val100", "val999", "vald"]
+    )
+    publish(pub, "topic1", df)
+    publish(pub, "topic4", df)
+
+    df = DataFrame(
+        "name" => ["a", "b"],
+        "type" => ["t1", "t2"],
+    )
+    publish(pub, "topic2_delete", df)
+
     @debug "[$(now())] closing pub"
     close(pub)
     @debug "[$(now())] closed pub"
@@ -128,6 +143,10 @@ function run(con)
     @test filter(r -> r.name == "b" && r.type == "t2", df)[1, :value] == "val999"
     @test filter(r -> r.name == "c" && r.type == "t3", df)[1, :value] == "val3"
     @test filter(r -> r.name == "d" && r.type == "t4", df)[1, :value] == "vald"
+
+    df = DuckDB.execute(con, "SELECT * FROM topic2") |> DataFrame
+    @debug "[duckdb_df] topic2 data:\n$(df)"
+    @test nrow(df) == 0
 
 end
 

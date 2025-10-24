@@ -23,15 +23,15 @@ function run(con)
     bro = component(
         con,
         schema=[
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic1",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "tinyint" => "TINYINT",
-                    "smallint" => "SMALLINT",
-                    "integer" => "INTEGER",
-                    "bigint" => "BIGINT"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("tinyint", "TINYINT"),
+                    Rembus.Column("smallint", "SMALLINT"),
+                    Rembus.Column("integer", "INTEGER"),
+                    Rembus.Column("bigint", "BIGINT")
                 ],
                 format="sequence",
                 extras=Dict(
@@ -39,46 +39,50 @@ function run(con)
                     "slot" => "rop"
                 )
             ),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic2",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "utinyint" => "UTINYINT",
-                    "usmallint" => "USMALLINT",
-                    "uinteger" => "UINTEGER",
-                    "ubigint" => "UBIGINT"],
-                primary_keys=["name"],
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("utinyint", "UTINYINT"),
+                    Rembus.Column("usmallint", "USMALLINT"),
+                    Rembus.Column("uinteger", "UINTEGER"),
+                    Rembus.Column("ubigint", "UBIGINT")],
+                keys=["name"],
                 format="sequence",
                 extras=Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )
             ),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic3",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "float" => "FLOAT",
-                    "double" => "DOUBLE"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT", default="type_default"),
+                    Rembus.Column("float", "FLOAT"),
+                    Rembus.Column("double", "DOUBLE")
                 ],
                 format="key_value",
                 extras=Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )),
-            Rembus.TableDef(
+            Rembus.Table(
                 table="topic4",
+                delete_topic="topic4/delete",
                 columns=[
-                    "name" => "TEXT",
-                    "type" => "TEXT",
-                    "value" => "TEXT"
+                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("value", "TEXT", default="default_value")
                 ],
-                primary_keys=["name", "type"],
-                format="key_value"
-            )
-        ])
+                keys=["name", "type"],
+                format="key_value",
+                extras=Dict(
+                    "recv_ts" => "ts",
+                    "slot" => "rop"
+                )
+            )])
 
     pub = component("duckdb_pub")
 
@@ -95,12 +99,19 @@ function run(con)
             "name_$i", "type_a", UInt8(1), UInt16(16), UInt32(32), UInt64(64)
         )
     end
+
+    publish(
+        pub,
+        "topic2",
+        "name", "wrong_number_of_fields"
+    )
+
     publish(
         pub,
         "topic3",
         Dict(
             "name" => "name_a",
-            "type" => "type_a",
+            #"type" => "type_a",
             "float" => Float32(1.0),
             "double" => Float64(2.0))
     )
@@ -112,7 +123,18 @@ function run(con)
     publish(
         pub,
         "topic4",
-        Dict("name" => "name_a", "type" => "type_a", "value" => "value_a")
+        Dict("name" => "name_a", "type" => "type_a")
+    )
+
+    publish(
+        pub,
+        "topic4",
+        Dict("name" => "name_b", "type" => "type_b")
+    )
+    publish(
+        pub,
+        "topic4/delete",
+        Dict("name" => "name_b")
     )
 
     # missing values

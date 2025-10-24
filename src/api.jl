@@ -190,7 +190,11 @@ function component(db=FileStore();
     end
     router = get_router(
         db,
-        schema=Dict(obj.name => obj for obj in schema),
+        schema=merge(
+            Dict(obj.name => obj for obj in schema),
+            Dict(obj.delete_topic => Table(obj.name, obj.format, obj.delete_topic)
+                 for obj in schema if !isnothing(obj.delete_topic))
+        ),
         name=name,
         ws=ws,
         tcp=tcp,

@@ -22,6 +22,26 @@ const typemap = Dict(
 
 const ducklock = ReentrantLock()
 
+function columndef(col::Rembus.Column)
+    return "$(col.name) $(col.type)" *
+           (col.nullable == false ? " NOT NULL" : "") *
+           (col.default !== nothing ? " DEFAULT '$(col.default)'" : "")
+end
+
+function columns(tabledef::Rembus.Table)
+    return [t.name for t in tabledef.fields]
+end
+
+function set_default(tabledef::Rembus.Table, d)
+    for col in tabledef.fields
+        if haskey(d, col.name)
+            continue
+        elseif col.default !== nothing
+            d[col.name] = col.default
+        end
+    end
+end
+
 function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     data_dir = joinpath(Rembus.rembus_dir(), router.id)
     if haskey(ENV, "DATABASE_URL")
@@ -38,7 +58,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         """
         CREATE TABLE IF NOT EXISTS message (
             name TEXT NOT NULL,
-            ptr UBIGINT,
+            recv UBIGINT,
             slot UINTEGER,
             qos UTINYINT,
             uid UBIGINT,
@@ -96,7 +116,11 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     end
 
     for (tname, tabledef) in router.schema
-        fields = join(["$(t.first) $(t.second)" for t in tabledef.fields], ",")
+        if isempty(tabledef.fields)
+            continue
+        end
+
+        fields = join(["$(columndef(t))" for t in tabledef.fields], ",")
         if haskey(tabledef.extras, "recv_ts")
             cn = tabledef.extras["recv_ts"]
             fields *= ", $cn UBIGINT"
@@ -115,19 +139,20 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     return con
 end
 
-function append(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
+function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
     topic = tabledef.name
     format = tabledef.format
-    tblfields = [t.first for t in tabledef.fields]
+    tblfields = columns(tabledef)
     appender = DuckDB.Appender(con, topic)
     for row in eachrow(df)
         values = decode(row.pkt)[end]
         if format == "key_value"
             obj = values[1]
+            set_default(tabledef, obj)
             if all(k -> haskey(obj, k), tblfields)
                 fields = [obj[f] for f in tblfields]
             else
-                @warn "[$topic] unsaved $obj with one or more missing $tblfields fields"
+                @warn "[$topic] unsaved $obj with mismatched fields"
                 continue
             end
         elseif format == "dataframe"
@@ -139,6 +164,7 @@ function append(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
                     con,
                     "INSERT INTO $topic SELECT * FROM df_view"
                 )
+                DuckDB.unregister_data_frame(con, "df_view")
             else
                 @warn "[$topic] unsaved $df with mismatched fields"
             end
@@ -147,7 +173,7 @@ function append(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
             if length(values) == length(tblfields)
                 fields = values
             else
-                @warn "[$topic] unsaved $values with mismatched num of fields"
+                @warn "[$topic] unsaved $values with mismatched fields"
                 continue
             end
         end
@@ -161,32 +187,64 @@ function append(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
     DuckDB.close(appender)
 end
 
-function add_extras(tabledef::Rembus.TableDef, fields::Vector, row)
+function add_extras(tabledef::Rembus.Table, fields::Vector, row)
     if haskey(tabledef.extras, "recv_ts")
-        push!(fields, row.ptr)
+        push!(fields, row.recv)
     end
     if haskey(tabledef.extras, "slot")
         push!(fields, row.slot)
     end
 end
 
-function df_extras(tabledef::Rembus.TableDef, df, row)
+function df_extras(tabledef::Rembus.Table, df, row)
     if haskey(tabledef.extras, "recv_ts")
-        df[!, tabledef.extras["recv_ts"]] .= row.ptr
+        df[!, tabledef.extras["recv_ts"]] .= row.recv
     end
     if haskey(tabledef.extras, "slot")
         df[!, tabledef.extras["slot"]] .= row.slot
     end
 end
 
-
-function upsert(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
+function delete(con::DuckDB.DB, tabledef::Rembus.Table, df)
     tname = tabledef.name
     format = tabledef.format
-    fields = [t.first for t in tabledef.fields]
+    for row in eachrow(df)
+        data = decode(row.pkt)
+        if format == "dataframe"
+            df = Rembus.dataframe_if_tagvalue(data[end][1])
+            for i in 1:nrow(df)
+                conds = String[]
+                for key in names(df)
+                    push!(conds, "$(key)='$(df[i, key])'")
+                end
+                cond_str = join(conds, " AND ")
+                DuckDB.execute(
+                    con,
+                    "DELETE FROM $tname WHERE $cond_str"
+                )
+            end
+        else
+            obj = data[end][1]
+            conds = String[]
+            for key in keys(obj)
+                push!(conds, "$(key)='$(obj[key])'")
+            end
+            cond_str = join(conds, " AND ")
+            DuckDB.execute(
+                con,
+                "DELETE FROM $tname WHERE $cond_str"
+            )
+        end
+    end
+end
+
+function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
+    tname = tabledef.name
+    format = tabledef.format
+    fields = columns(tabledef)
     indexes = tabledef.keys
     nfields = length(fields)
-    types = [typemap[t.second] for t in tabledef.fields]
+    types = [typemap[t.type] for t in tabledef.fields]
     if haskey(tabledef.extras, "recv_ts")
         push!(fields, tabledef.extras["recv_ts"])
         push!(types, UInt64)
@@ -201,15 +259,16 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
     for row in eachrow(df)
         data = decode(row.pkt)
         if format == "key_value"
-            obj = data[end][1]
-            if all(k -> haskey(obj, k), fields)
-                if haskey(tabledef.extras, "recv_ts")
-                    obj[tabledef.extras["recv_ts"]] = row.ptr
-                end
-                if haskey(tabledef.extras, "slot")
-                    obj[tabledef.extras["slot"]] = row.slot
-                end
+            obj::Dict{String,Any} = data[end][1]
+            set_default(tabledef, obj)
+            if haskey(tabledef.extras, "recv_ts")
+                obj[tabledef.extras["recv_ts"]] = row.recv
+            end
+            if haskey(tabledef.extras, "slot")
+                obj[tabledef.extras["slot"]] = row.slot
+            end
 
+            if all(k -> haskey(obj, k), fields)
                 push!(tdf, obj)
             else
                 @warn "[$tname] unsaved $obj with one or more missing $fields fields"
@@ -218,22 +277,26 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
         elseif format == "dataframe"
             df = Rembus.dataframe_if_tagvalue(data[end][1])
             df_extras(tabledef, df, row)
-            append!(tdf, df)
+            if names(df) == fields
+                append!(tdf, df)
+            else
+                @warn "[$tname] unsaved $df with mismatched fields"
+                continue
+            end
         else
             vals = data[end]
             if length(vals) == nfields
                 add_extras(tabledef, vals, row)
                 push!(tdf, vals)
             else
-                @warn "[$tname] unsaved $vals with mismatched num of fields"
+                @warn "[$tname] unsaved $vals with mismatched fields"
                 continue
             end
         end
     end
 
-    if isempty(tdf)
-        return
-    end
+    isempty(tdf) && return
+
     tdf = combine(groupby(tdf, indexes)) do g
         g[end, :]  # take the last record of each group
     end
@@ -252,37 +315,35 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.TableDef, df)
            WHEN NOT MATCHED THEN INSERT
         """
     )
+    DuckDB.unregister_data_frame(con, "df_view")
 end
 
 function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
     @debug "[$router] Persisting messages to DuckDB"
     df = select(
         router.msg_df,
-        :ptr, :slot, :qos, :uid, :topic,
+        :recv, :slot, :qos, :uid, :topic,
         :pkt => ByRow(p -> JSON3.write(decode(p)[end])) => :data
     )
     df[!, :name] .= router.id
     DuckDB.register_data_frame(con, df, "df_msg")
     DuckDB.execute(
         con,
-        "INSERT INTO message SELECT name, ptr, slot, qos, uid, topic, data FROM df_msg"
+        "INSERT INTO message SELECT name, recv, slot, qos, uid, topic, data FROM df_msg"
     )
-
-    try
-        for topic in unique(df.topic)
-            if haskey(router.schema, topic)
-                topicdf = filter(:topic => top -> top == topic, router.msg_df, view=true)
-                tabledef = router.schema[topic]
-                if isempty(tabledef.keys)
-                    append(con, tabledef, topicdf)
-                else
-                    upsert(con, tabledef, topicdf)
-                end
+    DuckDB.unregister_data_frame(con, "df_msg")
+    for topic in unique(df.topic)
+        if haskey(router.schema, topic)
+            topicdf = filter(:topic => top -> top == topic, router.msg_df, view=true)
+            tabledef = router.schema[topic]
+            if tabledef.delete_topic == topic
+                delete(con, tabledef, topicdf)
+            elseif isempty(tabledef.keys)
+                append(con, tabledef, topicdf)
+            else
+                upsert(con, tabledef, topicdf)
             end
         end
-    catch e
-        @error "Error saving data at rest: $e"
-        showerror(stdout, e, catch_backtrace())
     end
 
     # clear the in-memory message dataframe
@@ -314,7 +375,7 @@ function Rembus.send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::D
         name = twin.router.id
         min_ts = Rembus.uts() - max_period
         df = DataFrame(
-            DuckDB.execute(con, "SELECT * FROM message WHERE name='$name' AND ptr>=$min_ts")
+            DuckDB.execute(con, "SELECT * FROM message WHERE name='$name' AND recv>=$min_ts")
         )
         interests = Rembus.twin_topics(twin)
         filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]

@@ -378,7 +378,7 @@ end
 function data_at_rest(; from=LastReceived, broker="broker")
     files = messages_files(broker, to_microseconds(from))
     result = DataFrame(
-        ptr=UInt64[],
+        recv=UInt64[],
         slot=UInt32[],
         qos=UInt8[],
         uid=Msgid[],
@@ -401,10 +401,10 @@ function send_messages(twin::Twin, df)
     nowts = time() * 1_000_000
     for row in eachrow(df)
         tmark = twin.mark
-        if row.ptr > tmark
+        if row.recv > tmark
             if haskey(twin.msg_from, row.topic) &&
-               row.ptr > (nowts - twin.msg_from[row.topic])
-                Rembus.from_cbor(twin, row.ptr, row.pkt)
+               row.recv > (nowts - twin.msg_from[row.topic])
+                Rembus.from_cbor(twin, row.recv, row.pkt)
             end
         end
     end
