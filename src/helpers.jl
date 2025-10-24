@@ -348,14 +348,13 @@ function save_message(pd, router)
                 @debug "[$router] persisting cached messages"
                 persist(router)
             elseif isshutdown(msg)
+                close(tmr)
                 persist(router)
                 break
             end
         end
     catch e
         @error "save_message error: $e"
-    finally
-        close(tmr)
     end
 end
 
