@@ -355,6 +355,7 @@ function save_message(pd, router)
         end
     catch e
         @error "save_message error: $e"
+        showerror(stdout, e, catch_backtrace())
     end
 end
 
