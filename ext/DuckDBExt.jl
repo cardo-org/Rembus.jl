@@ -32,12 +32,16 @@ function columns(tabledef::Rembus.Table)
     return [t.name for t in tabledef.fields]
 end
 
-function set_default(tabledef::Rembus.Table, d)
+function set_default(tabledef::Rembus.Table, d; add_nullable=true)
     for col in tabledef.fields
         if haskey(d, col.name)
             continue
         elseif col.default !== nothing
             d[col.name] = col.default
+        elseif add_nullable && col.nullable == true
+            if !(col.name in tabledef.keys)
+                d[col.name] = missing
+            end
         end
     end
 end
@@ -115,7 +119,8 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         DuckDB.execute(con, table)
     end
 
-    for (tname, tabledef) in router.schema
+    for tabledef in values(router.schema)
+        tname = tabledef.name
         if isempty(tabledef.fields)
             continue
         end
@@ -148,7 +153,7 @@ function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
         values = decode(row.pkt)[end]
         if format == "key_value"
             obj = values[1]
-            set_default(tabledef, obj)
+            set_default(tabledef, obj, add_nullable=false)
             if all(k -> haskey(obj, k), tblfields)
                 fields = [obj[f] for f in tblfields]
             else
@@ -238,13 +243,21 @@ function delete(con::DuckDB.DB, tabledef::Rembus.Table, df)
     end
 end
 
+function get_type(col::Rembus.Column)
+    if col.nullable
+        return Union{typemap[col.type],Missing}
+    else
+        return typemap[col.type]
+    end
+end
+
 function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
     tname = tabledef.name
     format = tabledef.format
     fields = columns(tabledef)
     indexes = tabledef.keys
     nfields = length(fields)
-    types = [typemap[t.type] for t in tabledef.fields]
+    types = Any[get_type(t) for t in tabledef.fields]
     if haskey(tabledef.extras, "recv_ts")
         push!(fields, tabledef.extras["recv_ts"])
         push!(types, UInt64)
@@ -308,11 +321,15 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
         push!(conds, "df_view.$key=$tname.$key")
     end
     cond_str = join(conds, " AND ")
+
+    col_list = join(fields, ", ")
+    val_list = join(["df_view.$c" for c in fields], ", ")
+    update_list = join(["$c = df_view.$c" for c in setdiff(fields, tabledef.keys)], ", ")
     DuckDB.execute(
         con,
-        """MERGE INTO $(tabledef.name) USING df_view ON $cond_str
-           WHEN MATCHED THEN UPDATE
-           WHEN NOT MATCHED THEN INSERT
+        """MERGE INTO $tname USING df_view ON $cond_str
+           WHEN MATCHED THEN UPDATE SET $update_list
+           WHEN NOT MATCHED THEN INSERT ($col_list) VALUES ($val_list)
         """
     )
     DuckDB.unregister_data_frame(con, "df_view")

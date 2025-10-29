@@ -508,6 +508,7 @@ struct Table
     fields::Vector{Column}
     keys::Vector{String}
     extras::Dict{String,Any}
+    topic::String
     delete_topic::Union{Nothing,String}
     Table(;
         table,
@@ -515,13 +516,14 @@ struct Table
         keys=String[],
         format="sequence",
         extras=Dict(),
+        topic=table,
         delete_topic=nothing
-    ) = new(table, format, columns, keys, extras, delete_topic)
+    ) = new(table, format, columns, keys, extras, topic, delete_topic)
     Table(
         name,
         format,
         delete_topic
-    ) = new(name, format, Column[], String[], Dict(), delete_topic)
+    ) = new(name, format, Column[], String[], Dict(), name, delete_topic)
 end
 
 
