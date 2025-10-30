@@ -1,11 +1,13 @@
 module DuckDBExt
 
 using DataFrames
+using Dates
 using DuckDB
 using JSON3
 using Rembus
 
 const typemap = Dict(
+    "BLOB" => Vector{UInt8},
     "TEXT" => String,
     "UTINYINT" => Int8,
     "SMALLINT" => Int16,
@@ -18,6 +20,7 @@ const typemap = Dict(
     "UHUGEINT" => UInt128,
     "FLOAT" => Float32,
     "DOUBLE" => Float64,
+    "TIMESTAMP" => DateTime
 )
 
 const ducklock = ReentrantLock()
@@ -151,9 +154,10 @@ function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
     appender = DuckDB.Appender(con, topic)
     for row in eachrow(df)
         values = decode(row.pkt)[end]
+        @info "VALUES: $values"
         if format == "key_value"
-            obj = values[1]
-            set_default(tabledef, obj, add_nullable=false)
+            obj::Dict{String, Any} = values[1]
+            set_default(tabledef, obj, add_nullable=true)
             if all(k -> haskey(obj, k), tblfields)
                 fields = [obj[f] for f in tblfields]
             else

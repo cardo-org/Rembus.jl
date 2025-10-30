@@ -26,8 +26,8 @@ function run(con)
             Rembus.Table(
                 table="topic1",
                 columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
+                    Rembus.Column("name", "TEXT", nullable=false),
+                    Rembus.Column("type", "TEXT", nullable=false),
                     Rembus.Column("tinyint", "TINYINT"),
                     Rembus.Column("smallint", "SMALLINT"),
                     Rembus.Column("integer", "INTEGER"),
@@ -58,9 +58,9 @@ function run(con)
             Rembus.Table(
                 table="topic3",
                 columns=[
-                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("name", "TEXT", nullable=false),
                     Rembus.Column("type", "TEXT", default="type_default"),
-                    Rembus.Column("float", "FLOAT"),
+                    Rembus.Column("float", "FLOAT", nullable=true),
                     Rembus.Column("double", "DOUBLE")
                 ],
                 format="key_value",
@@ -72,9 +72,10 @@ function run(con)
                 table="topic4",
                 delete_topic="topic4/delete",
                 columns=[
-                    Rembus.Column("name", "TEXT"),
+                    Rembus.Column("name", "TEXT", nullable=false),
                     Rembus.Column("type", "TEXT"),
-                    Rembus.Column("value", "TEXT", default="default_value")
+                    Rembus.Column("value", "TEXT", default="default_value"),
+                    Rembus.Column("opt_value", "TEXT")
                 ],
                 keys=["name", "type"],
                 format="key_value",
@@ -111,8 +112,6 @@ function run(con)
         "topic3",
         Dict(
             "name" => "name_a",
-            #"type" => "type_a",
-            "float" => Float32(1.0),
             "double" => Float64(2.0))
     )
     publish(
