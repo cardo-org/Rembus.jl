@@ -75,3 +75,7 @@ function brokerd()::Cint
     end
     return 0
 end
+
+function (@main)(ARGS)
+    return brokerd()
+end

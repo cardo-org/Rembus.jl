@@ -154,9 +154,8 @@ function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
     appender = DuckDB.Appender(con, topic)
     for row in eachrow(df)
         values = decode(row.pkt)[end]
-        @info "VALUES: $values"
         if format == "key_value"
-            obj::Dict{String, Any} = values[1]
+            obj::Dict{String,Any} = values[1]
             set_default(tabledef, obj, add_nullable=true)
             if all(k -> haskey(obj, k), tblfields)
                 fields = [obj[f] for f in tblfields]

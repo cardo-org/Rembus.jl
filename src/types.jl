@@ -536,7 +536,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     downstream::Union{Nothing,Rembus.AbstractRouter}
     id::String
     eid::UInt64 # ephemeral unique id
-    store_type::Any
+    store::Any
     schema::Dict{String,Table}
     settings::Settings
     mode::ConnectionMode
@@ -701,7 +701,7 @@ function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
     router = last_downstream(twin.router)
-    send_data_at_rest(twin, msg_from, router.store_type)
+    send_data_at_rest(twin, msg_from, router.store)
     return nothing
 end
 

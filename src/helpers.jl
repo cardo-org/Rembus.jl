@@ -315,7 +315,7 @@ end
 
 function persist(router)
     if !isempty(router.msg_df)
-        save_data_at_rest(router, router.store_type)
+        save_data_at_rest(router, router.store)
         router.msg_df = msg_dataframe()
     end
 end

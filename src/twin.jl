@@ -548,7 +548,7 @@ function reconnect(twin::Twin, url::RbURL)
                 end
 
                 isconnected = true
-                send_data_at_rest(twin, twin.failover_from, twin.router.store_type)
+                send_data_at_rest(twin, twin.failover_from, twin.router.store)
             end
         end
     catch e
@@ -681,7 +681,7 @@ function setidentity(router::Router, twin::Twin, msg; isauth=false)
     router.id_twin[rid(twin)] = twin
     setname(twin.process, rid(twin))
     twin.isauth = isauth
-    load_twin(router, twin, router.store_type)
+    load_twin(router, twin, router.store)
     return nothing
 end
 
@@ -1090,7 +1090,7 @@ function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
     router = last_downstream(twin.router)
-    return send_data_at_rest(twin, from_msg, router.store_type)
+    return send_data_at_rest(twin, from_msg, router.store)
 end
 
 #=
@@ -1364,7 +1364,7 @@ function detach(twin)
     # save the state to disk
     router = last_downstream(twin.router)
     if !isrepl(twin.uid)
-        save_twin(router, twin, router.store_type)
+        save_twin(router, twin, router.store)
     end
 
     if !isa(twin.socket, Float)
@@ -1373,7 +1373,7 @@ function detach(twin)
         twin.socket = Float(twin.socket.out, twin.socket.direct)
 
         if !isempty(twin.ackdf)
-            save_received_acks(twin, router.store_type)
+            save_received_acks(twin, router.store)
         end
 
         # Remove the twin from the router tables.

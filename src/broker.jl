@@ -17,13 +17,13 @@ end
 
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
-        df = load_received_acks(router, url, router.store_type)
+        df = load_received_acks(router, url, router.store)
         if haskey(router.id_twin, rid(url))
             twin = router.id_twin[rid(url)]
         else
             twin = Twin(url, first_upstream(router))
             twin.ackdf = df
-            load_twin(router, twin, router.store_type)
+            load_twin(router, twin, router.store)
         end
 
         if !isdefined(twin, :process) || istaskdone(twin.process.task)
@@ -226,7 +226,7 @@ function boot(router::Router, ::FileStore)
 end
 
 function init(router::Router)
-    boot(router, router.store_type)
+    boot(router, router.store)
     router.local_function["rid"] = (ctx=missing, twin=nothing) -> router.id
     router.local_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
     router.local_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
@@ -753,7 +753,7 @@ function get_router(db=FileStore();
     broker_process = from("$name.broker")
     if broker_process === nothing
         router = Router{Twin}(name, nothing, missing, schema)
-        router.store_type = db
+        router.store = db
         if authenticated
             router.mode = Rembus.authenticated
         end
@@ -807,6 +807,9 @@ function start_broker(
     prometheus=nothing,
     name="broker",
 )
+    if all(isequal(nothing), (ws, tcp, zmq, http))
+        router.settings.archiver_interval = 0
+    end
     router.archiver = process(
         save_message,
         args=(router,),
