@@ -174,17 +174,7 @@ con = DuckDB.DB()
 
 try
     ENV["REMBUS_ARCHIVER_INTERVAL"] = 10
-    if haskey(ENV, "PGDATABASE")
-        dbname = "rembus_test"
-        user = get(ENV, "PGUSER", "postgres")
-        pwd = get(ENV, "PGPASSWORD", "postgres")
-        ENV["DATABASE_URL"] = "postgresql://$user:$pwd@127.0.0.1/$dbname"
-        Base.run(`dropdb $dbname --if-exists`)
-        Base.run(`createdb $dbname`)
-    else
-        rm(joinpath(Rembus.rembus_dir(), "broker.ducklake"); force=true, recursive=true)
-        rm(Rembus.broker_dir("broker"); force=true, recursive=true)
-    end
+    init_ducklake()
     run(con)
 catch e
     @test false

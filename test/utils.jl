@@ -195,3 +195,26 @@ function remove_keys(broker_name, cid)
         end
     end
 end
+
+
+function init_ducklake()
+    if haskey(ENV, "DUCKLAKE_URL")
+        if startswith(ENV["DUCKLAKE_URL"], "postgres")
+            dbname = "rembus_test"
+            user = get(ENV, "PGUSER", "postgres")
+            pwd = get(ENV, "PGPASSWORD", "postgres")
+            db_url = "postgresql://$user:$pwd@127.0.0.1/$dbname"
+            ENV["DATABASE_URL"] = db_url
+            ENV["DUCKLAKE_URL"] = "postgres:$db_url"
+            Base.run(`dropdb $dbname --if-exists`)
+            Base.run(`createdb $dbname`)
+        elseif startswith(ENV["DUCKLAKE_URL"], "sqlite")
+            db_file = joinpath(Rembus.rembus_dir(), "rembus_test.sqlite")
+            rm(db_file; force=true)
+            ENV["DUCKLAKE_URL"] = "sqlite:$db_file"
+        end
+    else
+        rm(joinpath(Rembus.rembus_dir(), "broker.ducklake"); force=true, recursive=true)
+        rm(Rembus.broker_dir("broker"); force=true, recursive=true)
+    end
+end
