@@ -94,22 +94,23 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
 
         if isa(e, MethodError)
             try
-                if router.shared === missing
-                    result = Base.invokelatest(
-                        router.local_function[msg.topic],
-                        getargs(payload)...
-                    )
-                else
+                result = Base.invokelatest(
+                    router.local_function[msg.topic],
+                    getargs(payload)...
+                )
+                sts = STS_SUCCESS
+            catch e
+                try
                     result = Base.invokelatest(
                         router.local_function[msg.topic],
                         router.shared,
                         twin,
                         getargs(payload)...
                     )
+                    sts = STS_SUCCESS
+                catch e
+                    result = "$e"
                 end
-                sts = STS_SUCCESS
-            catch e
-                result = "$e"
             end
         end
     end
@@ -738,7 +739,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
 end
 
 function get_router(db=FileStore();
-    schema=Dict(),
+    schema=OrderedDict(),
     name=localcid(),
     ws=nothing,
     tcp=nothing,

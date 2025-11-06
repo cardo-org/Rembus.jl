@@ -330,32 +330,27 @@ function save_message(pd, router)
     period = router.settings.archiver_interval
     tmr = Timer((_tmr) -> push!(pd.inbox, :persist), period, interval=period)
 
-    try
-        for msg in pd.inbox
-            if isa(msg, PubSubMsg)
-                if isa(msg.data, IOBuffer)
-                    data = msg.data.data
-                else
-                    data = encode_message(msg)
-                end
-
-                slot::UInt32 = 0
-                if (msg.flags & SLOT_FLAG) == SLOT_FLAG
-                    slot = UInt32(msg.id & 0xffffffff)
-                end
-                push!(router.msg_df, [msg.counter, slot, msg.flags, msg.id, msg.topic, data])
-            elseif msg === :persist
-                @debug "[$router] persisting cached messages"
-                persist(router)
-            elseif isshutdown(msg)
-                close(tmr)
-                persist(router)
-                break
+    for msg in pd.inbox
+        if isa(msg, PubSubMsg)
+            if isa(msg.data, IOBuffer)
+                data = msg.data.data
+            else
+                data = encode_message(msg)
             end
+
+            slot::UInt32 = 0
+            if (msg.flags & SLOT_FLAG) == SLOT_FLAG
+                slot = UInt32(msg.id & 0xffffffff)
+            end
+            push!(router.msg_df, [msg.counter, slot, msg.flags, msg.id, msg.topic, data])
+        elseif msg === :persist
+            @debug "[$router] persisting cached messages"
+            persist(router)
+        elseif isshutdown(msg)
+            close(tmr)
+            persist(router)
+            break
         end
-    catch e
-        @error "save_message error: $e"
-        showerror(stdout, e, catch_backtrace())
     end
 end
 
@@ -521,4 +516,28 @@ function probe_pprint(twin::Twin)
 
     report *= join(msgs, "\n")
     println(report)
+end
+
+function schema(jsonstr::AbstractString)
+    data = JSON3.read(jsonstr, Vector{Dict})
+
+    schema = [
+        Table(
+            table=t["table"],
+            columns=[Column(
+                c["col"],
+                c["type"],
+                nullable=get(c, "nullable", true),
+                default=get(c, "default", nothing)
+            ) for c in t["columns"]],
+            keys=get(t, "keys", String[]),
+            format=t["format"],
+            extras=Dict(t["extras"]),
+            topic=get(t, "topic", t["table"]),
+            delete_topic=get(t, "delete_topic", nothing)
+        )
+        for t in data
+    ]
+
+    return schema
 end

@@ -34,15 +34,29 @@ const GROUP = get(ENV, "GROUP", "all")
             include("mqtt/test_mqtt_publish.jl")
         end
     end
+    if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "keyspace")
+        @time @safetestset "keyspace" begin
+            include("keyspace/test_keyspace.jl")
+        end
+    end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
         @time @safetestset "duckdb_schema" begin
             include("duckdb/test_duckdb_schema.jl")
         end
+        @time @safetestset "duckdb_delete" begin
+            include("duckdb/test_duckdb_delete.jl")
+        end
         @time @safetestset "duckdb_df" begin
             include("duckdb/test_duckdb_df.jl")
         end
+        @time @safetestset "duckdb_delete_df" begin
+            include("duckdb/test_duckdb_delete_df.jl")
+        end
         @time @safetestset "duckdb" begin
             include("duckdb/test_duckdb.jl")
+        end
+        @time @safetestset "duckdb_hierarchy" begin
+            include("duckdb/test_duckdb_hierarchy.jl")
         end
     end
     if GROUP == "all" || GROUP == "broker"

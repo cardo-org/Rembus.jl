@@ -1,0 +1,33 @@
+[
+      {
+      "table": "pressure",
+      "topic": ":regione/:loc/pressure",
+      "columns": [
+        { "col": "sensor", "type": "TEXT", "nullable": false },
+        { "col": "regione", "type": "TEXT", "nullable": false },
+        { "col": "loc", "type": "TEXT" },
+        { "col": "value", "type": "DOUBLE" }
+      ],
+      "format": "key_value",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    },
+    {
+      "table": "temperature",
+      "topic": ":regione/:loc/temperature",
+      "columns": [
+        { "col": "sensor", "type": "TEXT", "nullable": false },
+        { "col": "regione", "type": "TEXT", "nullable": false },
+        { "col": "loc", "type": "TEXT" },
+        { "col": "value", "type": "DOUBLE" }
+      ],
+      "format": "key_value",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    }
+]
+

@@ -6,8 +6,6 @@ using Dates
 
 include("../utils.jl")
 
-#Rembus.debug!()
-
 topic1(name, type, value) = nothing
 topic2(name, type, value) = nothing
 topic3(obj) = nothing
@@ -20,70 +18,8 @@ end
 
 function run(con)
 
-    bro = component(
-        con,
-        schema=[
-            Rembus.Table(
-                table="topic1",
-                columns=[
-                    Rembus.Column("name", "TEXT", nullable=false),
-                    Rembus.Column("type", "TEXT", nullable=false),
-                    Rembus.Column("tinyint", "TINYINT"),
-                    Rembus.Column("smallint", "SMALLINT"),
-                    Rembus.Column("integer", "INTEGER"),
-                    Rembus.Column("bigint", "BIGINT")
-                ],
-                format="sequence",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )
-            ),
-            Rembus.Table(
-                table="topic2",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("utinyint", "UTINYINT"),
-                    Rembus.Column("usmallint", "USMALLINT"),
-                    Rembus.Column("uinteger", "UINTEGER"),
-                    Rembus.Column("ubigint", "UBIGINT")],
-                keys=["name"],
-                format="sequence",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )
-            ),
-            Rembus.Table(
-                table="topic3",
-                columns=[
-                    Rembus.Column("name", "TEXT", nullable=false),
-                    Rembus.Column("type", "TEXT", default="type_default"),
-                    Rembus.Column("float", "FLOAT", nullable=true),
-                    Rembus.Column("double", "DOUBLE")
-                ],
-                format="key_value",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )),
-            Rembus.Table(
-                table="topic4",
-                delete_topic="topic4/delete",
-                columns=[
-                    Rembus.Column("name", "TEXT", nullable=false),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("value", "TEXT", default="default_value"),
-                    Rembus.Column("opt_value", "TEXT")
-                ],
-                keys=["name", "type"],
-                format="key_value",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )
-            )])
+    jsonstr = read(joinpath(@__DIR__, "test_schema.json"), String)
+    bro = component(con, schema=Rembus.schema(jsonstr))
 
     pub = component("duckdb_pub")
 
@@ -130,11 +66,7 @@ function run(con)
         "topic4",
         Dict("name" => "name_b", "type" => "type_b")
     )
-    publish(
-        pub,
-        "topic4/delete",
-        Dict("name" => "name_b")
-    )
+
 
     # missing values
     publish(pub, "topic1", "name_a", "type_a")
@@ -164,7 +96,7 @@ function run(con)
 
     df = DuckDB.execute(con, "SELECT * FROM topic4") |> DataFrame
     @debug "[duckdb_schema] topic4 data:\n$(df)"
-    @test nrow(df) == 1
+    @test nrow(df) == 2
 
 end
 
@@ -173,7 +105,7 @@ end
 con = DuckDB.DB()
 
 try
-    ENV["REMBUS_ARCHIVER_INTERVAL"] = 10
+    ENV["REMBUS_ARCHIVER_INTERVAL"] = 1
     init_ducklake()
     run(con)
 catch e

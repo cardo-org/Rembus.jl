@@ -1,0 +1,75 @@
+[
+    {
+      "table": "topic1",
+      "columns": [
+        { "col": "name", "type": "TEXT", "nullable": false },
+        { "col": "type", "type": "TEXT", "nullable": false },
+        { "col": "tinyint", "type": "TINYINT" },
+        { "col": "smallint", "type": "SMALLINT" },
+        { "col": "integer", "type": "INTEGER" },
+        { "col": "bigint", "type": "BIGINT" }
+      ],
+      "format": "sequence",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    },
+    {
+      "table": "topic2",
+      "columns": [
+        { "col": "name", "type": "TEXT" },
+        { "col": "type", "type": "TEXT" },
+        { "col": "utinyint", "type": "UTINYINT" },
+        { "col": "usmallint", "type": "USMALLINT" },
+        { "col": "uinteger", "type": "UINTEGER" },
+        { "col": "ubigint", "type": "UBIGINT" }
+      ],
+      "keys": ["name"],
+      "format": "sequence",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    },
+    {
+      "table": "topic3",
+      "columns": [
+        { "col": "name", "type": "TEXT", "nullable": false },
+        { "col": "type", "type": "TEXT", "default": "type_default" },
+        { "col": "float", "type": "FLOAT", "nullable": true },
+        { "col": "double", "type": "DOUBLE" }
+      ],
+      "format": "key_value",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    },
+    {
+      "table": "topic4",
+      "delete_topic": "topic4/delete",
+      "columns": [
+        { "col": "name", "type": "TEXT", "nullable": false },
+        { "col": "type", "type": "TEXT" },
+        { "col": "value", "type": "TEXT", "default": "default_value" },
+        { "col": "opt_value", "type": "TEXT" }
+      ],
+      "keys": ["name", "type"],
+      "format": "key_value",
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    },
+    {
+      "table": "table_without_columns",
+      "format": "key_value",
+      "columns": [],
+      "extras": {
+        "recv_ts": "ts",
+        "slot": "rop"
+      }
+    }
+]
+

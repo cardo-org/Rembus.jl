@@ -19,6 +19,7 @@ for dir in [
     "test/api",
     "test/duckdb",
     "test/mqtt",
+    "test/keyspace",
     "test/offline",
     "test/broker",
     "test/twin",

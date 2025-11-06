@@ -33,9 +33,12 @@ export RembusError,
     RpcMethodNotFound,
     RpcMethodUnavailable,
     RpcMethodLoopback,
-    RpcMethodException
+    RpcMethodException,
+    KeySpaceRouter
 
 export
+    add_plugin,
+    bname,
     authorize,
     unauthorize,
     get_private_topics,
@@ -94,6 +97,7 @@ include("store.jl")
 include("transport.jl")
 include("api.jl")
 include("http.jl")
+include("keyspace.jl")
 include("main.jl")
 
 function __init__()

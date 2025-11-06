@@ -537,7 +537,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id::String
     eid::UInt64 # ephemeral unique id
     store::Any
-    schema::Dict{String,Table}
+    schema::OrderedDict{String,Table}
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -567,7 +567,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     process::Visor.Process
     archiver::Visor.Process
     owners::Dict{String,String}
-    Router{T}(name, plugin=nothing, context=missing, schema=Dict()) where {T<:AbstractTwin} = new{T}(
+    Router{T}(name, plugin=nothing, context=missing, schema=OrderedDict()) where {T<:AbstractTwin} = new{T}(
         nothing,
         nothing,
         name,
@@ -597,6 +597,8 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
         Set(), # admins
     )
 end
+
+bname(r::AbstractRouter) = last_downstream(r).id
 
 function upstream!(router, upstream_router)
     router.upstream = upstream_router
