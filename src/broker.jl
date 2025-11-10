@@ -739,7 +739,7 @@ function serve_tcp(pd, router::Router, port, issecure=false)
 end
 
 function get_router(db=FileStore();
-    schema=OrderedDict(),
+    tables=OrderedDict(),
     name=localcid(),
     ws=nothing,
     tcp=nothing,
@@ -753,7 +753,7 @@ function get_router(db=FileStore();
 )
     broker_process = from("$name.broker")
     if broker_process === nothing
-        router = Router{Twin}(name, nothing, missing, schema)
+        router = Router{Twin}(name, nothing, missing, tables)
         router.store = db
         if authenticated
             router.mode = Rembus.authenticated

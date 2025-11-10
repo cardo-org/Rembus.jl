@@ -58,6 +58,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "duckdb_hierarchy" begin
             include("duckdb/test_duckdb_hierarchy.jl")
         end
+        @time @safetestset "duckdb_enum" begin
+            include("duckdb/test_duckdb_enum.jl")
+        end
     end
     if GROUP == "all" || GROUP == "broker"
         @time @safetestset "upload_message" begin

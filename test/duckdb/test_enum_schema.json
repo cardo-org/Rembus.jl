@@ -1,0 +1,40 @@
+{
+    "enums": [
+        {
+            "name": "status",
+            "values": [
+                "on",
+                "off"
+            ]
+        }
+    ],
+    "tables": [
+        {
+            "table": "equipment",
+            "columns": [
+                {
+                    "col": "id",
+                    "type": "TEXT",
+                    "nullable": false
+                },
+                {
+                    "col": "type",
+                    "type": "TEXT",
+                    "nullable": false
+                },
+                {
+                    "col": "status",
+                    "type": "TEXT",
+                    "nullable": false
+                }
+            ],
+            "keys": [
+                "id"
+            ],
+            "format": "key_value",
+            "extras": {
+                "slot": "time"
+            }
+        }
+    ]
+}

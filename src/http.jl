@@ -97,7 +97,7 @@ end
 
 function jsonrpc_response(sts, retval)
     headers = [
-        "Content_type" => "application/json",
+        "Content-Type" => "application/json",
         "Access-Control-Allow-Origin" => "*"
     ]
     if isnothing(retval)
@@ -282,7 +282,7 @@ function http_rpc(router::Router, req::HTTP.Request)
             return HTTP.Response(
                 sts,
                 [
-                    "Content_type" => "application/json",
+                    "Content-Type" => "application/json",
                     "Access-Control-Allow-Origin" => "*"
                 ],
                 retval

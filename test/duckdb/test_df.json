@@ -3,14 +3,14 @@
   {
     "table": "topic1",
     "columns": [
-      { "col": "name", "type": "TEXT", "nullable": false },
-      { "col": "type", "type": "TEXT", "nullable": false },
+      { "col": "name", "type": "TEXT"},
+      { "col": "type", "type": "TEXT"},
       { "col": "tinyint", "type": "TINYINT" },
       { "col": "smallint", "type": "SMALLINT" },
       { "col": "integer", "type": "INTEGER" },
       { "col": "bigint", "type": "BIGINT" }
     ],
-    "format": "sequence",
+    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -27,7 +27,7 @@
       { "col": "ubigint", "type": "UBIGINT" }
     ],
     "keys": ["name"],
-    "format": "sequence",
+    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -36,12 +36,12 @@
   {
     "table": "topic3",
     "columns": [
-      { "col": "name", "type": "TEXT", "nullable": false },
-      { "col": "type", "type": "TEXT", "default": "type_default" },
-      { "col": "float", "type": "FLOAT", "nullable": true },
+      { "col": "name", "type": "TEXT" },
+      { "col": "type", "type": "TEXT" },
+      { "col": "float", "type": "FLOAT" },
       { "col": "double", "type": "DOUBLE" }
     ],
-    "format": "key_value",
+    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -49,27 +49,12 @@
   },
   {
     "table": "topic4",
-    "delete_topic": "topic4/delete",
     "columns": [
-      { "col": "name", "type": "TEXT", "nullable": false },
+      { "col": "name", "type": "TEXT" },
       { "col": "type", "type": "TEXT" },
-      { "col": "value", "type": "TEXT", "default": "default_value" },
-      { "col": "opt_value", "type": "TEXT" }
+      { "col": "value", "type": "TEXT" }
     ],
     "keys": ["name", "type"],
-    "format": "key_value",
-    "extras": {
-      "recv_ts": "ts",
-      "slot": "rop"
-    }
-  },
-  {
-    "table": "table_without_columns",
-    "format": "key_value",
-    "columns": [],
-    "extras": {
-      "recv_ts": "ts",
-      "slot": "rop"
-    }
+    "format": "dataframe"
   }]
 }

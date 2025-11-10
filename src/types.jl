@@ -537,7 +537,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     id::String
     eid::UInt64 # ephemeral unique id
     store::Any
-    schema::OrderedDict{String,Table}
+    tables::OrderedDict{String,Table}
     settings::Settings
     mode::ConnectionMode
     lock::ReentrantLock
@@ -567,13 +567,15 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     process::Visor.Process
     archiver::Visor.Process
     owners::Dict{String,String}
-    Router{T}(name, plugin=nothing, context=missing, schema=OrderedDict()) where {T<:AbstractTwin} = new{T}(
+    Router{T}(
+        name, plugin=nothing, context=missing, tables=OrderedDict()
+    ) where {T<:AbstractTwin} = new{T}(
         nothing,
         nothing,
         name,
         rand(Xoshiro(time_ns()), UInt64),
         FileStore(),
-        schema,
+        tables,
         Settings(name),
         anonymous,
         ReentrantLock(),

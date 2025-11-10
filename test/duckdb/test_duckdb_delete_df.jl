@@ -1,5 +1,6 @@
 using DuckDB
 using DataFrames
+using JSON3
 using Rembus
 using Test
 using Dates
@@ -16,64 +17,64 @@ function run(con)
 
     bro = component(
         con,
-        schema=[
-            Rembus.Table(
-                table="topic1",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("tinyint", "TINYINT"),
-                    Rembus.Column("smallint", "SMALLINT"),
-                    Rembus.Column("integer", "INTEGER"),
-                    Rembus.Column("bigint", "BIGINT")
+        schema=JSON3.write(Dict("tables" => [
+            Dict(
+                "table" => "topic1",
+                "columns" => [
+                    Dict("col" => "name", "type" => "TEXT"),
+                    Dict("col" => "type", "type" => "TEXT"),
+                    Dict("col" => "tinyint", "type" => "TINYINT"),
+                    Dict("col" => "smallint", "type" => "SMALLINT"),
+                    Dict("col" => "integer", "type" => "INTEGER"),
+                    Dict("col" => "bigint", "type" => "BIGINT")
                 ],
-                format="dataframe",
-                extras=Dict(
+                "format" => "dataframe",
+                "extras" => Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )
             ),
-            Rembus.Table(
-                table="topic2",
-                delete_topic="topic2_delete",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("utinyint", "UTINYINT"),
-                    Rembus.Column("usmallint", "USMALLINT"),
-                    Rembus.Column("uinteger", "UINTEGER"),
-                    Rembus.Column("ubigint", "UBIGINT")],
-                keys=["name"],
-                format="dataframe",
-                extras=Dict(
+            Dict(
+                "table" => "topic2",
+                "delete_topic" => "topic2_delete",
+                "columns" => [
+                    Dict("col" => "name", "type" => "TEXT"),
+                    Dict("col" => "type", "type" => "TEXT"),
+                    Dict("col" => "utinyint", "type" => "UTINYINT"),
+                    Dict("col" => "usmallint", "type" => "USMALLINT"),
+                    Dict("col" => "uinteger", "type" => "UINTEGER"),
+                    Dict("col" => "ubigint", "type" => "UBIGINT")],
+                "keys" => ["name"],
+                "format" => "dataframe",
+                "extras" => Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )
             ),
-            Rembus.Table(
-                table="topic3",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("float", "FLOAT"),
-                    Rembus.Column("double", "DOUBLE")
+            Dict(
+                "table" => "topic3",
+                "columns" => [
+                    Dict("col" => "name", "type" => "TEXT"),
+                    Dict("col" => "type", "type" => "TEXT"),
+                    Dict("col" => "float", "type" => "FLOAT"),
+                    Dict("col" => "double", "type" => "DOUBLE")
                 ],
-                format="dataframe",
-                extras=Dict(
+                "format" => "dataframe",
+                "extras" => Dict(
                     "recv_ts" => "ts",
                     "slot" => "rop"
                 )),
-            Rembus.Table(
-                table="topic4",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("value", "TEXT")
+            Dict(
+                "table" => "topic4",
+                "columns" => [
+                    Dict("col" => "name", "type" => "TEXT"),
+                    Dict("col" => "type", "type" => "TEXT"),
+                    Dict("col" => "value", "type" => "TEXT")
                 ],
-                keys=["name", "type"],
-                format="dataframe"
+                "keys" => ["name", "type"],
+                "format" => "dataframe"
             )
-        ])
+        ])))
 
     pub = component("duckdb_pub")
 

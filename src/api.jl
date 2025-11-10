@@ -183,14 +183,21 @@ function component(db=FileStore();
     policy="first_up",
     enc=CBOR,
     failovers=[],
-    schema=[]
+    schema=missing
 )
     if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
         ws = DEFAULT_WS_PORT
     end
+
+    if ismissing(schema)
+        tbls = OrderedDict{String,Table}()
+    else
+        tbls = create_schema(schema, db)
+    end
+
     router = get_router(
         db,
-        schema=OrderedDict(obj.name => obj for obj in schema),
+        tables=OrderedDict(obj.name => obj for obj in tbls),
         name=name,
         ws=ws,
         tcp=tcp,

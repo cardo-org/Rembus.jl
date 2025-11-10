@@ -61,11 +61,11 @@ function lakedelete(con, router, obj)
     end
 
     tbl = obj["table"]
-    if !haskey(router.schema, tbl)
+    if !haskey(router.tables, tbl)
         error("error: unknown $tbl db table")
     end
 
-    tabledef = router.schema[tbl]
+    tabledef = router.tables[tbl]
     delete(con, tabledef, obj["where"])
     return "ok"
 end
@@ -144,7 +144,7 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         DuckDB.execute(con, table)
     end
 
-    for tabledef in values(router.schema)
+    for tabledef in values(router.tables)
         tname = tabledef.name
         fields = ["$(columndef(t))" for t in tabledef.fields]
         if haskey(tabledef.extras, "recv_ts")
@@ -164,6 +164,21 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     Rembus.load_configuration(router)
 
     return con
+end
+
+function Rembus.create_enum(en, con::DuckDB.DB)
+    error("""
+    enum type: likely to be supported in the future:
+    https://ducklake.select/docs/stable/duckdb/unsupported_features
+    """)
+    #    ename = en["name"]
+    #    tostrings = ["'$v'" for v in en["values"]]
+    #    evalues = join(tostrings, ",")
+    #    DuckDB.execute(
+    #        con,
+    #        "CREATE TYPE $ename AS ENUM ($evalues)"
+    #    )
+    #    typemap[ename] = Int
 end
 
 # Extract placeholder names from pattern, e.g. ":regione/:loc/temp" → ["regione", "loc"]
@@ -222,7 +237,7 @@ function expand!(df)
 end
 
 function settable!(router, df)
-    schema_tables = [tbl for tbl in values(router.schema)]
+    schema_tables = [tbl for tbl in values(router.tables)]
     tables = []
     regexps = []
     for msg in eachrow(df)
@@ -477,10 +492,10 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
 
     try
         for tbl in unique(df.table)
-            if haskey(router.schema, tbl)
+            if haskey(router.tables, tbl)
                 topicdf = filter(:table => t -> t == tbl, df, view=false)
                 expand!(topicdf)
-                tabledef = router.schema[tbl]
+                tabledef = router.tables[tbl]
                 if isempty(tabledef.keys)
                     append(con, tabledef, topicdf)
                 else
@@ -489,7 +504,7 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
             end
         end
     catch e
-        @error "[save_data] schema tables: $e"
+        @error "[save_data_at_rest]: $e"
     end
 
     try

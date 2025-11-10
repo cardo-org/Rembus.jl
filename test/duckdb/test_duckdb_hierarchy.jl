@@ -35,7 +35,7 @@ function run(con)
     temperature = 20.0
     jsonstr = read(joinpath(@__DIR__, "test_hierarchy.json"), String)
     ctx = Dict()
-    bro = component(con, schema=Rembus.schema(jsonstr))
+    bro = component(con, schema=jsonstr)
     add_plugin(bro, KeySpaceRouter())
 
     sub = component("hsub")

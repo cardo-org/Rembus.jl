@@ -9,7 +9,7 @@ include("../utils.jl")
 function run(con)
 
     jsonstr = read(joinpath(@__DIR__, "test_schema.json"), String)
-    bro = component(con, schema=Rembus.schema(jsonstr))
+    bro = component(con, schema=jsonstr)
 
     pub = component("duckdb_pub")
 

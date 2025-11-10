@@ -1,5 +1,6 @@
 using DuckDB
 using DataFrames
+using JSON3
 using Rembus
 using Test
 using Dates
@@ -15,67 +16,8 @@ function run(con)
         "type" => ["t1", "t2", "t3"],
         "value" => ["val1", "val2", "val3"]
     )
-
-    bro = component(
-        con,
-        schema=[
-            Rembus.Table(
-                table="topic1",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("tinyint", "TINYINT"),
-                    Rembus.Column("smallint", "SMALLINT"),
-                    Rembus.Column("integer", "INTEGER"),
-                    Rembus.Column("bigint", "BIGINT")
-                ],
-                format="dataframe",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )
-            ),
-            Rembus.Table(
-                table="topic2",
-                delete_topic="topic2_delete",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("utinyint", "UTINYINT"),
-                    Rembus.Column("usmallint", "USMALLINT"),
-                    Rembus.Column("uinteger", "UINTEGER"),
-                    Rembus.Column("ubigint", "UBIGINT")],
-                keys=["name"],
-                format="dataframe",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )
-            ),
-            Rembus.Table(
-                table="topic3",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("float", "FLOAT"),
-                    Rembus.Column("double", "DOUBLE")
-                ],
-                format="dataframe",
-                extras=Dict(
-                    "recv_ts" => "ts",
-                    "slot" => "rop"
-                )),
-            Rembus.Table(
-                table="topic4",
-                columns=[
-                    Rembus.Column("name", "TEXT"),
-                    Rembus.Column("type", "TEXT"),
-                    Rembus.Column("value", "TEXT")
-                ],
-                keys=["name", "type"],
-                format="dataframe"
-            )
-        ])
+    jsonstr = read(joinpath(@__DIR__, "test_df.json"), String)
+    bro = component(con, schema=jsonstr)
 
     pub = component("duckdb_pub")
 

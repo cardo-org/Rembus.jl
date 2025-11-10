@@ -518,10 +518,18 @@ function probe_pprint(twin::Twin)
     println(report)
 end
 
-function schema(jsonstr::AbstractString)
-    data = JSON3.read(jsonstr, Vector{Dict})
+create_enum(en, db::Archiver) = nothing
 
-    schema = [
+function create_schema(jsonstr::AbstractString, db)
+    config = JSON3.read(jsonstr, Dict)
+    tables = config["tables"]
+
+    enums = get(config, "enums", [])
+    for en in enums
+        create_enum(en, db)
+    end
+
+    tables = [
         Table(
             table=t["table"],
             columns=[Column(
@@ -532,12 +540,12 @@ function schema(jsonstr::AbstractString)
             ) for c in t["columns"]],
             keys=get(t, "keys", String[]),
             format=t["format"],
-            extras=Dict(t["extras"]),
+            extras=Dict(get(t, "extras", Dict())),
             topic=get(t, "topic", t["table"]),
             delete_topic=get(t, "delete_topic", nothing)
         )
-        for t in data
+        for t in tables
     ]
 
-    return schema
+    return tables
 end
