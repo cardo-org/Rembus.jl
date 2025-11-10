@@ -1,7 +1,7 @@
 using Rembus
 
-# Implements a Key Expressions Language similar to ksrouter:
-# https://github.com/eclipse-ksrouter/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md
+# Implements a Key Expressions Language similar to zenoh:
+# https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md
 
 mutable struct KeySpaceRouter <: Rembus.AbstractRouter
     # r"house/.*/temperature" => ["house/*/temperature" => twin]
