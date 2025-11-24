@@ -39,7 +39,7 @@ jobs:
       MQTT_PORT: 1883
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install ssh-keygen on Windows
         if: runner.os == 'Windows'
@@ -87,7 +87,7 @@ jobs:
       DOCKER_IMAGE: rembus/broker
       IMAGE_TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Extract stripped tag
         run: echo "IMAGE_TAG_STRIPPED=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
       - name: Set up Julia
@@ -124,7 +124,7 @@ jobs:
       contents: write
       statuses: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
