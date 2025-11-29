@@ -48,6 +48,8 @@ function run(pub_url, sub_url)
         count += 1
     end
     sleep(1)
+    close(pub)
+    close(sub)
 end
 
 
@@ -67,5 +69,5 @@ finally
 end
 
 df = Rembus.data_at_rest(broker=broker_name, from=Dates.Second(2))
-@test nrow(df) == rounds * 2
+@test nrow(df) == rounds * 2 + 4 # two connection_up and two connection_down
 @info "[data_at_rest] end"

@@ -32,6 +32,9 @@ function run()
     publish(pub, "veneto/@agordo/cencenighe/temperature", temperature)
 
     sleep(1)
+
+    unsubscribe(sub2, "veneto/*/cencenighe/*")
+
     close(sub1)
     close(sub2)
     close(pub)

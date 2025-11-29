@@ -74,8 +74,8 @@ function run(admin_component)
     for c in [cli, clizmq, admin_sub, user_sub, user_subzmq]
         close(c)
     end
-    @test ctx.admin_count == 5
-    @test ctx.user_count == 5
+    @test ctx.admin_count == 9
+    @test ctx.user_count == 13
 end
 
 admin_component = "subscribe_glob_admin"

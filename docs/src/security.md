@@ -1,6 +1,6 @@
 # Security
 
-End-to-end encryption is provided by **Secure Web Socket** (`wss`) and 
+End-to-end encryption is provided by **Secure Web Socket** (`wss`) and
 **Transport Layer Security** (`tls`).
 
 Authentication and authorization are realized by using RSA and ECDSA keys
@@ -9,12 +9,12 @@ Authentication and authorization are realized by using RSA and ECDSA keys
 Each client component owns a private key, while the server/broker holds the
 corresponding public key.
 
-In this document, the syntax $VARNAME indicates the environment variable
+In this document, the syntax \$VARNAME indicates the environment variable
 VARNAME.
 
 ## End-to-end Encryption
 
-The broker requires the following files in the directory `$REMBUS_KEYSTORE`:
+The broker requires the following files in the directory `\$REMBUS_KEYSTORE`:
 
 * The server certificate: `rembus.crt`
 * The server private key: `rembus.key`
@@ -36,11 +36,11 @@ will not have access to privileges reserved for authenticated components.
 For a component named `foobar`, the authentication steps are:
 
 1. The component sends a message declaring its name `foobar`.
-1. If the file `$BROKER_DB/keys/foobar` exists, the broker replies with a
+1. If the file `\$BROKER_DB/keys/foobar` exists, the broker replies with a
    random challenge.
 1. The component computes a response:
 
-    * If `$HOME/.config/rembus/keys/foobar` contains an RSA or ECDSA private key:
+    * If `\$HOME/.config/rembus/keys/foobar` contains an RSA or ECDSA private key:
         * Create a SHA-256 digest of the string `(challenge || "foobar")`.
         * Sign this digest with the private key.
 
@@ -48,9 +48,9 @@ For a component named `foobar`, the authentication steps are:
       SHA-256 digest of `(challenge || shared_secret)`.
 1. The component send the resulting digest (or signature) to the broker;
 1. The broker verifies the response:
-    * if `$HOME/.config/broker/keys/foobar` contains an RSA or ECDSA public key:
+    * if `\$HOME/.config/broker/keys/foobar` contains an RSA or ECDSA public key:
         * Verify that the signature matches `(challenge || "foobar")`.  
-    * Otherwise verify that the digest equals the SHA-256 of 
+    * Otherwise verify that the digest equals the SHA-256 of
       `(challenge || shared_secret)`.
 1. If verification succeeds, the broker returns **SUCCESS**; otherwise,
    it returns **ERROR** and closes the connection.
@@ -80,7 +80,7 @@ public_topic(rb, "my_topic")
 
 To perform these actions, the `admin` role must be assigned to the component
 `superuser`, whose name must appear in the file
-`$HOME/.config/broker/admins.json`.
+`\$HOME/.config/broker/admins.json`.
 
 Multiple components can be granted the `admin` role:
 

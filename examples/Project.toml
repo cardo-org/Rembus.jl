@@ -1,4 +1,6 @@
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+CRC32 = "b4567568-9dcc-467e-9b62-c342d3a501d3"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DuckDB = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
 Rembus = "aa126574-2ec3-42c9-8bf5-7f62001d6bce"

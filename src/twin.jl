@@ -783,6 +783,11 @@ function attestation(router::Router, twin::Twin, msg, authenticate=true)
         end
 
         setidentity(router, twin, msg, isauth=authenticate)
+
+        # The named component is connected,
+        # send a message to component_info topic.
+        twin_event(twin, "connection_up")
+
         reason = get_topics(router, twin)
         @debug "[$twin] exported topics: $reason"
     catch e
@@ -967,6 +972,7 @@ function ack_msg(msg)
 end
 
 function admin_msg(router::Router, msg)
+    @info "admin_msg: $msg"
     twin = msg.twin
 
     if !command_permitted(router, twin)
@@ -988,6 +994,7 @@ function admin_msg(router::Router, msg)
         response = ResMsg(twin, msg.id, STS_SUCCESS, nothing)
         put!(twin.process.inbox, response)
     else
+        @info "admin_msg res: $admin_res"
         put!(twin.process.inbox, admin_res)
     end
     return true
@@ -1254,6 +1261,21 @@ function json_parse(twin::Twin, pkt::Dict)
     end
 end
 
+function twin_event(twin, event::AbstractString; detail=missing)
+    data = Dict("event" => event, "cid" => rid(twin))
+
+    #if !ismissing(detail)
+    #    data["detail"] = detail
+    #end
+    @debug "[$twin] twin_event: $data"
+    msg = PubSubMsg(
+        twin,
+        "component_info",
+        [data]
+    )
+    put!(twin.router.process.inbox, msg)
+end
+
 #=
     twin_receiver(twin)
 
@@ -1288,6 +1310,10 @@ function twin_receiver(twin::Twin)
         dumperror(twin, e)
     finally
         end_receiver(twin)
+
+        # Send the connection_down message to component_info topic.
+        twin_event(twin, "connection_down")
+
     end
 
     return nothing

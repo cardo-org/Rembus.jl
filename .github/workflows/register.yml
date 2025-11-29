@@ -13,8 +13,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Trigger JuliaRegistrator
-        uses: julia-actions/registrator@latest
+        uses: julia-actions/RegisterAction@latest
         with:
-          repo: ${{ github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}

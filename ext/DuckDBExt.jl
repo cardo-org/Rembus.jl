@@ -236,6 +236,15 @@ function expand!(df)
     end
 end
 
+"""
+    settable!(router, df)
+
+Given a router with defined tables and a DataFrame `df` containing a `:topic` column,
+this function matches each topic against the router's table patterns and assigns
+the corresponding table name and pattern to new `:table` and `:regexp` columns in `df`.
+If no pattern matches, the topic name itself is used as the table name and `nothing` for the
+pattern.
+"""
 function settable!(router, df)
     schema_tables = [tbl for tbl in values(router.tables)]
     tables = []

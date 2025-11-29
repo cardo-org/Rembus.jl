@@ -3,9 +3,15 @@ using Rembus
 # Implements a Key Expressions Language similar to zenoh:
 # https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md
 
+struct SpaceTwin
+    space::String
+    twin::Twin
+end
+
+
 mutable struct KeySpaceRouter <: Rembus.AbstractRouter
     # r"house/.*/temperature" => ["house/*/temperature" => twin]
-    spaces::Dict{Regex,Vector{Pair{String,Rembus.Twin}}}
+    spaces::Dict{Regex,Set{SpaceTwin}}
     downstream::Union{Nothing,Rembus.AbstractRouter}
     upstream::Union{Nothing,Rembus.AbstractRouter}
     process::Visor.Process
@@ -16,18 +22,36 @@ mutable struct KeySpaceRouter <: Rembus.AbstractRouter
     end
 end
 
+function build_space_re(topic)
+    str = replace(topic, "/**/" => "(.*)", "**" => "(.*)", "*" => "([^/]+)")
+    return Regex("^$str\$")
+
+end
+
 function subscribe_handler(ksrouter, msg)
     component = msg.twin
     topic = msg.topic
     @debug "[$component][subscribe] ksrouter:$ksrouter, topic:$topic"
 
     if contains(topic, "*")
-        str = replace(topic, "/**/" => "(.*)", "**" => "(.*)", "*" => "([^/]+)")
-        retopic = Regex("^$str\$")
+        retopic = build_space_re(topic)
         if haskey(ksrouter.spaces, retopic)
-            push!(ksrouter.spaces[retopic], Pair(topic, component))
+            push!(ksrouter.spaces[retopic], SpaceTwin(topic, component))
         else
-            ksrouter.spaces[retopic] = [Pair(topic, component)]
+            ksrouter.spaces[retopic] = Set([SpaceTwin(topic, component)])
+        end
+    end
+end
+
+function unsubscribe_handler(ksrouter, msg)
+    component = msg.twin
+    topic = msg.topic
+    @debug "[$component][unsubscribe] ksrouter:$ksrouter, topic:$topic"
+
+    if contains(topic, "*")
+        retopic = build_space_re(topic)
+        if haskey(ksrouter.spaces, retopic)
+            delete!(ksrouter.spaces[retopic], SpaceTwin(topic, component))
         end
     end
 end
@@ -38,8 +62,8 @@ function publish_interceptor(ksrouter, msg)
     topic = msg.topic
 
     if (contains(topic, "/"))
-        for space in keys(ksrouter.spaces)
-            m = match(space, topic)
+        for space_re in keys(ksrouter.spaces)
+            m = match(space_re, topic)
             if m !== nothing
                 unsealed = true
                 for capture in m.captures
@@ -52,9 +76,9 @@ function publish_interceptor(ksrouter, msg)
                 end
 
                 if unsealed
-                    for cmp in ksrouter.spaces[space]
-                        @debug "[ksrouter] sending: $payload"
-                        publish(cmp.second, cmp.first, topic, Rembus.msgdata(msg.data)...)
+                    for st in ksrouter.spaces[space_re]
+                        @debug "[ksrouter] sending $msg to $(st.twin)"
+                        publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
                     end
                 end
             end
@@ -67,11 +91,14 @@ function zenoh_task(self, router)
         @debug "[ksrouter] recv: $msg"
         !isshutdown(msg) || break
 
-        if isa(msg, Rembus.AdminReqMsg) &&
-           haskey(msg.data, Rembus.COMMAND) &&
-           msg.data[Rembus.COMMAND] === Rembus.SUBSCRIBE_CMD
-            @debug "[ksrouter][$(msg.twin)] subscribing: $msg"
-            subscribe_handler(router, msg)
+        if isa(msg, Rembus.AdminReqMsg) && haskey(msg.data, Rembus.COMMAND)
+            if msg.data[Rembus.COMMAND] === Rembus.SUBSCRIBE_CMD
+                @debug "[ksrouter][$(msg.twin)] subscribing: $msg"
+                subscribe_handler(router, msg)
+            elseif msg.data[Rembus.COMMAND] === Rembus.UNSUBSCRIBE_CMD
+                @debug "[ksrouter][$(msg.twin)] unsubscribing: $msg"
+                unsubscribe_handler(router, msg)
+            end
         elseif isa(msg, Rembus.PubSubMsg)
             publish_interceptor(router, msg)
         end

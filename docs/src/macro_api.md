@@ -7,20 +7,19 @@ The goal of this API is to make easy developing robust and fault-tolerant distri
 
 The following macros comprise the API and enable Julia to be supercharged with the capabilities of a middleware for RPC and Pub/Sub messaging:
 
-- [@component](#component)
-- [@expose](#expose)
-- [@unexpose](#unexpose)
-- [@rpc](#rpc)
-- [@subscribe](#subscribe)
-- [@unsubscribe](#unsubscribe)
-- [@publish](#publish)
-- [@reactive](#reactive)
-- [@unreactive](#reactive)
-- [@wait](#wait)
-- [@inject](#inject)
-- [@wait](#wait)
+- [@component](@ref)
+- [@expose](@ref)
+- [@unexpose](@ref)
+- [@rpc](@ref)
+- [@subscribe](@ref)
+- [@unsubscribe](@ref)
+- [@publish](@ref)
+- [@reactive](@ref)
+- [@unreactive](@ref)
+- [@wait](@ref)
+- [@inject](@ref)
 
-## component
+## @component
 
 A component needs to know the address of a broker, the transport protocol, the port
 and optionally it has to declare a persistent unique name for the component.
@@ -66,7 +65,7 @@ Setting for example `REMBUS_BASE_URL=ws://localhost:8000` the above `component_u
 @component "myclient"
 ```
 
-## expose
+## @expose
 
 Take a Julia function and exposes all of its the methods.
 
@@ -84,17 +83,17 @@ end
 @expose myservice
 ```
 
-The exposed function will became available to RPC clients using the [`@rpc`](#rpc) macro.
+The exposed function will became available to RPC clients using the [`@rpc`](@ref) macro.
 
-## unexpose
+## @unexpose
 
-Stop serving remote requests with [`@rpc`](#rpc) requests.
+Stop serving remote requests with [`@rpc`](@ref) requests.
 
 ```julia
 @unexpose myservice
 ```
 
-## rpc
+## @rpc
 
 Request a remote method and wait for a response.
 
@@ -102,19 +101,19 @@ Request a remote method and wait for a response.
 response = @rpc myservice(Dict("name"=>"foo", "tickets"=>3))
 ```
 
-The arguments of the local function call `myservice` is transported to the remote site and `myservice` method expecting a `Dict` as argument is executed. 
+The arguments of the local function call `myservice` is transported to the remote site and `myservice` method expecting a `Dict` as argument is executed.
 
 The return value of `myservice` is transported back to the RPC client calling site
 and `@rpc` returns.
 
 If the remote method throws an Exception then the local RPC client throws an Exception reporting the reason of the remote error.
 
-## subscribe
+## @subscribe
 
 Declare interest for messages published on a logical channel that usually is
 called topic.
 
-The subscribed Julia methods are named as the topic of interest. 
+The subscribed Julia methods are named as the topic of interest.
 
 ```julia
 function mytopic(x, y)
@@ -142,23 +141,23 @@ For receiving messages when the component was offline it is mandatory to set a c
 > **NOTE** By design messages are not persisted until a component declares
 interest for a topic. In other words the persistence feature for a topic is enabled at the time of first subscription. If is important not to loose any message the rule is subscribe first and publish after.
 
-## unsubscribe
+## @unsubscribe
 
-Stop the function to receive messages produced with [`@publish`](#publish).
+Stop the function to receive messages produced with [`@publish`](@ref).
 
 ```julia
 @unsubscribe myservice
 ```
 
-## publish
+## @publish
 
-Publishing a message is like calling a local function named as the pub/sub topic. 
+Publishing a message is like calling a local function named as the pub/sub topic.
 
 ```julia
 @publish mytopic(1.2, 3.0)
 ```
 
-## reactive
+## @reactive
 
 Enable the reception of published messages from subscribed topics.
 
@@ -170,7 +169,7 @@ Reactiveness is a property of a component and is applied to all subscribed topic
 
 By default a component starts with reactive mode enabled.
 
-## unreactive
+## @unreactive
 
 Stop receiving published messages.
 
@@ -178,14 +177,14 @@ Stop receiving published messages.
 @unreactive
 ```
 
-## wait
+## @wait
 
-Needed for components that [expose](#expose) and/or [subscribe](#subscribe) methods.
+Needed for components that [expose](@ref) and/or [subscribe](@ref) methods.
 Wait forever for rpc requests or pub/sub messages.
 
-By default `@wait` enable component reactiveness, see [@reactive](#reactive).
+By default `@wait` enable component reactiveness, see [@reactive](@ref).
 
-## inject
+## @inject
 
 `@inject` is handy when a state must be shared between the subscribed methods,
 the exposed methods and the application.
@@ -238,14 +237,5 @@ end
 # @rpc fetch_metrics()
 @expose fetch_metrics
 
-@wait
-```
-
-## wait
-
-Close the network connection and shutdown the supervised process associated with the
-component.   
-
-```julia
 @wait
 ```

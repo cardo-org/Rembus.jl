@@ -2,6 +2,7 @@ module MQTTExt
 
 using Mosquitto
 using DataStructures
+using JSON3
 using Rembus
 
 function __init__()
@@ -60,7 +61,7 @@ end
 
 function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
     outcome = true
-    @debug "publishing to MQTT topic $(msg.topic)"
+    @info "publishing to MQTT topic $(msg.topic)"
     if isa(msg.data, Base.GenericIOBuffer)
         data = Rembus.decode(copy(msg.data))
     else
@@ -68,7 +69,11 @@ function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
     end
 
     if length(data) == 1
-        Mosquitto.publish(socket.sock, msg.topic, data[1])
+        content = data[1]
+        if !isa(content, String)
+            content = JSON3.write(content)
+        end
+        Mosquitto.publish(socket.sock, msg.topic, content)
     elseif isempty(data)
         ## Available in Mosquitto.jl > 0.3.0
         # Mosquitto.publish(socket.sock, msg.topic, nothing)
