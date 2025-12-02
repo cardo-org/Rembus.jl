@@ -972,7 +972,7 @@ function ack_msg(msg)
 end
 
 function admin_msg(router::Router, msg)
-    @info "admin_msg: $msg"
+    @debug "admin_msg: $msg"
     twin = msg.twin
 
     if !command_permitted(router, twin)
@@ -994,7 +994,7 @@ function admin_msg(router::Router, msg)
         response = ResMsg(twin, msg.id, STS_SUCCESS, nothing)
         put!(twin.process.inbox, response)
     else
-        @info "admin_msg res: $admin_res"
+        @debug "admin_msg res: $admin_res"
         put!(twin.process.inbox, admin_res)
     end
     return true

@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-function mytopic(ctx, rb, msg)
+function mytopic(msg; ctx, node)
     @info "[mytopic] received message: $msg"
     ctx["msg"] = msg
     @info "[mytopic] context updated: $ctx"

@@ -8,7 +8,7 @@ mutable struct Session
     Session() = new(0, Condition())
 end
 
-function mytopic(ctx, rb, n)
+function mytopic(n; ctx, node)
     ctx.count += 1
     #@info "[mytopic] recv: $n"
     if ctx.count == expected_messages

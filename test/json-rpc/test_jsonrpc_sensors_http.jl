@@ -8,15 +8,15 @@ node_name = "aaa/bbb/sensor-1"
 
 df = DataFrame(a=1:3, b=["x", "y", "z"])
 
-function myservice(ctx, rb, x, y)
+function myservice(x, y; ctx, node)
     return x + y
 end
 
-function mydataframe(ctx, rb)
+function mydataframe(; ctx, node)
     return df
 end
 
-function mytopic(ctx, rb, msg)
+function mytopic(msg; ctx, node)
     ctx["msg"] = msg
 end
 

@@ -56,14 +56,14 @@ function subscribe_handler(ctx, router, twin, msg)
     error("something wrong!")
 end
 
-function park(ctx, twin, msg)
-    @info "[$twin] park: $msg"
+function park(msg; ctx, node)
+    @info "[$node] park: $msg"
     # an exception generate an error log
     error("parking error!")
 end
 
-function unpark(ctx, twin)
-    @info "[$twin] upark"
+function unpark(; ctx, node)
+    @info "[$node] upark"
 end
 
 function save_configuration(ctx, router)

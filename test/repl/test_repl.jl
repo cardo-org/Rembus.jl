@@ -14,19 +14,24 @@ mutable struct TestCtx
     count::UInt
 end
 
-myservice(x) = x + 1
-myservice(x, y) = x + y
-
 younger() = true
 
-function myservice(ctx::TestCtx, rb, x)
-    ctx.count += 1
-    return x + 2
+function myservice(x; ctx=nothing, node=nothing)
+    if isnothing(ctx)
+        return x + 1
+    else
+        ctx.count += 1
+        return x + 2
+    end
 end
 
-function myservice(ctx::TestCtx, rb, x, y)
-    ctx.count += 1
-    return x * y
+function myservice(x, y; ctx=nothing, node=nothing)
+    if isnothing(ctx)
+        return x + y
+    else
+        ctx.count += 1
+        return x * y
+    end
 end
 
 function run()

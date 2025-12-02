@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-foo(ctx, rb, x) = ctx[rid(rb)] = x
+foo(x; ctx, node) = ctx[rid(node)] = x
 
 function wait_message(fn, max_wait=10)
     wtime = 0.1

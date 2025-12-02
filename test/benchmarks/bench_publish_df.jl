@@ -8,7 +8,7 @@ mutable struct Session
     Session() = new(Condition())
 end
 
-function mytopic(ctx, rb, df)
+function mytopic(df; ctx, node)
     #@info "[mytopic] recv: $df"
     notify(ctx.done)
 end

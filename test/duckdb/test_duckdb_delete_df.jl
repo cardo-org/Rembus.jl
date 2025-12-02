@@ -7,6 +7,8 @@ using Dates
 
 include("../utils.jl")
 
+#Rembus.debug!()
+
 function run(con)
 
     df = DataFrame(

@@ -2,12 +2,12 @@ include("../utils.jl")
 
 Rembus.info!()
 
-mytopic(ctx, rb, k, v) = ctx[k] = v
+mytopic(k, v; ctx, node) = ctx[k] = v
 
-myservice(ctx, rb, x, y) = x + y
+myservice(x, y; ctx, node) = x + y
 
-client_service(ctx, rb, x, y) = x * y
-client_topic(ctx, rb, k, v) = ctx[k] = v
+client_service(x, y; ctx, node) = x * y
+client_topic(k, v; ctx, node) = ctx[k] = v
 
 function run()
     key = "mykey"
@@ -26,8 +26,8 @@ function run()
     @subscribe mytopic
     @expose myservice
 
-    @expose bar(ctx, rb, a, b) = a - b
-    @subscribe zoo(ctx, rb, a, b, c) = @info "zoo recv: $a,$b,$c "
+    @expose bar(a, b; ctx, node) = a - b
+    @subscribe zoo(a, b, c; ctx, node) = @info "zoo recv: $a,$b,$c "
 
     @reactive
 

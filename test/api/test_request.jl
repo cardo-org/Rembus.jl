@@ -23,8 +23,8 @@ function do_args_error(data)
     end
 end
 
-function rpc_method(bag, rb, rpc_method_arg)
-    bag.rpc_method_invoked = true
+function rpc_method(rpc_method_arg; ctx, node)
+    ctx.rpc_method_invoked = true
 end
 
 function run(request_url, subscriber_url, exposer_url)

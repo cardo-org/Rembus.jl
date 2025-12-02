@@ -5,24 +5,15 @@ using HTTP
 
 Base.isinteractive() = true
 
-#function rpc_service(x)
-#    return x
-#end
-
-#rpc_service(ctx, rb, x) = return x
-
-#function rpc_service(x, y)
-#    return x + y
-#end
-
 function start_server()
     rb = broker(ws=8000, name="server_repl")
 
-    rpc_service(x) = x
+    #rpc_service(x) = x
+    rpc_service(x; ctx=nothing, node=nothing) = x
     expose(rb, rpc_service)
 
-    rpc_service(ctx, rb, x) = x
-    rpc_service(x, y) = x + y
+    rpc_service(x, y; ctx=nothing, node=nothing) = x + y
+    #rpc_service(x, y) = x + y
 
     return rb
 end

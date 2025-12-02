@@ -10,12 +10,12 @@ mutable struct Ctx
     Ctx() = new(0, 0)
 end
 
-function bar(ctx, rb, x)
+function bar(x; ctx, node)
     @info "bar recv: $x"
     ctx.bar_count += 1
 end
 
-function foo(ctx, rb, x)
+function foo(x; ctx, node)
     @info "foo recv: $x"
     ctx.count += 1
 end

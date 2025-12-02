@@ -21,7 +21,7 @@ fixture = Dict(
     "d@$postfix" => 4
 )
 
-function myservice(ctx, rb, source, val)
+function myservice(source, val; ctx, node)
     if source === "c"
         sleep(4)
     end

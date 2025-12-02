@@ -53,6 +53,7 @@ function set_default(row::DataFrameRow, tabledef::Rembus.Table, d; add_nullable=
 end
 
 function lakedelete(con, router, obj)
+    @info "lakedelete called with obj: $obj"
     if !haskey(obj, "table")
         error("error: missing table field")
     end
@@ -387,7 +388,7 @@ function delete(con::DuckDB.DB, tabledef::Rembus.Table, df::AbstractDataFrame)
             push!(conds, "$(key)='$(df[i, key])'")
         end
         cond_str = join(conds, " AND ")
-        @debug "df delete command: DELETE FROM $tname WHERE $cond_str"
+        @info "df delete command: DELETE FROM $tname WHERE $cond_str"
         DuckDB.execute(
             con,
             "DELETE FROM $tname WHERE $cond_str"

@@ -1,7 +1,7 @@
 include("../utils.jl")
 
-function myservice(ctx, rb, data)
-    @info "[$rb] myservice: $data"
+function myservice(data; ctx, node)
+    @info "[$node] myservice: $data"
     return data + 1
 end
 

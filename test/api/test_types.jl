@@ -33,7 +33,7 @@ mutable struct TestHolder
     ])
 end
 
-function bar(bag, rb, n)
+function bar(n; ctx, node)
     return n
 end
 

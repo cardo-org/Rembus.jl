@@ -12,7 +12,7 @@ mutable struct Ctx
     Ctx() = new(0)
 end
 
-function consumer(ctx, rb, x)
+function consumer(x; ctx, node)
     @info "consumer recv: $x"
     ctx.count += 1
 end

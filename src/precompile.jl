@@ -29,9 +29,9 @@ mutable struct TypeHolder
     ])
 end
 
-precompile_topic(ctx, rb, x) = ctx[rid(rb)] = x
-precompile_service(ctx, rb, x) = x
-precompile_service(ctx, rb, x, y) = x + y
+precompile_topic(x; ctx, node) = ctx[rid(node)] = x
+precompile_service(x; ctx, node) = x
+precompile_service(x, y; ctx, node) = x + y
 
 function rpc_api(url)
     ctx = Dict()
@@ -80,7 +80,7 @@ function pool()
     close(server)
 end
 
-function bar(bag, rb, n)
+function bar(n; ctx, node)
     return n
 end
 

@@ -2,8 +2,8 @@ include("../utils.jl")
 
 using Dates
 
-function foo(ctx, rb, x)
-    ctx[rid(rb)] = x
+function foo(x; ctx, node)
+    ctx[rid(node)] = x
 end
 
 function wait_message(fn, max_wait=10)

@@ -26,7 +26,7 @@ function create_df()
     return df
 end
 
-function metric(ctx, rb, topic, value)
+function metric(topic, value; ctx, node)
     @info "[$topic] received: $value"
     ctx[topic] = value
 end

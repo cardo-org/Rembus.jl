@@ -5,11 +5,11 @@ mutable struct TestHolder
     TestHolder() = new(0)
 end
 
-function consume(bag, rb, data)
-    bag.msg_received += 1
+function consume(data; ctx, node)
+    ctx.msg_received += 1
 end
 
-function private_service(bag, rb, n)
+function private_service(n; ctx, node)
     return n + 1
 end
 

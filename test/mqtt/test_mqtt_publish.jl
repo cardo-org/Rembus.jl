@@ -21,7 +21,7 @@ function wait_for_message(ctx::Dict, key::String; timeout::Float64=5.0, interval
     error("Timeout: no message received for key '$key' within $timeout seconds")
 end
 
-function mytopic(ctx, rb, msg)
+function mytopic(msg; ctx, node)
     @info "[mytopic] got message: $msg"
     ctx["msg"] = msg
     ctx["count"] += 1

@@ -1,8 +1,8 @@
 include("../utils.jl")
 
-function mytopic(ctx, rb, data)
-    @info "[$rb] mytopic: $data"
-    ctx[rid(rb)] = data
+function mytopic(data; ctx, node)
+    @info "[$node] mytopic: $data"
+    ctx[rid(node)] = data
 end
 
 function run()

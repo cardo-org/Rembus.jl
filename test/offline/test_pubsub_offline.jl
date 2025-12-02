@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-function mytopic(ctx, rb, val)
+function mytopic(val; ctx, node)
     ctx["count"] += 1
 end
 

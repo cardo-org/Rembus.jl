@@ -15,7 +15,7 @@ mutable struct Ctx
     Ctx() = new(0, 0)
 end
 
-function foo(ctx, rb, x)
+function foo(x; ctx, node)
     @debug "foo recv: $x"
     if x == "data1"
         ctx.data1 += 1

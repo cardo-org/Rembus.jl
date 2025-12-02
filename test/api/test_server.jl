@@ -1,7 +1,7 @@
 include("../utils.jl")
 
-srv_topic(ctx, rb) = ctx["recv"] = true
-srv_service(ctx, rb, val) = val + 2
+srv_topic(; ctx, node) = ctx["recv"] = true
+srv_service(val; ctx, node) = val + 2
 cli_topic() = @info "[cli_topic] recv"
 cli_service(val) = val * 2
 

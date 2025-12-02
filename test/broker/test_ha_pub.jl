@@ -12,9 +12,9 @@ Rembus.info!()
 broker_name = "ha_pub_main"
 failover_name = "ha_pub_failover"
 
-function mytopic(ctx, rb, msg)
-    rid = Rembus.rid(rb)
-    @info "[ha_pub][$(Rembus.path(rb))] recv: $msg"
+function mytopic(msg; ctx, node)
+    rid = Rembus.rid(node)
+    @info "[ha_pub][$(Rembus.path(node))] recv: $msg"
     ctx[rid] = msg
 end
 

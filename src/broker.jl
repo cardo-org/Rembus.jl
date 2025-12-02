@@ -80,10 +80,14 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
         else
             args = getargs(payload)
             if isa(args, Dict)
-                kargs = Dict(Symbol(k) => v for (k, v) in args)
-                result = router.local_function[msg.topic](router.shared, twin; kargs...)
+                kargs = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in args)
+                kargs[:ctx] = router.shared
+                kargs[:node] = twin
+                result = router.local_function[msg.topic](; kargs...)
             else
-                result = router.local_function[msg.topic](router.shared, twin, args...)
+                result = router.local_function[msg.topic](
+                    args..., ctx=router.shared, node=twin
+                )
             end
         end
         sts = STS_SUCCESS
@@ -103,9 +107,9 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
                 try
                     result = Base.invokelatest(
                         router.local_function[msg.topic],
-                        router.shared,
-                        twin,
-                        getargs(payload)...
+                        getargs(payload)...,
+                        ctx=router.shared,
+                        node=twin,
                     )
                     sts = STS_SUCCESS
                 catch e
@@ -114,7 +118,6 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
             end
         end
     end
-
     if sts != STS_SUCCESS
         @error "[$(msg.topic)] local eval: $result"
     end
@@ -141,7 +144,7 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
             result = router.local_function["*"](msg.topic, getargs(payload)...)
         else
             result = router.local_function["*"](
-                router.shared, twin, msg.topic, getargs(payload)...
+                msg.topic, getargs(payload)..., ctx=router.shared, node=twin
             )
         end
         sts = STS_SUCCESS
@@ -160,9 +163,9 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
                 else
                     result = Base.invokelatest(
                         router.local_function[msg.topic],
-                        router.shared,
-                        twin,
-                        getargs(payload)...
+                        getargs(payload)...,
+                        ctx=router.shared,
+                        node=twin
                     )
                 end
                 sts = STS_SUCCESS

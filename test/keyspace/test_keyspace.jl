@@ -1,6 +1,6 @@
 include("../utils.jl")
 
-function environment(ctx, rb, topic, value)
+function environment(topic, value; ctx, node)
     ctx[topic] = value
 end
 

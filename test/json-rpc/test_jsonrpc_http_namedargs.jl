@@ -6,11 +6,11 @@ function myservice_noctx(; x, y)
     return x + y
 end
 
-function myservice(ctx, rb; x, y)
+function myservice(; x, y, ctx, node)
     return x + y
 end
 
-function mytopic(ctx, rb, msg)
+function mytopic(msg; ctx, node)
     ctx["msg"] = msg
 end
 
