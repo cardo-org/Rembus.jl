@@ -1,3 +1,5 @@
+settings(twin::Twin) = top_router(twin.router).settings
+
 #=
 Start the twin process and add to the router id_twin map.
 =#
@@ -23,7 +25,7 @@ function zmq_ping(twin::Twin)
     try
         @debug "[$twin] zmq ping"
         if iszmq(twin)
-            router = last_downstream(twin.router)
+            router = top_router(twin.router)
             if isopen(twin.socket)
                 send_msg(twin, PingMsg(twin, twin.uid.id)) |> fetch
             end
@@ -130,7 +132,7 @@ function await_challenge(router::Router, twin::Twin)
 end
 
 function keep_alive(twin)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     router.settings.ws_ping_interval == 0 && return
     while true
         sleep(router.settings.ws_ping_interval)
@@ -163,7 +165,7 @@ Save to file the ids of received acks of Pub/Sub messages
 waitings Ack2 acknowledgements.
 =#
 function save_received_acks(twin::Twin, ::FileStore)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     path = acks_file(router, twin.uid.id)
     save_object(path, twin.ackdf)
 end
@@ -352,7 +354,8 @@ function component(
     secure=false,
     authenticated=false,
     policy="first_up",
-    enc=CBOR
+    enc=CBOR,
+    keyspace=false
 )
     if ismissing(name)
         nodeurl = localcid()
@@ -360,7 +363,13 @@ function component(
     end
 
     router = get_router(
-        db, name=name, ws=ws, tcp=tcp, zmq=zmq, authenticated=authenticated, secure=secure
+        db, name=name,
+        ws=ws,
+        tcp=tcp,
+        zmq=zmq,
+        authenticated=authenticated,
+        secure=secure,
+        keyspace=keyspace
     )
     set_policy(router, policy)
     for url_str in urls
@@ -370,6 +379,7 @@ function component(
         # a local twin of a pool component must be reactive to forward pub/sub messages
         c.reactive = true
     end
+
     return bind(router)
 end
 
@@ -393,6 +403,7 @@ function component(
     authenticated=false,
     policy="first_up",
     enc=CBOR,
+    keyspace=false,
     failovers=[]
 )
     # check for loopbacks
@@ -412,7 +423,8 @@ function component(
         zmq=zmq,
         http=http,
         authenticated=authenticated,
-        secure=secure
+        secure=secure,
+        keyspace=keyspace
     )
     set_policy(router, policy)
     return component(url, router, enc, failovers)
@@ -454,7 +466,7 @@ function connect(url::RbURL; name=missing, enc=CBOR)
         name = url.id
     end
 
-    router = get_router(name=name)
+    router = get_router(name=name, keyspace=false)
     twin = bind(router, url)
     twin.enc = enc
     try
@@ -497,7 +509,7 @@ function close_twin(twin::Twin)
         twin.process.phase = :closing
         shutdown(twin.process)
     end
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     delete!(router.id_twin, rid(twin))
     return nothing
 end
@@ -525,7 +537,7 @@ function reconnect(twin::Twin, url::RbURL)
     isconnected = false
     try
         if do_connect(twin)
-            router = last_downstream(twin.router)
+            router = top_router(twin.router)
 
             # repost the configuration
             @debug "[$twin] reposting exposed and subscribed"
@@ -561,7 +573,7 @@ end
 function reconnect(twin::Twin)
     twin.process.phase === :closing && return
     @debug "[$twin] reconnecting..."
-    period = last_downstream(twin.router).settings.reconnect_period
+    period = top_router(twin.router).settings.reconnect_period
     while true
         for url in twin.failovers
             sleep(period)
@@ -584,7 +596,7 @@ component identifier each time the application connect to the broker.
 """
 function do_connect(twin::Twin)
     if !isopen(twin.socket)
-        router = last_downstream(twin.router)
+        router = top_router(twin.router)
         if router.settings.connection_mode === authenticated
             transport_connect(twin)
             await_challenge(router, twin)
@@ -862,7 +874,7 @@ function end_receiver(twin::Twin)
     if hasname(twin)
         detach(twin)
     else
-        destroy_twin(twin, last_downstream(twin.router))
+        destroy_twin(twin, top_router(twin.router))
     end
 end
 
@@ -1078,9 +1090,18 @@ function messages_files(node, from_msg)
     return files
 end
 
-function send_data_at_rest(twin::Twin, from_msg::Float64, ::FileStore)
-    if hasname(twin) && (from_msg > 0.0)
-        files = messages_files(twin, from_msg)
+"""
+    send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::DuckDB.DB
+
+Send persisted and cached messages.
+
+`max_period` is a time barrier set by the reactive command.
+
+Valid time period for sending old messages: `[min(twin.topic.msg_from, max_period), now_ts]`
+"""
+function send_data_at_rest(twin::Twin, max_period::Float64, ::FileStore)
+    if hasname(twin) && (max_period > 0.0)
+        files = messages_files(twin, max_period)
         for fn in files
             @debug "loading file [$fn]"
             from_disk_messages(twin, fn)
@@ -1096,7 +1117,7 @@ end
 function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     return send_data_at_rest(twin, from_msg, router.store)
 end
 
@@ -1388,7 +1409,7 @@ function detach(twin)
         take!(twin.connected)
     end
     # save the state to disk
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     if !isrepl(twin.uid)
         save_twin(router, twin, router.store)
     end
@@ -1422,7 +1443,7 @@ function twin_task(self, twin)
     try
         @debug "starting twin [$(rid(twin))]"
         for msg in self.inbox
-            max_retries = last_downstream(twin.router).settings.send_retries
+            max_retries = top_router(twin.router).settings.send_retries
             if isshutdown(msg)
                 self.phase = :closing
                 break

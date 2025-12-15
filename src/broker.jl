@@ -1,18 +1,22 @@
 function alltwins(router)
-    r = Rembus.last_downstream(router)
+    r = Rembus.top_router(router)
     return [t for (name, t) in r.id_twin if name !== "__repl__"]
 end
 
-function add_plugin(twin::Twin, context)
-    router = twin.router
+function add_plugin(router::AbstractRouter, context)
     upstream!(router, context)
     sv = router.process.supervisor
     startup(sv, context.process)
-    twin.router = context
 
     for tw in alltwins(router)
         tw.router = context
     end
+end
+
+function add_plugin(twin::Twin, context)
+    router = twin.router
+    add_plugin(router, context)
+    twin.router = context
 end
 
 function bind(router::Router, url=RbURL(protocol=:repl))
@@ -21,7 +25,7 @@ function bind(router::Router, url=RbURL(protocol=:repl))
         if haskey(router.id_twin, rid(url))
             twin = router.id_twin[rid(url)]
         else
-            twin = Twin(url, first_upstream(router))
+            twin = Twin(url, bottom_router(router))
             twin.ackdf = df
             load_twin(router, twin, router.store)
         end
@@ -37,13 +41,14 @@ function bind(router::Router, url=RbURL(protocol=:repl))
     return twin
 end
 
-function islistening(router::Router; protocol::Vector{Symbol}=[:ws], wait=0)
+function islistening(router::AbstractRouter; protocol::Vector{Symbol}=[:ws], wait=0)
+    r = top_router(router)
     while wait >= 0
         all_listening = true
         for p in protocol
-            if !haskey(router.listeners, p)
+            if !haskey(r.listeners, p)
                 return false
-            elseif router.listeners[p].status === off
+            elseif r.listeners[p].status === off
                 all_listening = false
             end
         end
@@ -56,7 +61,7 @@ function islistening(router::Router; protocol::Vector{Symbol}=[:ws], wait=0)
 end
 
 function islistening(twin::Twin; protocol::Vector{Symbol}=[:ws], wait=0)
-    return islistening(last_downstream(twin.router); protocol=protocol, wait=wait)
+    return islistening(twin.router; protocol=protocol, wait=wait)
 end
 
 function local_eval(router::Router, twin::Twin, msg::RembusMsg)
@@ -752,6 +757,7 @@ function get_router(db=FileStore();
     authenticated=false,
     secure=false,
     policy="first_up",
+    keyspace=true,
     tsk=broker_task,
 )
     broker_process = from("$name.broker")
@@ -772,6 +778,10 @@ function get_router(db=FileStore();
             name=name,
             ws=ws, tcp=tcp, zmq=zmq, http=http, prometheus=prometheus,
         )
+
+        if keyspace
+            add_plugin(router, KeySpaceRouter())
+        end
     else
         router = broker_process.args[1]
     end
@@ -906,7 +916,7 @@ function listener_status!(router::Router, proto, status::ListenerStatus)
 end
 
 function set_plugin(twin::Twin, plugin, context=missing)
-    router = twin.router
+    router = top_router(twin.router)
     router.plugin = plugin
     router.shared = context
 end

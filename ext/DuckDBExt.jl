@@ -1,10 +1,13 @@
 module DuckDBExt
 
+using Base64
 using DataFrames
 using Dates
 using DuckDB
 using JSON3
 using Rembus
+using Serialization
+
 
 const typemap = Dict(
     "BLOB" => Vector{UInt8},
@@ -52,23 +55,35 @@ function set_default(row::DataFrameRow, tabledef::Rembus.Table, d; add_nullable=
     end
 end
 
-function lakedelete(con, router, obj)
-    @info "lakedelete called with obj: $obj"
-    if !haskey(obj, "table")
-        error("error: missing table field")
-    end
-    if !haskey(obj, "where")
-        error("error: missing where field")
+function delete(router, table, obj)
+    con = router.store
+    if isnothing(obj)
+        DuckDB.execute(con,"DELETE FROM $(table.name)")
+    else
+        if !haskey(obj, "where")
+            error("error: missing where field")
+        end
+
+        cond = obj["where"]
+        DuckDB.execute(con,"DELETE FROM $(table.name) WHERE $cond")
     end
 
-    tbl = obj["table"]
-    if !haskey(router.tables, tbl)
-        error("error: unknown $tbl db table")
-    end
-
-    tabledef = router.tables[tbl]
-    delete(con, tabledef, obj["where"])
     return "ok"
+end
+
+function query(router, table, obj)
+    con = router.store
+    if isnothing(obj)
+        df = DataFrame(DuckDB.execute(con,"SELECT * FROM $(table.name)"))
+    else
+        if !haskey(obj, "where")
+            error("error: missing where field")
+        end
+
+        cond = obj["where"]
+        df = DataFrame(DuckDB.execute(con,"SELECT * FROM $(table.name) WHERE $cond"))
+    end
+    return df
 end
 
 function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
@@ -79,8 +94,8 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         db_name = "$data_dir.ducklake"
     end
 
-    router.local_function["lakedelete"] = (obj) -> lakedelete(con, router, obj)
     DuckDB.execute(con, "INSTALL ducklake")
+    @debug "[DuckDB] ATTACH 'ducklake:$db_name' AS rl (DATA_PATH '$data_dir')"
     DuckDB.execute(con, "ATTACH 'ducklake:$db_name' AS rl (DATA_PATH '$data_dir')")
     DuckDB.execute(con, "USE rl")
 
@@ -160,6 +175,9 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         cols = join(fields, ",")
         @debug "[DuckDB] CREATE TABLE IF NOT EXISTS $tname ($cols)"
         DuckDB.execute(con, "CREATE TABLE IF NOT EXISTS $tname ($cols)")
+
+        router.local_function["delete_$tname"] = (obj=nothing) -> delete(router, tabledef, obj)
+        router.local_function["query_$tname"] = (obj=nothing) -> query(router, tabledef, obj)
     end
 
     Rembus.load_configuration(router)
@@ -284,21 +302,22 @@ function settable!(router, df)
 end
 
 function getobj(topic, values)
-    v = values[1]
-    if !isa(v, Dict)
-        error("[$topic] format is key_value: data must be a dictionary")
+    if isempty(values)
+        return Dict{String,Any}()
     end
+
+    v = values[1]
     return Dict{String,Any}(v)
 end
 
 function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
     topic = tabledef.name
-    format = tabledef.format
     tblfields = columns(tabledef)
     appender = DuckDB.Appender(con, topic)
     try
         for row in eachrow(df)
             values = row.data
+            format = get_format(values, tabledef)
             if format == "key_value"
                 obj = getobj(topic, values)
                 set_default(row, tabledef, obj, add_nullable=true)
@@ -365,36 +384,6 @@ function df_extras(tabledef::Rembus.Table, df, row)
     end
 end
 
-function delete(con::DuckDB.DB, tabledef::Rembus.Table, obj::Dict)
-    tname = tabledef.name
-    format = tabledef.format
-    conds = String[]
-    for key in keys(obj)
-        push!(conds, "$(key)='$(obj[key])'")
-    end
-    cond_str = join(conds, " AND ")
-    @debug "delete command: DELETE FROM $tname WHERE $cond_str"
-    DuckDB.execute(
-        con,
-        "DELETE FROM $tname WHERE $cond_str"
-    )
-end
-
-function delete(con::DuckDB.DB, tabledef::Rembus.Table, df::AbstractDataFrame)
-    tname = tabledef.name
-    for i in 1:nrow(df)
-        conds = String[]
-        for key in names(df)
-            push!(conds, "$(key)='$(df[i, key])'")
-        end
-        cond_str = join(conds, " AND ")
-        @info "df delete command: DELETE FROM $tname WHERE $cond_str"
-        DuckDB.execute(
-            con,
-            "DELETE FROM $tname WHERE $cond_str"
-        )
-    end
-end
 
 function get_type(col::Rembus.Column)
     if col.nullable
@@ -404,9 +393,27 @@ function get_type(col::Rembus.Column)
     end
 end
 
+function get_format(data, table::Rembus.Table)
+    """Return the format of the message data."""
+    fmt = "sequence"
+    len = length(data)
+    if len == 1
+        arg = data[1]
+        if isa(arg, Dict)
+            fmt = "key_value"
+        elseif isa(arg, Rembus.Tag) && arg.id == Rembus.DATAFRAME_TAG
+            fmt = "dataframe"
+        end
+    elseif len == 0 && contains(table.topic, ":")
+        fmt = "key_value"
+    end
+
+    return fmt
+end
+
 function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
     tname = tabledef.name
-    format = tabledef.format
+    ### format = tabledef.format
     fields = columns(tabledef)
     indexes = tabledef.keys
     nfields = length(fields)
@@ -424,6 +431,7 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
 
     for row in eachrow(df)
         data = row.data
+        format = get_format(data, tabledef)
         if format == "key_value"
             obj = getobj(tname, data)
             set_default(row, tabledef, obj)
@@ -491,16 +499,23 @@ end
 function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
     lock(ducklock)
     @debug "[$router] Persisting messages to DuckDB"
-    df = select(
-        router.msg_df,
-        :recv, :slot, :qos, :uid, :topic,
-        :pkt => ByRow(p -> decode(p)[end]) => :data
-    )
-    df[!, :name] .= bname(router)
-
-    settable!(router, df)
 
     try
+        df = select(
+            router.msg_df,
+            :recv, :slot, :qos, :uid, :topic,
+            :pkt => ByRow(p -> tobase64(p)) => :data
+        )
+        df[!, :name] .= bname(router)
+        DuckDB.register_data_frame(con, df, "df_msg")
+        DuckDB.execute(
+            con,
+            "INSERT INTO message SELECT name, recv, slot, qos, uid, topic, data FROM df_msg"
+        )
+        DuckDB.unregister_data_frame(con, "df_msg")
+
+        df[!, :data] = decode.(router.msg_df.pkt) .|> last
+        settable!(router, df)
         for tbl in unique(df.table)
             if haskey(router.tables, tbl)
                 topicdf = filter(:table => t -> t == tbl, df, view=false)
@@ -513,19 +528,6 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
                 end
             end
         end
-    catch e
-        @error "[save_data_at_rest]: $e"
-    end
-
-    try
-        select!(df, Not([:regexp, :table]))
-        transform!(df, :data => ByRow(d -> JSON3.write(d)) => :data)
-        DuckDB.register_data_frame(con, df, "df_msg")
-        DuckDB.execute(
-            con,
-            "INSERT INTO message SELECT name, recv, slot, qos, uid, topic, data FROM df_msg"
-        )
-        DuckDB.unregister_data_frame(con, "df_msg")
     finally
         # clear the in-memory message dataframe
         empty!(router.msg_df)
@@ -533,26 +535,18 @@ function Rembus.save_data_at_rest(router::Rembus.Router, con::DuckDB.DB)
     end
 end
 
-function encmsg(flags, uid, topic, data)
-    if uid == 0
-        pkt = encode([Rembus.TYPE_PUB | flags, topic, JSON3.read(data, Any)])
-    else
-        pkt = encode([
-            Rembus.TYPE_PUB | flags, Rembus.id2bytes(uid), topic, JSON3.read(data, Any)
-        ])
-    end
-
-    return pkt
+function tobase64(data)
+    io = IOBuffer()
+    serialize(io, data)
+    return Base64.base64encode(take!(io))
 end
 
-"""
+function frombase64(str)
+    bytes = Base64.base64decode(str)
+    io = IOBuffer(bytes)
+    return deserialize(io)
+end
 
-Send persisted amd cached messages.
-
-`max_period` is a time barrier set by the reactive command.
-
-Valid time period for sending old messages: `[min(twin.topic.msg_from, max_period), now_ts]`
-"""
 function Rembus.send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::DuckDB.DB)
     if Rembus.hasname(twin) && (max_period > 0.0)
         name = bname(twin.router)
@@ -565,8 +559,7 @@ function Rembus.send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::D
         if !isempty(filtered)
             filtered = transform(
                 filtered,
-                [:qos, :uid, :topic, :data] =>
-                    ByRow(((qos, id, topic, data) -> encmsg(qos, id, topic, data))) => :pkt
+                :data =>ByRow(data -> frombase64(data)) => :pkt
             )
             Rembus.send_messages(twin, filtered)
         end
@@ -765,7 +758,7 @@ end
 
 function Rembus.save_received_acks(twin, con::DuckDB.DB)
     name = bname(twin.router)
-    router = Rembus.last_downstream(twin.router)
+    router = Rembus.top_router(twin.router)
     current_df = copy(twin.ackdf)
     insertcols!(current_df, 1, :name .=> name)
     insertcols!(current_df, 2, :twin .=> rid(twin))

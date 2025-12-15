@@ -37,8 +37,8 @@ function run()
     @test rpc(c1, "rid") === failover_name
 
     @test rpc(c1, "myservice", x, y) == x + y
-    @info "[$bro] exposers: $(bro.router.topic_impls)"
-    @info "[$failover] exposers: $(failover.router.topic_impls)"
+    @info "[$bro] exposers: $(Rembus.top_router(bro.router).topic_impls)"
+    @info "[$failover] exposers: $(Rembus.top_router(failover.router).topic_impls)"
 
     # Restart the main broker.
     bro = broker(ws=8000, name=broker_name)

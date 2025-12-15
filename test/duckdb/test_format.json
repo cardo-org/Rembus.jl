@@ -1,0 +1,20 @@
+{
+  "tables": [
+    {
+      "table": "device",
+      "topic": ":site/:dn/device",
+      "columns": [
+        {
+          "col": "site",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "col": "dn",
+          "type": "TEXT",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

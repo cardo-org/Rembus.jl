@@ -24,7 +24,11 @@ function save_tenants(router, tenants::Dict)
     end
 end
 
-broker_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id)
+function broker_dir(router::AbstractRouter)
+    r = top_router(router)
+    joinpath(r.settings.rembus_dir, r.process.supervisor.id)
+end
+
 broker_dir(name::AbstractString) = joinpath(rembus_dir(), name)
 
 function keystore_dir()
@@ -35,11 +39,11 @@ keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "
 keys_dir(name::AbstractString) = joinpath(rembus_dir(), name, "keys")
 
 function messages_dir(r::AbstractRouter)
-    r = last_downstream(r)
+    r = top_router(r)
     return joinpath(r.settings.rembus_dir, r.process.supervisor.id, "messages")
 end
 
-messages_dir(t::Twin) = messages_dir(last_downstream(t.router))
+messages_dir(t::Twin) = messages_dir(top_router(t.router))
 
 function messages_dir(broker::AbstractString)
     return joinpath(rembus_dir(), broker, "messages")

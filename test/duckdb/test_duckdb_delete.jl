@@ -13,15 +13,7 @@ function run(con)
 
     pub = component("duckdb_pub")
 
-    rpc(pub, "lakedelete", Dict("table" => "topic4", "where" => Dict("name" => "name_b")))
-
-    @test_throws RpcMethodException rpc(pub, "lakedelete", Dict("table" => "topic4"))
-    @test_throws RpcMethodException rpc(pub, "lakedelete", Dict("where" => Dict()))
-    @test_throws RpcMethodException rpc(
-        pub,
-        "lakedelete",
-        Dict("table" => "invalid_table", "where" => Dict())
-    )
+    rpc(pub, "delete_topic4", Dict("where" => "name='name_b'"))
 
     close(pub)
     close(bro)

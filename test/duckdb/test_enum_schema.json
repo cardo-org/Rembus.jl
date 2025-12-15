@@ -31,7 +31,6 @@
             "keys": [
                 "id"
             ],
-            "format": "key_value",
             "extras": {
                 "slot": "time"
             }

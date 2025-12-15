@@ -33,8 +33,9 @@ function run(pub_url, sub_url)
     reactive(sub)
 
     pub = connect(Rembus.RbURL(pub_url), name="saved_messages_pub")
-    pub.router.settings.send_retries = 0
-    pub.router.settings.ack_timeout = 0.5
+    stngs = Rembus.settings(pub)
+    stngs.send_retries = 0
+    stngs.ack_timeout = 0.5
 
     publish(pub, "foo", "data1", qos=Rembus.QOS1)
     publish(pub, "foo", "data2", qos=Rembus.QOS1)
@@ -61,7 +62,7 @@ try
     msg_dir = joinpath(Rembus.broker_dir(rb.router), "messages")
     foreach(rm, readdir(msg_dir, join=true))
 
-    rb.router.settings.ack_timeout = 0.5
+    Rembus.settings(rb).ack_timeout = 0.5
     run(pub_url, sub_url)
 catch e
     @error "[ack_never_send] error: $e"

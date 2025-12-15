@@ -8,7 +8,7 @@ function run()
     Rembus.islistening(repl, wait=10)
     rb = connect()
 
-    Rembus.RouterCollector(repl.router)
+    Rembus.RouterCollector(Rembus.top_router(repl.router))
     metrics = []
     for collector in Prometheus.DEFAULT_REGISTRY.collectors
         if isa(collector, Rembus.RouterCollector)
@@ -19,7 +19,7 @@ function run()
     @test length(metrics) == 1
 
     # Do no throw because the already register error is catched.
-    Rembus.RouterCollector(repl.router)
+    Rembus.RouterCollector(Rembus.top_router(repl.router))
 
     close(rb)
 end

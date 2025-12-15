@@ -6,7 +6,7 @@ always_true(uid) = true
 # COV_EXCL_STOP
 
 function dumperror(twin, e)
-    if last_downstream(twin.router).settings.stacktrace
+    if top_router(twin.router).settings.stacktrace
         showerror(stdout, e, catch_backtrace())
     end
 end
@@ -309,8 +309,7 @@ function encode_message(msg::PubSubMsg)
 end
 
 function uts()
-    tv = Libc.TimeVal()
-    return tv.sec * 1_000_000 + tv.usec
+    return UInt(time() * 1_000_000_000)
 end
 
 function persist(router)
@@ -392,8 +391,9 @@ function data_at_rest(; from=LastReceived, broker="broker")
     return result
 end
 
+
 function send_messages(twin::Twin, df)
-    nowts = time() * 1_000_000
+    nowts = uts()
     for row in eachrow(df)
         tmark = twin.mark
         if row.recv > tmark
@@ -409,7 +409,7 @@ end
 Return the subscribed pubsub topics of the twin
 =#
 function twin_topics(twin::Twin)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     topics = []
     for (k, v) in router.topic_interests
         if twin in v
@@ -431,7 +431,7 @@ function from_disk_messages(twin::Twin, fn)
 end
 
 function from_memory_messages(twin::Twin)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     send_messages(twin, router.msg_df)
 end
 
@@ -539,7 +539,6 @@ function create_schema(jsonstr::AbstractString, db)
                 default=get(c, "default", nothing)
             ) for c in t["columns"]],
             keys=get(t, "keys", String[]),
-            format=t["format"],
             extras=Dict(get(t, "extras", Dict())),
             topic=get(t, "topic", t["table"]),
             delete_topic=get(t, "delete_topic", nothing)

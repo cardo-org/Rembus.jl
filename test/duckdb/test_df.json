@@ -10,7 +10,6 @@
       { "col": "integer", "type": "INTEGER" },
       { "col": "bigint", "type": "BIGINT" }
     ],
-    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -27,7 +26,6 @@
       { "col": "ubigint", "type": "UBIGINT" }
     ],
     "keys": ["name"],
-    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -41,7 +39,6 @@
       { "col": "float", "type": "FLOAT" },
       { "col": "double", "type": "DOUBLE" }
     ],
-    "format": "dataframe",
     "extras": {
       "recv_ts": "ts",
       "slot": "rop"
@@ -54,7 +51,6 @@
       { "col": "type", "type": "TEXT" },
       { "col": "value", "type": "TEXT" }
     ],
-    "keys": ["name", "type"],
-    "format": "dataframe"
+    "keys": ["name", "type"]
   }]
 }

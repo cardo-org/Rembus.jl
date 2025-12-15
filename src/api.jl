@@ -72,7 +72,8 @@ function server(;
     zmq=nothing,
     prometheus=nothing,
     authenticated=false,
-    secure=false
+    secure=false,
+    keyspace=true
 )
     if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
         ws = DEFAULT_WS_PORT
@@ -86,6 +87,7 @@ function server(;
         prometheus=prometheus,
         authenticated=authenticated,
         secure=secure,
+        keyspace=keyspace,
         tsk=server_task
     )
     # Return a floating twin.
@@ -183,7 +185,8 @@ function component(db=FileStore();
     policy="first_up",
     enc=CBOR,
     failovers=[],
-    schema=missing
+    schema=missing,
+    keyspace=true
 )
     if (isnothing(ws) && isnothing(tcp) && isnothing(zmq))
         ws = DEFAULT_WS_PORT
@@ -207,6 +210,7 @@ function component(db=FileStore();
         authenticated=authenticated,
         secure=secure,
         policy=policy,
+        keyspace=keyspace
     )
     set_policy(router, policy)
     twin = bind(router)
@@ -282,7 +286,7 @@ The invoked method will receive the context and component as the first two argum
 foo(container, rb, arg2, arg2)
 ```
 """
-inject(rb::Twin, ctx=nothing) = rb.router.shared = ctx
+inject(rb::Twin, ctx=nothing) = top_router(rb.router).shared = ctx
 
 """
     expose(rb, topic::AbstractString, fn::Function)
@@ -304,7 +308,7 @@ If the `topic` argument is omitted, the function name is used as the RPC method 
 returned as an RPC exception.
 """
 function expose(twin::Twin, name::AbstractString, func::Function)
-    router = twin.router
+    router = top_router(twin.router)
     router.local_function[name] = func
     msg = AdminReqMsg(twin, name, Dict{String,Any}(COMMAND => EXPOSE_CMD), rid(twin))
     return send_msg(twin, msg) |> fetch
@@ -318,7 +322,7 @@ expose(twin::Twin, func::Function) = expose(twin, string(func), func)
 Stop servicing RPC requests targeting `service`.
 """
 function unexpose(twin::Twin, topic::AbstractString)
-    router = twin.router
+    router = top_router(twin.router)
     delete!(router.local_function, topic)
     msg = AdminReqMsg(twin, topic, Dict{String,Any}(COMMAND => UNEXPOSE_CMD))
     return send_msg(twin, msg) |> fetch
@@ -341,7 +345,7 @@ function subscribe(
     from::Union{Real,Period,Dates.CompoundPeriod}=Now
 )
     from_now = to_microseconds(from)
-    router = twin.router
+    router = top_router(twin.router)
     router.local_function[name] = func
     router.local_subscriber[name] = from_now
 
@@ -402,7 +406,7 @@ end
 Stops delivering messages published on the specified `topic` to the `rb` component.
 """
 function unsubscribe(twin::Twin, topic::AbstractString)
-    router = twin.router
+    router = top_router(twin.router)
     delete!(router.local_function, topic)
     delete!(router.local_subscriber, topic)
     msg = AdminReqMsg(twin, topic, Dict{String,Any}(COMMAND => UNSUBSCRIBE_CMD))
@@ -724,7 +728,7 @@ function Base.fetch(response::FutureResponse)
     end
     if res.status !== STS_SUCCESS
         if res.status == STS_CHALLENGE
-            resend_attestate(last_downstream(res.twin.router), res.twin, res)
+            resend_attestate(top_router(res.twin.router), res.twin, res)
         else
             topic = nothing
             if isa(response.request, RembusTopicMsg)
@@ -743,7 +747,7 @@ function Base.fetch(response::FutureResponse)
 end
 
 function send_msg(twin, msg, timeout=Inf)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     t = (timeout === Inf) ? router.settings.request_timeout : timeout
     timer = Timer(t) do tmr
         if haskey(twin.socket.direct, msg.id)
@@ -767,7 +771,7 @@ function publish_msg(twin, msg)
         put!(twin.router.process.inbox, msg)
     else
         if failover_queue(twin)
-            r = last_downstream(twin.router)
+            r = top_router(twin.router)
             push!(r.archiver.inbox, msg)
         end
         cast(twin.process, msg)
@@ -802,7 +806,7 @@ end
 
 Get the request timeout value for the component `rb`.
 """
-request_timeout(twin::Twin) = last_downstream(twin.router).settings.request_timeout
+request_timeout(twin::Twin) = top_router(twin.router).settings.request_timeout
 
 """
     request_timeout!(rb, value::Real)
@@ -810,7 +814,7 @@ request_timeout(twin::Twin) = last_downstream(twin.router).settings.request_time
 Set the request timeout value for the component `rb`.
 """
 function request_timeout!(twin::Twin, value::Real)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     router.settings.request_timeout = value
     return twin
 end

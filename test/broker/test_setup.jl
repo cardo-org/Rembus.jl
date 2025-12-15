@@ -59,9 +59,10 @@ function run(pub_url, sub_url)
     sub = component(sub_url, ws=10000)
     @test twin_setup(sub.router, sub)
 
-    @test haskey(bro.router.topic_impls, "service1")
-    @test haskey(bro.router.topic_impls, "service2")
-    @test haskey(bro.router.topic_interests, "consumer")
+    r = Rembus.top_router(bro.router)
+    @test haskey(r.topic_impls, "service1")
+    @test haskey(r.topic_impls, "service2")
+    @test haskey(r.topic_interests, "consumer")
 
     exports = [["myservice1", "myservice2"], ["mytopic1", "mytopic2"]]
     Rembus.update_tables(sub.router, sub, exports)

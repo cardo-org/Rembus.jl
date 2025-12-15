@@ -77,7 +77,6 @@ try
 
     request_timeout!(20)
     rb = broker(ws=8010, name="saved_messages")
-    @info "cache size: $(rb.router.settings.cache_size)"
     produce(pub_url)
     consume(sub_url)
 catch e

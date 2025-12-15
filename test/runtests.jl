@@ -40,6 +40,9 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
+        @time @safetestset "format" begin
+            include("duckdb/test_format.jl")
+        end
         @time @safetestset "duckdb_schema" begin
             include("duckdb/test_duckdb_schema.jl")
         end
@@ -49,8 +52,8 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "duckdb_df" begin
             include("duckdb/test_duckdb_df.jl")
         end
-        @time @safetestset "duckdb_delete_df" begin
-            include("duckdb/test_duckdb_delete_df.jl")
+        @time @safetestset "send_data_at_rest" begin
+            include("duckdb/test_send_data_at_rest.jl")
         end
         @time @safetestset "duckdb" begin
             include("duckdb/test_duckdb.jl")
@@ -168,9 +171,6 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "macros" begin
             include("api/test_macros.jl")
-        end
-        @time @safetestset "server" begin
-            include("api/test_server.jl")
         end
     end
     if GROUP == "all" || GROUP == "errors"

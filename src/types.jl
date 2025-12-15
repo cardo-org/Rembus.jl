@@ -409,7 +409,7 @@ mutable struct Settings
     stacktrace::Bool  # log stacktrace on error
     connection_retry_period::Float32 # seconds between reconnection attempts
     broker_plugin::Union{Nothing,Module}
-    archiver_interval::UInt
+    archiver_interval::Float64
     cache_size::UInt
     connection_mode::ConnectionMode
     request_timeout::Float64
@@ -469,7 +469,7 @@ mutable struct Settings
         messages_timer_interval = get(
             cfg,
             "archiver_interval",
-            parse(UInt, get(ENV, "REMBUS_ARCHIVER_INTERVAL", "60"))
+            parse(Float64, get(ENV, "REMBUS_ARCHIVER_INTERVAL", "60"))
         )
         new(
             zmq_ping_interval,
@@ -504,7 +504,6 @@ end
 
 struct Table
     name::String
-    format::String
     fields::Vector{Column}
     keys::Vector{String}
     extras::Dict{String,Any}
@@ -514,16 +513,14 @@ struct Table
         table,
         columns,
         keys=String[],
-        format="sequence",
         extras=Dict(),
         topic=table,
         delete_topic=nothing
-    ) = new(table, format, columns, keys, extras, topic, delete_topic)
+    ) = new(table, columns, keys, extras, topic, delete_topic)
     Table(
         name,
-        format,
         delete_topic
-    ) = new(name, format, Column[], String[], Dict(), name, delete_topic)
+    ) = new(name, Column[], String[], Dict(), name, delete_topic)
 end
 
 
@@ -532,8 +529,8 @@ abstract type AbstractRouter end
 abstract type AbstractTwin end
 
 mutable struct Router{T<:AbstractTwin} <: AbstractRouter
-    upstream::Union{Nothing,AbstractRouter}
-    downstream::Union{Nothing,Rembus.AbstractRouter}
+    upstream::Union{Nothing,AbstractRouter} # toward the top router (the Router)
+    downstream::Union{Nothing,Rembus.AbstractRouter} # toward the twin
     id::String
     eid::UInt64 # ephemeral unique id
     store::Any
@@ -600,14 +597,14 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     )
 end
 
-bname(r::AbstractRouter) = last_downstream(r).id
+bname(r::AbstractRouter) = top_router(r).id
 
 function upstream!(router, upstream_router)
     router.upstream = upstream_router
     upstream_router.downstream = router
 end
 
-function last_downstream(router)
+function top_router(router)
     while !isnothing(router.downstream)
         router = router.downstream
     end
@@ -615,7 +612,7 @@ function last_downstream(router)
     return router
 end
 
-function first_upstream(router)
+function bottom_router(router)
     while !isnothing(router.upstream)
         router = router.upstream
     end
@@ -704,7 +701,7 @@ end
 function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     send_data_at_rest(twin, msg_from, router.store)
     return nothing
 end

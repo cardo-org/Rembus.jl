@@ -32,7 +32,7 @@ end
 function run()
     name = "overwrite_connection_node"
     bro = broker(name=broker_name, ws=8000)
-    bro.router.settings.overwrite_connection = true
+    Rembus.settings(bro).overwrite_connection = true
     Rembus.islistening(bro, protocol=[:ws], wait=10)
 
     rb1 = connect(name)

@@ -421,7 +421,7 @@ end
 message_send(twin, future::FutureResponse) = transport_send(twin, future.request)
 
 function message_send(twin, msg)
-    router = last_downstream(twin.router)
+    router = top_router(twin.router)
     if isa(msg, RpcReqMsg) || isa(msg, AdminReqMsg)
         tmr = Timer(router.settings.request_timeout) do tmr
             delete!(twin.socket.out, msg.id)
@@ -515,7 +515,7 @@ end
 
 function create_msg_timer(socket, msg)
     msgid = msg.id
-    r = last_downstream(msg.twin.router)
+    r = top_router(msg.twin.router)
     timer = Timer(
         (t) -> handle_ack_timeout(t, socket, msg, msgid), r.settings.ack_timeout
     )
@@ -597,7 +597,7 @@ function transport_zmq_pubsub(z, msg::PubSubMsg)
     data = data2message(msg.data)
     outcome = true
     if (msg.flags & QOS2) > QOS0
-        r = last_downstream(msg.twin.router)
+        r = top_router(msg.twin.router)
         timer = Timer((t) -> handle_ack_timeout(t, z, msg, msg.id), r.settings.ack_timeout)
         ack_cond = FutureResponse(msg, timer)
         z.out[msg.id] = ack_cond

@@ -3,7 +3,8 @@ include("../utils.jl")
 foo(x) = @info "foo: $x"
 
 function run()
-    broker(ws=8010, tcp=8011)
+    bro = broker(ws=8010, tcp=8011)
+    Rembus.islistening(bro, protocol=[:tcp, :ws], wait=10)
 
     rb = connect("ws://:8010/wssub")
     ws = rb.socket.sock

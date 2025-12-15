@@ -47,7 +47,6 @@ try
     # shutdown the broker
     shutdown(rb)
     sleep(1)
-    @info "[zmq_resend_attestate] zmq_ping_interval:$(rb.router.settings.zmq_ping_interval)"
 
     rb = broker(zmq=8012, name=broker_name)
     sleep(3)

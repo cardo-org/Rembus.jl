@@ -4,7 +4,8 @@ function run()
     component(ws=9000, name="bro1")
 
     bro2 = component(ws=8000, name="bro2")
-    bro2.router.settings.connection_mode = Rembus.authenticated
+
+    Rembus.settings(bro2).connection_mode = Rembus.authenticated
 
     # Throw "anonymous components not allowed"
     @test_throws ErrorException component("ws://:9000", name="bro2")

@@ -11,7 +11,6 @@ function run()
     wind = 3
 
     bro = broker()
-    Rembus.add_plugin(bro, KeySpaceRouter())
 
     sub1 = component("hierarchy_sub1")
     inject(sub1, ctx)

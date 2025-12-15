@@ -18,7 +18,7 @@ function run()
     con = DuckDB.DB()
     bro = component(con)
     # set admin role for sub component
-    push!(bro.router.admins, "duckdb_pub")
+    push!(Rembus.top_router(bro.router).admins, "duckdb_pub")
 
     pub = component("duckdb_pub")
 
@@ -47,7 +47,7 @@ function run()
     reactive(othersub)
 
     # set some received acks awaiting ack2
-    tw = bro.router.id_twin["duckdb_pub"]
+    tw = Rembus.top_router(bro.router).id_twin["duckdb_pub"]
     tw.ackdf = DataFrame(:ts => UInt64[1], :id => Rembus.Msgid[2])
 
     close(sub)
