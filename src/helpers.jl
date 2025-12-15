@@ -518,16 +518,17 @@ function probe_pprint(twin::Twin)
     println(report)
 end
 
-create_enum(en, db::Archiver) = nothing
+# For the future. See: https://ducklake.select/docs/stable/duckdb/unsupported_features
+#create_enum(en, db::Archiver) = nothing
 
 function create_schema(jsonstr::AbstractString, db)
     config = JSON3.read(jsonstr, Dict)
     tables = config["tables"]
 
-    enums = get(config, "enums", [])
-    for en in enums
-        create_enum(en, db)
-    end
+#    enums = get(config, "enums", [])
+#    for en in enums
+#        create_enum(en, db)
+#    end
 
     tables = [
         Table(

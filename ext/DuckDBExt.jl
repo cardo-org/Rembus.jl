@@ -185,20 +185,19 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     return con
 end
 
-function Rembus.create_enum(en, con::DuckDB.DB)
-    error("""
-    enum type: likely to be supported in the future:
-    https://ducklake.select/docs/stable/duckdb/unsupported_features
-    """)
-    #    ename = en["name"]
-    #    tostrings = ["'$v'" for v in en["values"]]
-    #    evalues = join(tostrings, ",")
-    #    DuckDB.execute(
-    #        con,
-    #        "CREATE TYPE $ename AS ENUM ($evalues)"
-    #    )
-    #    typemap[ename] = Int
-end
+## See: enum type: likely to be supported in the future:
+##    https://ducklake.select/docs/stable/duckdb/unsupported_features
+##
+#function Rembus.create_enum(en, con::DuckDB.DB)
+#    ename = en["name"]
+#    tostrings = ["'$v'" for v in en["values"]]
+#    evalues = join(tostrings, ",")
+#    DuckDB.execute(
+#        con,
+#        "CREATE TYPE $ename AS ENUM ($evalues)"
+#    )
+#    typemap[ename] = Int
+#end
 
 # Extract placeholder names from pattern, e.g. ":regione/:loc/temp" → ["regione", "loc"]
 function extract_names(pattern::AbstractString)
