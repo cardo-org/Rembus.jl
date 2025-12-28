@@ -757,7 +757,6 @@ end
 
 function Rembus.save_received_acks(twin, con::DuckDB.DB)
     name = bname(twin.router)
-    router = Rembus.top_router(twin.router)
     current_df = copy(twin.ackdf)
     insertcols!(current_df, 1, :name .=> name)
     insertcols!(current_df, 2, :twin .=> rid(twin))

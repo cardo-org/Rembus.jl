@@ -103,7 +103,7 @@ function zenoh_task(self, router)
             publish_interceptor(router, msg)
         end
 
-        # route to downstream broker
+        # route to downstream broker (in the direction of the top router)
         put!(router.downstream.process.inbox, msg)
     end
 end
