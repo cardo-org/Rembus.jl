@@ -1,4 +1,4 @@
-const VERSION = "1.0.0"
+const VERSION = "1.2.3"
 
 const Protocols = Set{String}(["ws", "wss", "tcp", "tls", "zmq"])
 

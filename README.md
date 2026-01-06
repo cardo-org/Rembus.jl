@@ -8,7 +8,8 @@
 [![Coverage](https://codecov.io/gh/cardo-org/Rembus.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cardo-org/Rembus.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 
-Rembus is a middleware to implement high performance and fault-tolerant distributed applications using RPC and Pub/Sub communication styles.
+Rembus is a middleware to implement high performance and fault-tolerant
+distributed applications using RPC and Pub/Sub communication styles.
 
 ## Key Features
 
@@ -25,7 +26,7 @@ Rembus is a middleware to implement high performance and fault-tolerant distribu
 Start the broker:
 
 ```sh
-julia -e "using Rembus; brokerd()"
+julia -e "import Rembus; Rembus.brokerd()"
 ```
 
 ## RPC server

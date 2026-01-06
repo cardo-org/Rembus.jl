@@ -91,12 +91,12 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
     if haskey(ENV, "DUCKLAKE_URL")
         db_name = ENV["DUCKLAKE_URL"]
     else
-        db_name = "$data_dir.ducklake"
+        db_name = "ducklake:$data_dir.ducklake"
     end
 
     DuckDB.execute(con, "INSTALL ducklake")
     @debug "[DuckDB] ATTACH 'ducklake:$db_name' AS rl (DATA_PATH '$data_dir')"
-    DuckDB.execute(con, "ATTACH 'ducklake:$db_name' AS rl (DATA_PATH '$data_dir')")
+    DuckDB.execute(con, "ATTACH '$db_name' AS rl (DATA_PATH '$data_dir')")
     DuckDB.execute(con, "USE rl")
 
     tables = [

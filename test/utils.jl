@@ -199,23 +199,23 @@ end
 
 function init_ducklake(; reset=true)
     if haskey(ENV, "DUCKLAKE_URL")
-        if startswith(ENV["DUCKLAKE_URL"], "postgres")
+        if startswith(ENV["DUCKLAKE_URL"], "ducklake:postgres")
             dbname = "rembus_test"
             user = get(ENV, "PGUSER", "postgres")
             pwd = get(ENV, "PGPASSWORD", "postgres")
             db_url = "postgresql://$user:$pwd@127.0.0.1/$dbname"
             ENV["DATABASE_URL"] = db_url
-            ENV["DUCKLAKE_URL"] = "postgres:$db_url"
+            ENV["DUCKLAKE_URL"] = "ducklake:postgres:$db_url"
             if reset
                 Base.run(`dropdb $dbname --if-exists`)
                 Base.run(`createdb $dbname`)
             end
-        elseif startswith(ENV["DUCKLAKE_URL"], "sqlite")
+        elseif startswith(ENV["DUCKLAKE_URL"], "ducklake:sqlite")
+            db_file = joinpath(Rembus.rembus_dir(), "rembus_test.sqlite")
             if reset
-                db_file = joinpath(Rembus.rembus_dir(), "rembus_test.sqlite")
                 rm(db_file; force=true)
             end
-            ENV["DUCKLAKE_URL"] = "sqlite:$db_file"
+            ENV["DUCKLAKE_URL"] = "ducklake:sqlite:$db_file"
         end
     elseif reset
         rm(joinpath(Rembus.rembus_dir(), "broker.ducklake"); force=true, recursive=true)
