@@ -19,6 +19,8 @@ function add_plugin(twin::Twin, context)
     twin.router = context
 end
 
+setup_twin(r, twin::Twin) = nothing
+
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
         df = load_received_acks(router, url, router.store)
@@ -528,7 +530,6 @@ function router_task(self, router::Router, implementor_rule)
         if broker_isnamed(router)
             save_configuration(router)
         end
-        @debug "$(router.process.supervisor) shutted down"
     end
 end
 
@@ -768,7 +769,7 @@ function get_router(db=FileStore();
             router.mode = Rembus.authenticated
         end
         set_policy(router, policy)
-        bp = process("broker", tsk, args=(router,))
+        bp = process("broker", tsk, args=(router,), force_interrupt_after=30.0)
         router.process = bp
         init(router)
 

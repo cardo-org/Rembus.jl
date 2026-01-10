@@ -58,14 +58,14 @@ end
 function delete(router, table, obj)
     con = router.store
     if isnothing(obj)
-        DuckDB.execute(con,"DELETE FROM $(table.name)")
+        DuckDB.execute(con, "DELETE FROM $(table.name)")
     else
-        if !haskey(obj, "where")
-            error("error: missing where field")
-        end
+        allowed = ("where",)
+        bad = filter(k -> !(k in allowed), keys(obj))
+        isempty(bad) || error("invalid keys: $(join(bad, ", "))")
 
         cond = obj["where"]
-        DuckDB.execute(con,"DELETE FROM $(table.name) WHERE $cond")
+        DuckDB.execute(con, "DELETE FROM $(table.name) WHERE $cond")
     end
 
     return "ok"
@@ -74,14 +74,30 @@ end
 function query(router, table, obj)
     con = router.store
     if isnothing(obj)
-        df = DataFrame(DuckDB.execute(con,"SELECT * FROM $(table.name)"))
+        df = DataFrame(DuckDB.execute(con, "SELECT * FROM $(table.name)"))
     else
-        if !haskey(obj, "where")
-            error("error: missing where field")
+        allowed = ("where", "when")
+        bad = filter(k -> !(k in allowed), keys(obj))
+        isempty(bad) || error("invalid keys: $(join(bad, ", "))")
+
+        where_cond = ""
+        if haskey(obj, "where")
+            where_cond = " WHERE " * obj["where"]
         end
 
-        cond = obj["where"]
-        df = DataFrame(DuckDB.execute(con,"SELECT * FROM $(table.name) WHERE $cond"))
+        at = ""
+        if haskey(obj, "when")
+            if Base.isa(obj["when"], Real)
+                dt = unix2datetime(obj["when"])
+                ts = Dates.format(dt, "yyyy-mm-dd HH:MM:SS")
+            else
+                ts = obj["when"]
+            end
+            at = " AT (TIMESTAMP => CAST('$ts' AS TIMESTAMP))"
+        end
+
+        @debug "query: SELECT * FROM $(table.name) $where_cond $at"
+        df = DataFrame(DuckDB.execute(con, "SELECT * FROM $(table.name) $at $where_cond"))
     end
     return df
 end
@@ -176,8 +192,8 @@ function Rembus.boot(router::Rembus.Router, con::DuckDB.DB)
         @debug "[DuckDB] CREATE TABLE IF NOT EXISTS $tname ($cols)"
         DuckDB.execute(con, "CREATE TABLE IF NOT EXISTS $tname ($cols)")
 
-        router.local_function["delete_$tname"] = (obj=nothing) -> delete(router, tabledef, obj)
-        router.local_function["query_$tname"] = (obj=nothing) -> query(router, tabledef, obj)
+        router.local_function["delete_$tname"] = (obj = nothing) -> delete(router, tabledef, obj)
+        router.local_function["query_$tname"] = (obj = nothing) -> query(router, tabledef, obj)
     end
 
     Rembus.load_configuration(router)
@@ -558,7 +574,7 @@ function Rembus.send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::D
         if !isempty(filtered)
             filtered = transform(
                 filtered,
-                :data =>ByRow(data -> frombase64(data)) => :pkt
+                :data => ByRow(data -> frombase64(data)) => :pkt
             )
             Rembus.send_messages(twin, filtered)
         end

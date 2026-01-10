@@ -17,7 +17,7 @@ using TestItems
     @test msg2.twin === twin2
 
     @test !isopen(twin.socket)
-    @test wait(twin) === nothing
+    @test wait(twin, reactive=false) === nothing
     @test !Rembus.isconnectionerror(twin.socket, ErrorException("something nasty"))
 end
 

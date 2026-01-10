@@ -56,17 +56,46 @@ function run(con)
     close(pub)
 
     sleep(2)
+    now_dt = now(UTC)
     cli = sub(ctx)
 
     # test query errors
     @test_throws RpcMethodException rpc(cli, "query_topic_at_rest", Dict("no_where_condition"=>""))
     @test_throws RpcMethodException rpc(cli, "delete_topic_at_rest", Dict("no_where_condition"=>""))
 
+    result = rpc(cli, "query_topic_at_rest", Dict("where"=>"name='a'"))
+    @debug "topic_at_rest WHERE:\n$df"
+
+    result = rpc(
+        cli,
+        "query_topic_at_rest",
+        Dict("when"=>Dates.format(now_dt, dateformat"yyyy-mm-dd HH:MM:SS"))
+   )
+    @debug "topic_at_rest WHEN=now:\n$result"
+    @test nrow(result) == 3
+
+    seconds_ago = now_dt - Dates.Second(2)
+    result = rpc(
+        cli,
+        "query_topic_at_rest",
+        Dict("when"=>Dates.format(seconds_ago, dateformat"yyyy-mm-dd HH:MM:SS"))
+   )
+    @debug "topic_at_rest WHEN=3 seconds ago:\n$result"
+    @test nrow(result) == 0
+
+    # When is just the current timestamp in epoch seconds.
+    result = rpc(
+        cli,
+        "query_topic_at_rest",
+        Dict("when"=>Libc.TimeVal().sec, "where"=>"type='t2'")
+    )
+    @test nrow(result) == 1
+
     sleep(1)
     close(cli)
     close(bro)
     df = ctx["df"]
-    @info "topic_at_rest:\n$df"
+    @debug "topic_at_rest received by subscriber:\n$df"
 end
 
 @info "[send_data_at_rest] start"

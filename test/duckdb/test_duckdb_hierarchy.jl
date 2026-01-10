@@ -36,7 +36,6 @@ function run(con)
     jsonstr = read(joinpath(@__DIR__, "test_hierarchy.json"), String)
     ctx = Dict()
     bro = component(con, schema=jsonstr)
-    add_plugin(bro, KeySpaceRouter())
 
     sub = component("hsub")
     inject(sub, ctx)

@@ -694,6 +694,7 @@ function setidentity(router::Router, twin::Twin, msg; isauth=false)
     setname(twin.process, rid(twin))
     twin.isauth = isauth
     load_twin(router, twin, router.store)
+    setup_twin(twin.router, twin)
     return nothing
 end
 
@@ -838,7 +839,7 @@ function receiver_exception(twin, e)
         twin.handler[HR_CONN_DOWN](twin)
     end
     if isconnectionerror(twin.socket, e)
-        if close_is_ok(twin.socket, e)
+        if close_is_ok(twin.socket, e) || twin.process.phase === :closing
             @debug "[$twin] connection closed"
         else
             @error "[$twin] connection closed: $e"

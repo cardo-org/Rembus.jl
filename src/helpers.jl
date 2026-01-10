@@ -398,7 +398,7 @@ function send_messages(twin::Twin, df)
         tmark = twin.mark
         if row.recv > tmark
             if haskey(twin.msg_from, row.topic) &&
-               row.recv > (nowts - twin.msg_from[row.topic])
+                row.recv > (nowts - twin.msg_from[row.topic])
                 Rembus.from_cbor(twin, row.recv, row.pkt)
             end
         end

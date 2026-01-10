@@ -469,7 +469,7 @@ mutable struct Settings
         messages_timer_interval = get(
             cfg,
             "archiver_interval",
-            parse(Float64, get(ENV, "REMBUS_ARCHIVER_INTERVAL", "60"))
+            parse(Float64, get(ENV, "REMBUS_ARCHIVER_INTERVAL", "1"))
         )
         new(
             zmq_ping_interval,
@@ -661,7 +661,7 @@ end
 
 Base.:(==)(a::Twin, b::Twin) = rid(a) === rid(b)
 
-Base.hash(t::Twin) = hash(rid(t))
+Base.hash(t::Twin, h::UInt) = hash(rid(t), h)
 
 """
 $(TYPEDSIGNATURES)
@@ -744,7 +744,11 @@ end
 $(TYPEDSIGNATURES)
 Wait for RPC requests and Pub/Sub messages.
 """
-function Base.wait(rb::Twin)
+function Base.wait(rb::Twin; reactive=true)
+    if reactive
+        Rembus.reactive(rb, reactive)
+    end
+
     if !isinteractive() && isdefined(rb, :process)
         wait(rb.process.task)
     end

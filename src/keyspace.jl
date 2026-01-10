@@ -8,6 +8,10 @@ struct SpaceTwin
     twin::Twin
 end
 
+Base.:(==)(a::SpaceTwin, b::SpaceTwin) =
+    a.space == b.space && a.twin == b.twin
+
+Base.hash(st::SpaceTwin, h::UInt) = hash((st.space, st.twin), h)
 
 mutable struct KeySpaceRouter <: Rembus.AbstractRouter
     # r"house/.*/temperature" => ["house/*/temperature" => twin]
@@ -28,9 +32,19 @@ function build_space_re(topic)
 
 end
 
-function subscribe_handler(ksrouter, msg)
-    component = msg.twin
-    topic = msg.topic
+function setup_twin(router::KeySpaceRouter, twin::Twin)
+    @debug "[ksrouter] topic_interests: $(router.downstream.topic_interests)"
+    for topic in keys(router.downstream.topic_interests)
+        if twin in router.downstream.topic_interests[topic]
+            @debug "[ksrouter] subscribing twin $twin to topic $topic"
+            subscribe_handler(router, twin, topic)
+        end
+    end
+
+    return nothing
+end
+
+function subscribe_handler(ksrouter, component, topic)
     @debug "[$component][subscribe] ksrouter:$ksrouter, topic:$topic"
 
     if contains(topic, "*")
@@ -78,7 +92,9 @@ function publish_interceptor(ksrouter, msg)
                 if unsealed
                     for st in ksrouter.spaces[space_re]
                         @debug "[ksrouter] sending $msg to $(st.twin)"
-                        publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
+                        if isopen(st.twin)
+                            publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
+                        end
                     end
                 end
             end
@@ -94,7 +110,7 @@ function zenoh_task(self, router)
         if isa(msg, Rembus.AdminReqMsg) && haskey(msg.data, Rembus.COMMAND)
             if msg.data[Rembus.COMMAND] === Rembus.SUBSCRIBE_CMD
                 @debug "[ksrouter][$(msg.twin)] subscribing: $msg"
-                subscribe_handler(router, msg)
+                subscribe_handler(router, msg.twin, msg.topic)
             elseif msg.data[Rembus.COMMAND] === Rembus.UNSUBSCRIBE_CMD
                 @debug "[ksrouter][$(msg.twin)] unsubscribing: $msg"
                 unsubscribe_handler(router, msg)

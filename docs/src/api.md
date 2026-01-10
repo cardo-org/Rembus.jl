@@ -8,6 +8,7 @@ This API provides both approaches to connection handling:
 
 Rembus API functions:
 
+- [broker](#broker)
 - [component](#component)
 - [connect](#connect)
 - [expose](#expose)
@@ -24,29 +25,60 @@ Rembus API functions:
 - [close](#close)
 - [shutdown](#shutdown)
 
+## broker
+
+```julia
+broker(;<keyword arguments>) -> Twin
+```
+
+Start a broker node and return a handle for interacting with it.
+
+The broker acts as a central node to manage routing of RPC requests and Pub/Sub messages
+between nodes.
+
+It supports multiple communication protocols (WebSocket, TCP, and ZMQ) and allows for
+customizable security, authentication, and routing policies.
+
+### Keyword arguments
+
+- `name::AbstractString="broker"`: The unique identifier for the broker supervisor process.
+- `ws=nothing`: The WebSocket (ws/wss) listening port. Set to `nothing` to disable.
+- `tcp=nothing`: The TCP (tcp/tls) listening port. Set to `nothing` to disable.
+- `zmq=nothing`: The ZMQ Router listening port. Set to `nothing` to disable.
+- `prometheus=nothing`: The Prometheus port for scraping monitoring metrics. Set to
+  `nothing` to disable.
+- `secure=false`: If `true`, enables WSS (WebSocket Secure) and TLS
+  (Transport Layer Security) protocols for encrypted connections.
+- `authenticated=false`: If `true`, only allows connections from named and authenticated
+   nodes.
+- `policy::String="first_up"`: The routing policy used when topics are served by multiple
+   nodes. Possible options include:
+  - `"first_up"`: Selects the first connected node from the list of nodes exposing the
+      RPC method.
+  - `"round_robin"`: Distributes requests evenly across nodes in a round-robin fashion.
+  - `"less_busy"`: Chooses the node with fewer outstanding requests.
+- `enc=Rembus.CBOR`: wire message format for sending messages. Set to
+  `Rembus.JSON` for JSON-RPC-2.0 text encoding.
+
+> If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
+> for WebSocket connections on port `8000`.
+
 ## component
 
 ```julia
-component(
-    url::AbstractString;
-    ws=nothing,
-    tcp=nothing,
-    zmq=nothing,
-    name=missing,
-    secure=false,
-    authenticated=false,
-    policy="first_up",
-    enc=Rembus.CBOR,
-    failovers=[]
-) -> Twin
-
-# for more details
-help?> component
+component(url::AbstractString; <keyword arguments>) -> Twin
 ```
 
-Start a component and join the network of Rembus nodes.
+Start a component and join the network of Rembus nodes connecting to a broker
+identified by `url` endpoint.
 
-### Connected Component
+The keyword arguments are the same as for [`broker`](#keyword-arguments) with
+the addition of:
+
+- `failovers=[]`: A list of failover connection URLs to use when the primary
+  connection is down. Each URL should be a string formatted similarly to the `url` argument.
+
+For example:
 
 ```julia
 rb = component("ws://hostname:8000/mycomponent")
@@ -59,21 +91,10 @@ commands.
 In case of connection lost the underlying supervision logic attempts to reconnect
 to the broker until it succeed.
 
-See [Component](@ref) for URL format details.
+### broker and component
 
-### Broker
-
-```julia
-rb = component(ws=8000, tcp=8001)
-```
-
-Start a broker that listens on the web socket port `8000` and on the TCP port
-`8001`. The broker will accept connections from other components.
-
-### Broker and Connected Component
-
-This is an advanced pattern that allows to create a component that is also a
-broker and that is able to connect to another broker. This pattern is useful for
+This is an advanced pattern that allows to create a component that is both a
+broker and a component that connects to another broker. This pattern is useful for
 creating a component that is able to act as a proxy between two brokers or to
 create a component that is able to connect to a broker and at the same time
 to act as a broker for other components.
@@ -111,7 +132,7 @@ exchanging data and commands.
 
 If the broker is not reachable the `connect` function will throw an Exception
 and if the connection is lost at a later time the `rb` handle becomes
-disconnected. The status of a component can be checked with the `isopen` 
+disconnected. The status of a component can be checked with the `isopen`
 method:
 
 ```julia
@@ -234,11 +255,12 @@ reactive(rb)
 The `from` (default=`Rembus.Now`) argument defines the starting point in time from which
 messages published while the component was offline will be sent upon reconnection.
 Possible `from` values:
-  - **`Rembus.Now`**: Equivalent to `0.0`, ignores old messages, and starts receiving only
+
+- **`Rembus.Now`**: Equivalent to `0.0`, ignores old messages, and starts receiving only
     new messages from now.
-  - **`Rembus.LastReceived`**: Receives all messages published since the last disconnection.
-  - **`n::Float64`**: Receives messages published within the last `n` seconds.
-  - **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
+- **`Rembus.LastReceived`**: Receives all messages published since the last disconnection.
+- **`n::Float64`**: Receives messages published within the last `n` seconds.
+- **`Dates.CompoundPeriod`**: Defines a custom period using a `CompoundPeriod` value.
 
 ### Example
 
@@ -371,7 +393,7 @@ Stop receiving published messages.
 wait(rb::Twin)
 ```
 
-Needed for components that [expose](#expose) and/or [subscribe](#subscribe) 
+Needed for components that [expose](#expose) and/or [subscribe](#subscribe)
 methods. Wait forever for rpc requests or pub/sub messages.
 
 ## inject

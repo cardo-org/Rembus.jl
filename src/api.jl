@@ -36,7 +36,9 @@ customizable security, authentication, and routing policies.
     ### Default Behavior
     If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
     for WebSocket connections on port `8000`.
-        """
+- `enc=Rembus.CBOR`: wire message format for sending messages
+   Set to `Rembus.JSON` for JSON-RPC-2.0 text encoding.
+"""
 broker = component
 
 """
@@ -141,6 +143,8 @@ it to act as a broker. These ports are specified using keyword arguments.
     - `"less_busy"`: Chooses the node with fewer outstanding requests.
 - `enc=Rembus.CBOR`: wire message format for sending messages
    Set to `Rembus.JSON` for JSON-RPC-2.0 text encoding.
+- failovers=[]: A list of failover connection URLs to use when the primary
+  connection is down. Each URL should be a string formatted similarly to the `url` argument.
 """
 function component(
     url::AbstractString,
