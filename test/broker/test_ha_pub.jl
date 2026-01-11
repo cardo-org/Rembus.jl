@@ -45,13 +45,12 @@ function run()
     # Wait for the failover to take over.
     sleep(3)
 
-    @info "CTX: $ctx"
-    @info "[$bro] subscribers: $(bro.router.topic_interests)"
+    @info "ctx: $ctx"
 
     empty!(ctx)
     publish(publisher, "mytopic", msg)
     sleep(0.1)
-    @info "FAILOVER CTX: $ctx"
+    @info "failover ctx: $ctx"
     @test length(ctx) === 2
 
     #    # Restart the main broker.

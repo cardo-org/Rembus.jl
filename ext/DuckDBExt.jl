@@ -96,7 +96,7 @@ function query(router, table, obj)
             at = " AT (TIMESTAMP => CAST('$ts' AS TIMESTAMP))"
         end
 
-        @debug "query: SELECT * FROM $(table.name) $where_cond $at"
+        @debug "query: SELECT * FROM $(table.name) $at $where_cond"
         df = DataFrame(DuckDB.execute(con, "SELECT * FROM $(table.name) $at $where_cond"))
     end
     return df
