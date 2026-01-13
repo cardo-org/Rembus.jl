@@ -595,7 +595,7 @@ function rpc(
     data...
 )
     wait_open(twin) || error("connection down")
-    return fetch(fpc(twin, topic, collect(data)))
+    return fetch(fpc(twin, topic, data...))
 end
 
 #  Just for reference, a way to implement rpc api with keyword arguments.
@@ -695,10 +695,10 @@ Future Request Call.
 function fpc(
     twin::Twin,
     topic::AbstractString,
-    data=(),
+    data...;
     timeout=Inf
 )
-    msg = RpcReqMsg(twin, topic, data)
+    msg = RpcReqMsg(twin, topic, collect(data))
     return send_msg(twin, msg, timeout)
 end
 

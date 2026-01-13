@@ -70,8 +70,8 @@ function simo_task(self, router)
             for tw in Rembus.alltwins(router)
                 push!(requests, (rid(tw), Rembus.fpc(
                     tw, msg.topic,
-                    (rid(tw), msg.data...),
-                    request_timeout() - 1
+                    rid(tw), msg.data,
+                    timeout=request_timeout() - 1
                 )))
             end
             @async wait_responses(self, msg, requests)

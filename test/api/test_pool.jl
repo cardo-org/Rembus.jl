@@ -25,7 +25,7 @@ function run()
 
     @test_throws RembusError direct(rb, "invalid_pool", "myservice", "hello")
 
-    futres = Rembus.fpc(rb, "myservice", ("hello",))
+    futres = Rembus.fpc(rb, "myservice", "hello")
     @test Rembus.issuccess(futres)
     @test fetch(futres) == "hello"
 

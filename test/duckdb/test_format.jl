@@ -22,10 +22,10 @@ function run(con)
     df = rpc(pub, "query_device")
     @test nrow(df) == 1
 
-    df = rpc(pub, "query_device", Dict("where"=>"site='belluno'"))
+    df = rpc(pub, "query_device", Dict("where" => "site='belluno'"))
     @test nrow(df) == 1
 
-    rpc(pub, "delete_device", Dict("where"=>"site='not_exist'"))
+    rpc(pub, "delete_device", Dict("where" => "site='not_exist'"))
     df = rpc(pub, "query_device")
     @test nrow(df) == 1
 
@@ -38,7 +38,7 @@ end
 con = DuckDB.DB()
 
 try
-    ENV["REMBUS_ARCHIVER_INTERVAL"] = 1
+    ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.5
     init_ducklake()
     run(con)
 catch e

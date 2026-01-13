@@ -39,7 +39,7 @@ function run()
         response = direct(rb, "rpc_myserver", "myservice", "hello")
         @test response == "hello"
 
-        futres = Rembus.fpc(rb, "myservice", ("hello",))
+        futres = Rembus.fpc(rb, "myservice", "hello")
         @test Rembus.issuccess(futres)
         @test fetch(futres) == "hello"
 

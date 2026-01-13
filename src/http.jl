@@ -144,7 +144,14 @@ function http_jsonrpc_eval(router::Router, twin::Twin, msg::RembusMsg)
     retval = nothing
 
     if isa(msg, RpcReqMsg)
-        fut_response = fpc(twin, msg.topic, isnothing(msg.data) ? () : msg.data)
+        if isnothing(msg.data)
+            fut_response = fpc(twin, msg.topic)
+        elseif isa(msg.data, Dict)
+            rpcmsg = RpcReqMsg(twin, msg.topic, msg.data)
+            fut_response = send_msg(twin, rpcmsg)
+        else
+            fut_response = fpc(twin, msg.topic, msg.data...)
+        end
         response = fetch(fut_response.future)
         retval = Dict{String,Any}(
             "jsonrpc" => "2.0",
@@ -268,7 +275,7 @@ function http_rpc(router::Router, req::HTTP.Request)
             twin = bind(router, RbURL(cid))
             twin.isauth = isauth
             twin.socket = Float()
-            fut_response = fpc(twin, topic, content)
+            fut_response = fpc(twin, topic, content...)
             response = fetch(fut_response.future)
             retval = http_response_data(response)
             if response.status == 0
