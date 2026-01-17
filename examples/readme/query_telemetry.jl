@@ -29,6 +29,14 @@ function command_line()
         default = "mymeter"
         arg_type = String
 
+        "--where"
+        help = "where filter"
+        arg_type = String
+
+        "--when"
+        help = "when filter"
+        arg_type = String
+
         "--debug", "-d"
         help = "Enable debug logging"
         action = :store_true
@@ -55,7 +63,14 @@ function main()
 
     subscribe(node, topic, telemetry)
 
-    df = rpc(node, "query_telemetry")
+    filter = Dict()
+    for cond in ["where", "when"]
+        if haskey(args, cond)
+            filter["cond"] = args["cond"]
+        end
+    end
+
+    df = rpc(node, "query_telemetry", filter)
 
     println("🟢 telemetry at rest for $name:")
     println(df)

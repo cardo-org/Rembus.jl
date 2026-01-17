@@ -444,7 +444,7 @@ mutable struct Settings
         request_timeout = get(
             cfg,
             "request_timeout",
-            parse(Float64, get(ENV, "REMBUS_TIMEOUT", "5"))
+            parse(Float64, get(ENV, "REMBUS_TIMEOUT", "10"))
         )
         challenge_timeout = get(
             cfg,
@@ -745,7 +745,7 @@ $(TYPEDSIGNATURES)
 Wait for RPC requests and Pub/Sub messages.
 """
 function Base.wait(rb::Twin; reactive=true)
-    if reactive
+    if reactive && !isrepl(rb.uid)
         Rembus.reactive(rb, reactive)
     end
 

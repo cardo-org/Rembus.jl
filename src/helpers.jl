@@ -343,7 +343,7 @@ function save_message(pd, router)
             end
             push!(router.msg_df, [msg.counter, slot, msg.flags, msg.id, msg.topic, data])
         elseif msg === :persist
-            @debug "[$router] persisting cached messages"
+            # @debug "[$router] persisting cached messages"
             persist(router)
         elseif isshutdown(msg)
             close(tmr)
@@ -398,7 +398,7 @@ function send_messages(twin::Twin, df)
         tmark = twin.mark
         if row.recv > tmark
             if haskey(twin.msg_from, row.topic) &&
-                row.recv > (nowts - twin.msg_from[row.topic])
+               row.recv > (nowts - twin.msg_from[row.topic])
                 Rembus.from_cbor(twin, row.recv, row.pkt)
             end
         end
@@ -525,10 +525,10 @@ function create_schema(jsonstr::AbstractString, db)
     config = JSON3.read(jsonstr, Dict)
     tables = config["tables"]
 
-#    enums = get(config, "enums", [])
-#    for en in enums
-#        create_enum(en, db)
-#    end
+    #    enums = get(config, "enums", [])
+    #    for en in enums
+    #        create_enum(en, db)
+    #    end
 
     tables = [
         Table(
@@ -548,4 +548,12 @@ function create_schema(jsonstr::AbstractString, db)
     ]
 
     return tables
+end
+
+function service_install(
+    router, topic, code, ctx=nothing, node=nothing
+)
+    @info "installing service [$topic]"
+    save_service(router, topic, code)
+    return "ok"
 end

@@ -1,3 +1,88 @@
+
+function eval_file(twin, name, path)
+    mod = Module(Symbol(name))
+    service_fn = Base.include(mod, path)
+    expose(twin, name, service_fn)
+end
+
+function save_service(router::Router, name, content)
+    dir = joinpath(broker_dir(router), "src", "services")
+    if !isdir(dir)
+        mkpath(dir)
+    end
+
+    path = joinpath(dir, "$name.jl")
+    @info "[$router] saving exposer to $path"
+    open(path, "w") do f
+        write(f, content)
+    end
+
+    twin = router.id_twin["__repl__"]
+    eval_file(twin, name, path)
+end
+
+function load_services(twin)
+    router = top_router(twin.router)
+    #components = Module[]
+    dir = joinpath(broker_dir(top_router(router).id), "src", "services")
+    @info "[$router] Loading impls from $dir"
+
+    if !isdir(dir)
+        mkpath(dir)
+    end
+
+    for file in sort(readdir(dir))
+        endswith(file, ".jl") || continue
+
+        path = joinpath(dir, file)
+        name = splitext(file)[1]
+
+        @info "Loading component $name"
+
+        mod = Module(Symbol(name))
+        service_fn = Base.include(mod, path)
+        expose(twin, name, service_fn)
+    end
+
+    return nothing
+end
+
+
+function load_components!(twin)
+    router = top_router(twin.router)
+    components = Module[]
+    dir = joinpath(broker_dir(top_router(router).id), "src")
+    @info "[$router] Loading impls from $dir"
+
+    if !isdir(dir)
+        mkpath(dir)
+    end
+
+    for file in sort(readdir(dir))
+        endswith(file, ".jl") || continue
+
+        path = joinpath(dir, file)
+        name = Symbol(splitext(file)[1])
+
+        @info "Loading component $name"
+
+        mod = Module(name)
+        Base.include(mod, path)
+
+        if isdefined(mod, :bootstrap)
+            Base.invokelatest(() -> begin
+                bootfn = getfield(mod, :bootstrap)
+                bootfn(twin)
+            end)
+            push!(components, mod)
+        else
+            @warn "Component $name has no bootstrap(node)"
+        end
+    end
+
+    return components
+end
+
 #=
     load_tenants(router, ::FileStore)
 

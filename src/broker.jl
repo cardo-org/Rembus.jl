@@ -241,6 +241,13 @@ function init(router::Router)
     router.local_function["rid"] = (ctx=missing, twin=nothing) -> router.id
     router.local_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
     router.local_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
+
+    router.local_function["julia_service_install"] = (
+        name,
+        cnt,
+        ctx=missing,
+        twin=nothing
+    ) -> service_install(router, name, cnt, ctx, twin)
 end
 
 function first_up(::Router, tenant, topic, implementors)
