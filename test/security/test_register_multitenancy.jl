@@ -11,7 +11,7 @@ function init(pin)
     end
 
     tenant_settings = Dict("com" => pin, "org" => pin)
-    Rembus.save_tenants(broker_dir, tenant_settings)
+    Rembus.save_tenants(broker_name, tenant_settings)
 end
 
 function run(url)
@@ -115,8 +115,12 @@ setup() = init(pin)
 try
     url = "zmq://:8002/$cid"
     execute(() -> run(url), "register_multitenancy", setup=setup)
+
+    @info "[register_multitenancy] 2nd round"
     execute(() -> decommission(url), "register_multitenancy", reset=false)
     url = cid
+
+    @info "[register_multitenancy] 3nd round"
     execute(() -> run(cid), "register_multitenancy", reset=false)
 catch e
     @error "[register_multitenancy]: $e"

@@ -15,7 +15,7 @@ function multiple_users(pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, tenants_settings)
+    Rembus.save_tenants(broker_name, tenants_settings)
 end
 
 function run(cid)

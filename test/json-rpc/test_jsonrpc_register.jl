@@ -10,7 +10,7 @@ function init(pin)
     end
 
     tenant_settings = Dict("." => pin)
-    Rembus.save_tenants(broker_dir, tenant_settings)
+    Rembus.save_tenants(broker_name, tenant_settings)
 end
 
 function run()

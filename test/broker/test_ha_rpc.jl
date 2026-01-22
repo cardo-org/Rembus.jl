@@ -40,11 +40,17 @@ function run()
     @info "[$bro] exposers: $(Rembus.top_router(bro.router).topic_impls)"
     @info "[$failover] exposers: $(Rembus.top_router(failover.router).topic_impls)"
 
+    # close the failover
+    shutdown(failover)
+
     # Restart the main broker.
     bro = broker(ws=8000, name=broker_name)
 
     # Wait for the main broker to take over.
-    sleep(3)
+    Rembus.islistening(bro, wait=20)
+
+    # reserve some time to client reconnection.
+    sleep(2)
 
     @test rpc(c1, "rid") === broker_name
     @test rpc(c1, "myservice", x, y) == x + y

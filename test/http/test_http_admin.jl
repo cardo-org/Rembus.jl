@@ -1,6 +1,7 @@
 include("../utils.jl")
 
 using Base64
+using DuckDB
 
 broker_name = "http_admin"
 admin = "http_admin_superuser"
@@ -18,18 +19,6 @@ end
 
 basic_auth(str::String) = Base64.base64encode(str)
 
-function setup_admin()
-    bdir = Rembus.broker_dir(broker_name)
-    mkpath(bdir)
-    @info "broker_dir:$bdir - ($(pwd())) $(isdir(bdir))"
-
-    fn = joinpath(bdir, "admins.json")
-    @info "setting admin: $fn"
-    open(fn, "w") do io
-        write(io, JSON3.write(Set([admin])))
-    end
-    @info "admins.json setup done"
-end
 
 # set a shared secret
 function init(cid, password)
@@ -129,7 +118,13 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore`)
-        execute(run, broker_name, setup=setup_admin, secure=true, http=9000)
+        execute(
+            run,
+            broker_name,
+            setup=() -> set_admin(broker_name, admin),
+            secure=true,
+            http=9000
+        )
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

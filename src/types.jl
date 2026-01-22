@@ -149,8 +149,6 @@ Adapter(a) = Adapter{a}()
 
 abstract type Archiver end
 
-struct FileStore <: Archiver end
-
 mutable struct RbURL
     id::String
     tenant::String
@@ -162,7 +160,7 @@ mutable struct RbURL
         name="",
         protocol=:ws,
         host="127.0.0.1",
-        port=8000,
+        port=DEFAULT_WS_PORT,
         props=Dict()
     )
         if protocol === :repl
@@ -204,6 +202,11 @@ end
 hasname(c::RbURL) = !(is_uuid4(c.id) || all(isdigit, c.id))
 
 isrepl(c::RbURL) = c.protocol === :repl
+
+"""
+Return an url representing an anonymous component.
+"""
+anonym(; host="127.0.0.1", port=DEFAULT_WS_PORT) = RbURL(host=host, port=port)
 
 struct AckState
     ack2::Bool
@@ -517,10 +520,6 @@ struct Table
         topic=table,
         delete_topic=nothing
     ) = new(table, columns, keys, extras, topic, delete_topic)
-    Table(
-        name,
-        delete_topic
-    ) = new(name, Column[], String[], Dict(), name, delete_topic)
 end
 
 
@@ -533,7 +532,9 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     downstream::Union{Nothing,Rembus.AbstractRouter} # toward the twin
     id::String
     eid::UInt64 # ephemeral unique id
-    store::Any
+    datadir::String
+    dbpath::String
+    con::Any
     tables::OrderedDict{String,Table}
     settings::Settings
     mode::ConnectionMode
@@ -564,37 +565,58 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     process::Visor.Process
     archiver::Visor.Process
     owners::Dict{String,String}
-    Router{T}(
-        name, plugin=nothing, context=missing, tables=OrderedDict()
-    ) where {T<:AbstractTwin} = new{T}(
-        nothing,
-        nothing,
+    function Router{T}(
         name,
-        rand(Xoshiro(time_ns()), UInt64),
-        FileStore(),
-        tables,
-        Settings(name),
-        anonymous,
-        ReentrantLock(),
-        :first_up,
-        nothing,
-        msg_dataframe(),
-        [],
-        time(), # start_ts
-        Set(),
-        Dict(),
-        Dict(),
-        plugin,
-        context, # shared
-        Dict(), # topic_impls
-        Dict(), # last_invoked
-        Dict(), # topic_interests
-        Dict(), # id_twin
-        Dict(), # local_function
-        Dict(), # local_subscriber
-        Dict(), # topic_auth
-        Set(), # admins
-    )
+        dbpath=nothing,
+        datadir=nothing,
+        plugin=nothing,
+        context=missing,
+        tables=OrderedDict()
+    ) where {T<:AbstractTwin}
+        if isnothing(datadir)
+            datadir = joinpath(Rembus.rembus_dir(), name)
+        end
+
+        if isnothing(dbpath)
+            if haskey(ENV, "DUCKLAKE_URL")
+                dbpath = ENV["DUCKLAKE_URL"]
+            else
+                dbpath = "ducklake:$datadir.ducklake"
+            end
+        end
+
+        return new{T}(
+            nothing,
+            nothing,
+            name,
+            rand(Xoshiro(time_ns()), UInt64),
+            datadir,
+            dbpath,
+            nothing,
+            tables,
+            Settings(name),
+            anonymous,
+            ReentrantLock(),
+            :first_up,
+            nothing,
+            msg_dataframe(),
+            [],
+            time(), # start_ts
+            Set(),
+            Dict(),
+            Dict(),
+            plugin,
+            context, # shared
+            Dict(), # topic_impls
+            Dict(), # last_invoked
+            Dict(), # topic_interests
+            Dict(), # id_twin
+            Dict(), # local_function
+            Dict(), # local_subscriber
+            Dict(), # topic_auth
+            Set(), # admins
+        )
+    end
 end
 
 bname(r::AbstractRouter) = top_router(r).id
@@ -702,7 +724,7 @@ function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
     router = top_router(twin.router)
-    send_data_at_rest(twin, msg_from, router.store)
+    send_data_at_rest(twin, msg_from)
     return nothing
 end
 

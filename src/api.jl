@@ -69,6 +69,8 @@ for WebSocket connections on port `8000`.
 """
 function server(;
     name::AbstractString="server",
+    datadir=nothing,
+    dbpath=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -83,6 +85,8 @@ function server(;
 
     router = get_router(
         name=name,
+        datadir=datadir,
+        dbpath=dbpath,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -147,8 +151,7 @@ it to act as a broker. These ports are specified using keyword arguments.
   connection is down. Each URL should be a string formatted similarly to the `url` argument.
 """
 function component(
-    url::AbstractString,
-    db=FileStore();
+    url::AbstractString;
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -163,7 +166,6 @@ function component(
     uid = RbURL(url)
     return component(
         uid,
-        db,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -177,8 +179,10 @@ function component(
     )
 end
 
-function component(db=FileStore();
+function component(;
     name::AbstractString="broker",
+    datadir=nothing,
+    dbpath=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -199,13 +203,14 @@ function component(db=FileStore();
     if ismissing(schema)
         tbls = OrderedDict{String,Table}()
     else
-        tbls = create_schema(schema, db)
+        tbls = create_schema(schema)
     end
 
     router = get_router(
-        db,
         tables=OrderedDict(obj.name => obj for obj in tbls),
         name=name,
+        datadir=datadir,
+        dbpath=dbpath,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -218,6 +223,10 @@ function component(db=FileStore();
     )
     set_policy(router, policy)
     twin = bind(router)
+
+    # Load installed services and subscribers
+    load_callbacks(twin)
+
     twin.enc = enc
     return add_failovers(twin, failovers)
 end
@@ -233,7 +242,11 @@ A disconnection from the remote endpoint will not trigger automatic reconnection
 
 rb = connect("ws://127.0.0.1:8000/mycomponent")
 """
-connect(url::AbstractString; enc=CBOR)::Twin = connect(RbURL(url), enc=enc)
+connect(url::AbstractString;
+    enc=CBOR,
+    datadir=nothing,
+    dbpath=nothing
+)::Twin = connect(RbURL(url), enc=enc, datadir=datadir, dbpath=dbpath)
 
 function issuccess(response)
     response = fetch(response.future)

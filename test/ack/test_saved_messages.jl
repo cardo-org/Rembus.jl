@@ -42,7 +42,7 @@ function produce(pub_url)
         publish(pub, "bar", count)
         count += 1
     end
-    sleep(1)
+    sleep(0.1)
     shutdown(pub)
 end
 
@@ -53,7 +53,7 @@ function consume(sub_url)
     @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
     @test isnothing(subscribe(sub, bar, Rembus.LastReceived))
     inject(sub, ctx)
-    reactive(sub, 1_900_000)
+    reactive(sub)
 
     @test wait_message() do
         ctx.count == messages
@@ -74,7 +74,7 @@ try
     sub_url = "ws://127.0.0.1:8010/sub"
 
     ENV["REMBUS_CACHE_SIZE"] = "2"
-
+    ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
     request_timeout!(20)
     rb = broker(ws=8010, name="saved_messages")
     produce(pub_url)

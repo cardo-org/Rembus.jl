@@ -35,7 +35,7 @@ precompile_service(x, y; ctx, node) = x + y
 
 function rpc_api(url)
     ctx = Dict()
-    srv = connect("$url/precompile_server")
+    srv = connect("$url/precompile_server", datadir="/tmp/rembus_compile/precompile_server")
     expose(srv, precompile_service)
     inject(srv, ctx)
 
@@ -66,7 +66,7 @@ foo(df) = df
 
 function pool()
     df = DataFrame(:a => 1:3)
-    server = connect("server")
+    server = connect("server", datadir="/tmp/rembus_compile/my_server")
     expose(server, foo)
 
     nodes = ["a", "b"]

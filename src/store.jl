@@ -1,112 +1,70 @@
 
-function eval_file(twin, name, path)
-    mod = Module(Symbol(name))
+function eval_file(twin, cbtype, name, path)
+    # crete an anonymous module
+    mod = Module()
+    @debug "[$twin] evaluating $path"
     service_fn = Base.include(mod, path)
-    expose(twin, name, service_fn)
+    if cbtype == "services"
+        expose(twin, name, service_fn)
+    else
+        subscribe(twin, name, service_fn)
+    end
 end
 
-function save_service(router::Router, name, content)
-    dir = joinpath(broker_dir(router), "src", "services")
-    if !isdir(dir)
-        mkpath(dir)
-    end
-
+function save_callback(router::Router, cbtype, name, content)
+    dir = joinpath(broker_dir(router), "src", cbtype)
     path = joinpath(dir, "$name.jl")
-    @info "[$router] saving exposer to $path"
+    @debug "[$router] saving callback to $path"
     open(path, "w") do f
         write(f, content)
     end
-
     twin = router.id_twin["__repl__"]
-    eval_file(twin, name, path)
+    eval_file(twin, cbtype, name, path)
 end
 
-function load_services(twin)
-    router = top_router(twin.router)
-    #components = Module[]
-    dir = joinpath(broker_dir(top_router(router).id), "src", "services")
-    @info "[$router] Loading impls from $dir"
+function delete_callback(router::Router, cbtype, name)
+    path = joinpath(broker_dir(router), "src", cbtype, "$name.jl")
+    twin = router.id_twin["__repl__"]
 
-    if !isdir(dir)
-        mkpath(dir)
+    if cbtype == "services"
+        unexpose(twin, name)
+    else
+        unsubscribe(twin, name)
     end
 
-    for file in sort(readdir(dir))
-        endswith(file, ".jl") || continue
-
-        path = joinpath(dir, file)
-        name = splitext(file)[1]
-
-        @info "Loading component $name"
-
-        mod = Module(Symbol(name))
-        service_fn = Base.include(mod, path)
-        expose(twin, name, service_fn)
+    if isfile(path)
+        rm(path, force=true)
     end
-
-    return nothing
 end
 
-
-function load_components!(twin)
+function load_callbacks(twin)
     router = top_router(twin.router)
-    components = Module[]
-    dir = joinpath(broker_dir(top_router(router).id), "src")
-    @info "[$router] Loading impls from $dir"
 
-    if !isdir(dir)
-        mkpath(dir)
-    end
+    for cbtype in ["services", "subscribers"]
+        dir = joinpath(broker_dir(top_router(router).id), "src", cbtype)
+        @debug "[$router] Loading callbacks from $dir"
 
-    for file in sort(readdir(dir))
-        endswith(file, ".jl") || continue
+        if !isdir(dir)
+            mkpath(dir)
+        end
 
-        path = joinpath(dir, file)
-        name = Symbol(splitext(file)[1])
+        for file in sort(readdir(dir))
+            endswith(file, ".jl") || continue
 
-        @info "Loading component $name"
+            path = joinpath(dir, file)
+            name = splitext(file)[1]
 
-        mod = Module(name)
-        Base.include(mod, path)
-
-        if isdefined(mod, :bootstrap)
-            Base.invokelatest(() -> begin
-                bootfn = getfield(mod, :bootstrap)
-                bootfn(twin)
-            end)
-            push!(components, mod)
-        else
-            @warn "Component $name has no bootstrap(node)"
+            mod = Module()
+            fn = Base.include(mod, path)
+            if cbtype == "services"
+                expose(twin, name, fn)
+            else
+                subscribe(twin, name, fn)
+            end
         end
     end
 
-    return components
-end
-
-#=
-    load_tenants(router, ::FileStore)
-
-Return the owners dataframe
-=#
-function load_tenants(router, ::FileStore)
-    fn = joinpath(broker_dir(router.id), TENANTS_FILE)
-    if isfile(fn)
-        return JSON3.read(fn, Dict{String,String})
-    else
-        return Dict{String,String}()
-    end
-end
-
-#=
-    save_tenants(router, tenants::AbstractString)
-
-Save the tenants table.
-=#
-function save_tenants(router, tenants::Dict)
-    fn = joinpath(broker_dir(router), TENANTS_FILE)
-    open(fn, "w") do f
-        JSON3.write(f, tenants)
-    end
+    return nothing
 end
 
 function broker_dir(router::AbstractRouter)
@@ -202,54 +160,6 @@ end
 
 isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
 
-function load_topic_auth(router, ::FileStore)
-    @debug "loading topic_auth table"
-    fn = joinpath(broker_dir(router.id), "topic_auth.json")
-    if isfile(fn)
-        content = read(fn, String)
-        topics = Dict()
-        for (private_topic, cids) in JSON3.read(content, Dict)
-            topics[private_topic] = Dict(cids .=> true)
-        end
-        router.topic_auth = topics
-    end
-end
-
-function save_topic_auth(router, ::FileStore)
-    @debug "saving topic_auth table"
-    fn = joinpath(broker_dir(router), "topic_auth.json")
-
-    d = Dict()
-    for (topic, cids) in router.topic_auth
-        d[topic] = keys(cids)
-    end
-
-    open(fn, "w") do io
-        write(io, JSON3.write(d))
-    end
-end
-
-function load_admins(router, ::FileStore)
-    fn = joinpath(broker_dir(router.id), "admins.json")
-    @debug "loading $fn"
-    if isfile(fn)
-        content = read(fn, String)
-        router.admins = JSON3.read(content, Set)
-    end
-end
-
-function save_admins(router, ::FileStore)
-    @debug "saving admins"
-    fn = joinpath(broker_dir(router), "admins.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(router.admins))
-    end
-end
-
-#=
-
-Return the twin filename, transforming the '/'.
-=#
 function twin_file(router, name)
     parts = split(name, '/')
 
@@ -263,51 +173,6 @@ function twin_file(router, name)
     return joinpath(twin_dir, last(parts) * ".json")
 end
 
-#=
-    load_twin(router::Router, twin::Twin, ::FileStore)
-
-Load the persisted twin configuration from disk.
-=#
-function load_twin(router::Router, twin::Twin, ::FileStore)
-    @debug "[$twin] loading configuration"
-    fn = twin_file(router, twin.uid.id)
-    if isfile(fn)
-        content = read(fn, String)
-        cfg = JSON3.read(content, Dict, allow_inf=true)
-    else
-        cfg = Dict()
-    end
-
-    if haskey(cfg, "subscribers")
-        topicsdict = cfg["subscribers"]
-        twin.msg_from = topicsdict
-
-        topic_interests = router.topic_interests
-        for topic in keys(topicsdict)
-            if haskey(topic_interests, topic)
-                push!(topic_interests[topic], twin)
-            else
-                topic_interests[topic] = Set([twin])
-            end
-        end
-    end
-
-    if haskey(cfg, "exposers")
-        topics = cfg["exposers"]
-        topic_impls = router.topic_impls
-        for topic in topics
-            if haskey(topic_impls, topic)
-                push!(topic_impls[topic], twin)
-            else
-                topic_impls[topic] = Set([twin])
-            end
-        end
-    end
-
-    if haskey(cfg, "mark")
-        twin.mark = cfg["mark"]
-    end
-end
 
 
 function exposed_topics(router::Router, twin::Twin)
@@ -321,27 +186,6 @@ function exposed_topics(router::Router, twin::Twin)
     return topics
 end
 
-function save_twin(router::Router, twin::Twin, ::FileStore)
-    @debug "[$twin] saving methods configuration"
-    twinid = rid(twin)
-    twin_cfg = Dict()
-
-    if hasname(twin) && haskey(router.id_twin, twinid) && !isrepl(twin.uid)
-        twin_cfg["subscribers"] = twin.msg_from
-        twin_cfg["exposers"] = exposed_topics(router, twin)
-        twin_cfg["mark"] = twin.mark
-
-        if is_uuid4(router.process.supervisor.id)
-            @debug "[$twin] is a pool element: skipping twin configuration save"
-            return nothing
-        end
-
-        fn = twin_file(router, twin.uid.id)
-        open(fn, "w") do io
-            write(io, JSON3.write(twin_cfg, allow_inf=true))
-        end
-    end
-end
 
 #=
     save_configuration(router::Router)
@@ -351,21 +195,16 @@ Persist router configuration on disk.
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "[$router] saving configuration to $(broker_dir(router.id))"
-        save_topic_auth(router, router.store)
-        save_admins(router, router.store)
-
-        # twins configurations are saved in detach(twin)
-        #for twin in values(router.id_twin)
-        #    save_twin(router, twin, router.store)
-        #end
+        save_topic_auth(router)
+        save_admins(router)
     end
 end
 
 function load_configuration(router)
     callback_or(router, :load_configuration) do
         @debug "[$router] loading configuration from $(broker_dir(router.id))"
-        load_topic_auth(router, router.store)
-        load_admins(router, router.store)
-        router.owners = load_tenants(router, router.store)
+        load_topic_auth(router)
+        load_admins(router)
+        router.owners = load_tenants(router)
     end
 end

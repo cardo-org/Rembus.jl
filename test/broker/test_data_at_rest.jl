@@ -52,7 +52,7 @@ function run(pub_url, sub_url)
     close(sub)
 end
 
-
+ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
 @info "[data_at_rest] start"
 try
     pub_url = "ws://127.0.0.1:8010/pub"
@@ -60,6 +60,7 @@ try
 
     request_timeout!(20)
 
+    Rembus.broker_reset(broker_name)
     run(pub_url, sub_url)
 catch e
     @error "[data_at_rest] error: $e"

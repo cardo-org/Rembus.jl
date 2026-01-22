@@ -119,7 +119,6 @@ function shutdown_broker(router)
     @debug "shutting down broker ..."
     try
         Visor.shutdown(router.process.supervisor)
-        save_configuration(router)
     catch e
         @warn "$SHUTDOWN_CMD: $e"
     end

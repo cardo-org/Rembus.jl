@@ -38,11 +38,13 @@ end
 
     comp = "component1"
     bro = "test_router"
+    Rembus.broker_reset(bro)
     dir = joinpath(Rembus.rembus_dir(), bro, comp)
     @info "creating dir $dir"
     mkpath(dir)
 
     router = Rembus.Router{Rembus.Twin}(bro)
+    Rembus.boot(router)
     fn = Rembus.acks_file(router, comp)
     if isfile(fn)
         rm(fn)
@@ -51,13 +53,13 @@ end
     url = Rembus.RbURL(comp)
     twin = Rembus.Twin(url, router)
     msg = Rembus.PubSubMsg(twin, "topic", "data", Rembus.QOS2)
-    twin.ackdf = Rembus.load_received_acks(router, url, router.store)
+    twin.ackdf = Rembus.load_received_acks(router, url)
     Rembus.add_pubsub_id(twin, msg)
-    Rembus.save_received_acks(twin, router.store)
+    Rembus.save_received_acks(twin)
 
     # reload the acks file
     twin2 = Rembus.Twin(url, router)
-    twin2.ackdf = Rembus.load_received_acks(router, url, router.store)
+    twin2.ackdf = Rembus.load_received_acks(router, url)
     @test nrow(twin2.ackdf) == 1
     @test twin.ackdf[1, :] == twin2.ackdf[1, :]
 end
@@ -79,6 +81,7 @@ end
     @test request_timeout(rb) == 20
     shutdown()
 end
+
 @testitem "default_server" begin
     rb = server()
     @test Rembus.islistening(rb, wait=10)
@@ -138,10 +141,10 @@ end
     router = Rembus.get_router(name="myrouter", http=6754)
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
-    Rembus.save_topic_auth(router, router.store)
+    Rembus.save_topic_auth(router)
 
     router.topic_auth = Dict()
-    Rembus.load_topic_auth(router, router.store)
+    Rembus.load_topic_auth(router)
     @test router.topic_auth == cfg
 
     shutdown()
@@ -201,7 +204,7 @@ end
 end
 
 @testitem "no message dir" begin
-    router = Rembus.get_router(name="test_router")
+    router = Rembus.get_router(name="test_router_2")
     mdir = Rembus.messages_dir(router)
     if isdir(mdir)
         rm(mdir, recursive=true)

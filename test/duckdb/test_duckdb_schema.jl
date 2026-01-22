@@ -16,10 +16,12 @@ function nowts()
     return UInt32(t - t % 900)
 end
 
-function run(con)
+function run()
+    broker_name = "duckdb_schema"
+    Rembus.broker_reset(broker_name)
 
     jsonstr = read(joinpath(@__DIR__, "test_schema.json"), String)
-    bro = component(con, schema=jsonstr)
+    bro = component(name=broker_name, schema=jsonstr)
 
     pub = component("duckdb_pub")
 
@@ -78,6 +80,9 @@ function run(con)
     close(pub)
     @debug "[$(now())] closed pub"
     close(bro)
+    sleep(1)
+
+    con = DuckDB.DB(Rembus.top_router(bro.router).dbpath)
 
     df = DuckDB.execute(con, "SELECT * FROM topic1") |> DataFrame
     @debug "[duckdb_schema] topic1 data:\n$(df)"
@@ -95,25 +100,24 @@ function run(con)
     @test nrow(df) == 2
 
     df = DuckDB.execute(con, "SELECT * FROM topic4") |> DataFrame
+
+    close(con)
+
     @debug "[duckdb_schema] topic4 data:\n$(df)"
     @test nrow(df) == 2
-
 end
 
 
 @info "[duckdb_schema] start"
-con = DuckDB.DB()
-
 try
-    ENV["REMBUS_ARCHIVER_INTERVAL"] = 1
+    ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
     init_ducklake()
-    run(con)
+    run()
 catch e
     @test false
     @error "[duckdb_schema] server error: $e"
     showerror(stdout, e, catch_backtrace())
 finally
     shutdown()
-    close(con)
 end
 @info "[duckdb_schema] stop"

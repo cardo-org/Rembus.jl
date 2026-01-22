@@ -89,7 +89,7 @@ function run()
     temperature = 18.5
     wind = 3
 
-    bro = broker()
+    bro = broker(name="hierarchy")
     Rembus.add_plugin(bro, Zenoh())
 
     sub = component("hierarchy_sub")

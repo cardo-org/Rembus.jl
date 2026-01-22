@@ -111,8 +111,6 @@ function run(authorized_component)
     @test_throws RembusError unexpose(consumer, another_service)
     @test_throws RembusError unsubscribe(consumer, another_topic)
 
-    unexpose(consumer, priv_service)
-
     for cmd in [
         Rembus.BROKER_CONFIG_CMD,
         Rembus.LOAD_CONFIG_CMD,
@@ -168,7 +166,6 @@ function run(authorized_component)
 
     # execute a shutdown
     Rembus.broker_shutdown(rb)
-    Visor.dump()
 
     for c in [rb, producer, consumer, unauth_consumer]
         shutdown(c)

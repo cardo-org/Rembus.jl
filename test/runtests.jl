@@ -1,3 +1,4 @@
+using DuckDB
 using Rembus
 using SafeTestsets
 using Test
@@ -37,6 +38,11 @@ const GROUP = get(ENV, "GROUP", "all")
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "keyspace")
         @time @safetestset "keyspace" begin
             include("keyspace/test_keyspace.jl")
+        end
+    end
+    if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "swdistribution")
+        @time @safetestset "swdistribution" begin
+            include("swdistribution/test_swdistribution.jl")
         end
     end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
@@ -120,7 +126,14 @@ const GROUP = get(ENV, "GROUP", "all")
             include("json-rpc/test_jsonrpc_register.jl")
         end
     end
+    #return
     if GROUP == "all" || GROUP == "api"
+        @time @safetestset "anonym" begin
+            include("api/test_anonym.jl")
+        end
+        @time @safetestset "wait" begin
+            include("api/test_wait.jl")
+        end
         @time @safetestset "ifdown_block" begin
             include("api/test_ifdown_block.jl")
         end

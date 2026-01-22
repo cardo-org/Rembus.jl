@@ -23,13 +23,13 @@ setup_twin(r, twin::Twin) = nothing
 
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
-        df = load_received_acks(router, url, router.store)
+        df = load_received_acks(router, url)
         if haskey(router.id_twin, rid(url))
             twin = router.id_twin[rid(url)]
         else
             twin = Twin(url, bottom_router(router))
             twin.ackdf = df
-            load_twin(router, twin, router.store)
+            load_twin(router, twin)
         end
 
         if !isdefined(twin, :process) || istaskdone(twin.process.task)
@@ -99,7 +99,7 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
         end
         sts = STS_SUCCESS
     catch e
-        @debug "[$(msg.topic)] server error (method too young?): $e"
+        # @debug "[$(msg.topic)] server error (method too young?): $e"
         result = "$e"
         sts = STS_METHOD_EXCEPTION
 
@@ -211,33 +211,8 @@ function broker_isnamed(router::Router)
     return !occursin(idv4_reg, router.id)
 end
 
-#=
-    boot(router)
-
-Setup the router.
-=#
-function boot(router::Router, ::FileStore)
-    if broker_isnamed(router)
-        dir = broker_dir(router.id)
-
-        appdir = keys_dir(router.id)
-        if !isdir(appdir)
-            mkdir(appdir)
-        end
-
-        msg_dir = messages_dir(router.id)
-        if !isdir(msg_dir)
-            mkdir(msg_dir)
-        end
-
-        load_configuration(router)
-    end
-
-    return nothing
-end
 
 function init(router::Router)
-    boot(router, router.store)
     router.local_function["rid"] = (ctx=missing, twin=nothing) -> router.id
     router.local_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
     router.local_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
@@ -248,6 +223,23 @@ function init(router::Router)
         ctx=missing,
         twin=nothing
     ) -> service_install(router, name, cnt, ctx, twin)
+    router.local_function["julia_service_uninstall"] = (
+        name,
+        ctx=missing,
+        twin=nothing
+    ) -> service_uninstall(router, name, ctx, twin)
+    router.local_function["julia_subscriber_install"] = (
+        name,
+        cnt,
+        ctx=missing,
+        twin=nothing
+    ) -> subscriber_install(router, name, cnt, ctx, twin)
+    router.local_function["julia_subscriber_uninstall"] = (
+        name,
+        ctx=missing,
+        twin=nothing
+    ) -> subscriber_uninstall(router, name, ctx, twin)
+
 end
 
 function first_up(::Router, tenant, topic, implementors)
@@ -534,9 +526,12 @@ function router_task(self, router::Router, implementor_rule)
             end
         end
     finally
-        if broker_isnamed(router)
+        if broker_isnamed(router) && isopen(router.con)
             save_configuration(router)
         end
+
+        # close the duckdb connection
+        closedb(router.con)
     end
 end
 
@@ -754,9 +749,11 @@ function serve_tcp(pd, router::Router, port, issecure=false)
     end
 end
 
-function get_router(db=FileStore();
+function get_router(;
     tables=OrderedDict(),
     name=localcid(),
+    datadir=nothing,
+    dbpath=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -770,14 +767,15 @@ function get_router(db=FileStore();
 )
     broker_process = from("$name.broker")
     if broker_process === nothing
-        router = Router{Twin}(name, nothing, missing, tables)
-        router.store = db
+        router = Router{Twin}(name, dbpath, datadir, nothing, missing, tables)
         if authenticated
             router.mode = Rembus.authenticated
         end
         set_policy(router, policy)
         bp = process("broker", tsk, args=(router,), force_interrupt_after=30.0)
         router.process = bp
+
+        boot(router)
         init(router)
 
         start_broker(

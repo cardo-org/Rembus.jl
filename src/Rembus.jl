@@ -7,6 +7,7 @@ using DataFrames
 using Dates
 using DataStructures
 using Distributed
+using DuckDB
 using FileWatching
 using HTTP
 using JLD2
@@ -44,6 +45,7 @@ export
     get_private_topics,
     private_topic,
     public_topic,
+    anonym,
     broker,
     component,
     server,
@@ -93,6 +95,7 @@ include("twin.jl")
 include("broker.jl")
 include("admin.jl")
 include("register.jl")
+include("db.jl")
 include("store.jl")
 include("transport.jl")
 include("api.jl")

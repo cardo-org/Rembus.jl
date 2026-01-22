@@ -9,7 +9,7 @@ include("../utils.jl")
 
 #Rembus.debug!()
 
-function run(con)
+function run()
 
     df = DataFrame(
         "name" => ["a", "b", "c"],
@@ -17,7 +17,7 @@ function run(con)
         "value" => ["val1", "val2", "val3"]
     )
     jsonstr = read(joinpath(@__DIR__, "test_df.json"), String)
-    bro = component(con, schema=jsonstr)
+    bro = component(schema=jsonstr)
 
     pub = component("duckdb_pub")
 
@@ -69,7 +69,12 @@ function run(con)
     @debug "[$(now())] closing pub"
     close(pub)
     @debug "[$(now())] closed pub"
+
     close(bro)
+
+
+    dbpath = Rembus.top_router(bro.router).dbpath
+    con = DuckDB.DB(dbpath)
 
     df = DuckDB.execute(con, "SELECT * FROM topic4") |> DataFrame
     @debug "[duckdb_df] topic4 data:\n$(df)"
@@ -81,24 +86,24 @@ function run(con)
     @test filter(r -> r.name == "d" && r.type == "t4", df)[1, :value] == "vald"
 
     df = DuckDB.execute(con, "SELECT * FROM topic2") |> DataFrame
+
+    close(con)
+
     @debug "[duckdb_df] topic2 data:\n$(df)"
     @test nrow(df) == 2
 
 end
 
 @info "[duckdb_df] start"
-con = DuckDB.DB()
-
 try
-    ENV["REMBUS_ARCHIVER_INTERVAL"] = 10
+    ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
     init_ducklake()
-    run(con)
+    run()
 catch e
     @test false
     @error "[duckdb_df] server error: $e"
     showerror(stdout, e, catch_backtrace())
 finally
     shutdown()
-    close(con)
 end
 @info "[duckdb_df] stop"

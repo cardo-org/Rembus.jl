@@ -1,5 +1,7 @@
 include("../utils.jl")
 
+broker_name = "keyspace"
+
 function environment(topic, value; ctx, node)
     ctx[topic] = value
 end
@@ -10,7 +12,7 @@ function run()
     temperature = 18.5
     wind = 3
 
-    bro = broker()
+    bro = broker(name=broker_name)
 
     sub1 = component("hierarchy_sub1")
     inject(sub1, ctx)
@@ -48,6 +50,7 @@ end
 @info "[hierarchy] start"
 try
     request_timeout!(5)
+    Rembus.broker_reset(broker_name)
     run()
 catch e
     @test false

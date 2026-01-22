@@ -6,11 +6,11 @@ function run()
 
     Rembus.localcid!("policies_component")
 
-    server = connect("server")
+    server = connect("server", datadir="/tmp/rembus/policies_server")
 
     nodes = ["a", "b", "c"]
     for policy in ["round_robin", "less_busy"]
-        rb = component(nodes, policy=policy)
+        rb = component(nodes, policy=policy, datadir="/tmp/rembus/policies_nodes")
         @info "[$rb] socket: $(rb.socket)"
         expose(server, foo)
 

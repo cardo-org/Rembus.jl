@@ -76,8 +76,7 @@ try
     srv_url = "ws://127.0.0.1:8010/setup_srv"
 
     # clear configurartion
-    rm(joinpath(Rembus.rembus_dir(), broker_name), recursive=true, force=true)
-
+    Rembus.broker_reset(broker_name)
     request_timeout!(20)
     run(pub_url, srv_url)
 catch e

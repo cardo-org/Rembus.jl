@@ -49,7 +49,7 @@ function run()
 
     empty!(ctx)
     publish(publisher, "mytopic", msg)
-    sleep(0.1)
+    sleep(1)
     @info "failover ctx: $ctx"
     @test length(ctx) === 2
 

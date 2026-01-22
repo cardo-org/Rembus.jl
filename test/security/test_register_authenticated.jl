@@ -13,7 +13,7 @@ function init(pin)
     if !isdir(broker_dir)
         mkdir(broker_dir)
     end
-    Rembus.save_tenants(broker_dir, tenant_settings)
+    Rembus.save_tenants(broker_name, tenant_settings)
 end
 
 function run()

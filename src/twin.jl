@@ -142,33 +142,6 @@ end
 
 acks_file(r::Router, id::AbstractString) = joinpath(rembus_dir(), r.id, "$id.acks")
 
-#=
-    load_received_acks(router::Router, component::RbURL, ::FileStore)
-
-Load from file the ids of received acks of Pub/Sub messages
-awaiting Ack2 acknowledgements.
-=#
-function load_received_acks(router::Router, component::RbURL, ::FileStore)
-    if hasname(component)
-        path = acks_file(router, component.id)
-        if isfile(path)
-            return load_object(path)
-        end
-    end
-    return ack_dataframe()
-end
-
-#=
-    save_received_acks(rb::RBHandle, ::FileStore)
-
-Save to file the ids of received acks of Pub/Sub messages
-waitings Ack2 acknowledgements.
-=#
-function save_received_acks(twin::Twin, ::FileStore)
-    router = top_router(twin.router)
-    path = acks_file(router, twin.uid.id)
-    save_object(path, twin.ackdf)
-end
 
 #=
     add_pubsub_id(twin, msg)
@@ -345,8 +318,9 @@ end
 Start a component that connects to a pool of nodes defined by the `urls` array.
 """
 function component(
-    urls::Vector,
-    db=FileStore();
+    urls::Vector;
+    datadir=nothing,
+    dbpath=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -363,7 +337,9 @@ function component(
     end
 
     router = get_router(
-        db, name=name,
+        name=name,
+        datadir=datadir,
+        dbpath=dbpath,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -392,8 +368,9 @@ function singleton()
 end
 
 function component(
-    url::RbURL,
-    db=FileStore();
+    url::RbURL;
+    datadir=nothing,
+    dbpath=nothing,
     ws=nothing,
     tcp=nothing,
     zmq=nothing,
@@ -416,8 +393,9 @@ function component(
         name = rid(url)
     end
     router = get_router(
-        db,
         name=name,
+        datadir=datadir,
+        dbpath=dbpath,
         ws=ws,
         tcp=tcp,
         zmq=zmq,
@@ -461,12 +439,17 @@ function add_failovers(twin::Twin, failovers)
     return twin
 end
 
-function connect(url::RbURL; name=missing, enc=CBOR)
+function connect(
+    url::RbURL;
+    name=missing,
+    datadir=nothing,
+    dbpath=nothing,
+    enc=CBOR)
     if ismissing(name)
         name = url.id
     end
 
-    router = get_router(name=name, keyspace=false)
+    router = get_router(name=name, datadir=datadir, dbpath=dbpath, keyspace=false)
     twin = bind(router, url)
     twin.enc = enc
     try
@@ -560,7 +543,7 @@ function reconnect(twin::Twin, url::RbURL)
                 end
 
                 isconnected = true
-                send_data_at_rest(twin, twin.failover_from, twin.router.store)
+                send_data_at_rest(twin, twin.failover_from)
             end
         end
     catch e
@@ -693,7 +676,7 @@ function setidentity(router::Router, twin::Twin, msg; isauth=false)
     router.id_twin[rid(twin)] = twin
     setname(twin.process, rid(twin))
     twin.isauth = isauth
-    load_twin(router, twin, router.store)
+    load_twin(router, twin)
     setup_twin(twin.router, twin)
     return nothing
 end
@@ -1091,35 +1074,12 @@ function messages_files(node, from_msg)
     return files
 end
 
-"""
-    send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::DuckDB.DB
-
-Send persisted and cached messages.
-
-`max_period` is a time barrier set by the reactive command.
-
-Valid time period for sending old messages: `[min(twin.topic.msg_from, max_period), now_ts]`
-"""
-function send_data_at_rest(twin::Twin, max_period::Float64, ::FileStore)
-    if hasname(twin) && (max_period > 0.0)
-        files = messages_files(twin, max_period)
-        for fn in files
-            @debug "loading file [$fn]"
-            from_disk_messages(twin, fn)
-        end
-
-        # send the cached in-memory messages
-        from_memory_messages(twin)
-    end
-
-    return nothing
-end
 
 function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
     router = top_router(twin.router)
-    return send_data_at_rest(twin, from_msg, router.store)
+    return send_data_at_rest(twin, from_msg)
 end
 
 #=
@@ -1411,8 +1371,8 @@ function detach(twin)
     end
     # save the state to disk
     router = top_router(twin.router)
-    if !isrepl(twin.uid)
-        save_twin(router, twin, router.store)
+    if !isrepl(twin.uid) && hasname(twin)
+        save_twin(router, twin)
     end
 
     if !isa(twin.socket, Float)
@@ -1420,8 +1380,8 @@ function detach(twin)
         # This will trigger the requests timeout ...
         twin.socket = Float(twin.socket.out, twin.socket.direct)
 
-        if !isempty(twin.ackdf)
-            save_received_acks(twin, router.store)
+        if !isempty(twin.ackdf) && hasname(twin)
+            save_received_acks(twin)
         end
 
         # Remove the twin from the router tables.

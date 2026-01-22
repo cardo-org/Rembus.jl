@@ -314,7 +314,7 @@ end
 
 function persist(router)
     if !isempty(router.msg_df)
-        save_data_at_rest(router, router.store)
+        save_data_at_rest(router)
         router.msg_df = msg_dataframe()
     end
 end
@@ -369,26 +369,15 @@ function get_data(pkt)
     return data
 end
 
-function data_at_rest(; from=LastReceived, broker="broker")
-    files = messages_files(broker, to_microseconds(from))
-    result = DataFrame(
-        recv=UInt64[],
-        slot=UInt32[],
-        qos=UInt8[],
-        uid=Msgid[],
-        topic=String[],
-        pkt=Vector{UInt8}[],
-        data=Any[]
-    )
-    for fn in files
-        path = joinpath(messages_dir(broker), fn)
-        if isfile(path)
-            df = load_object(path)
-            df.data = get_data.(Vector{UInt8}.(df.pkt))
-            result = vcat(result, df)
-        end
-    end
-    return result
+function data_at_rest(
+    ; from=LastReceived, broker="broker", datadir=nothing, dbpath=nothing
+)
+    con = dbconnect(broker=broker, datadir=datadir, dbpath=dbpath)
+    return DataFrame(DuckDB.execute(
+        con,
+        "SELECT * FROM message WHERE name=?",
+        [broker]
+    ))
 end
 
 
@@ -447,15 +436,11 @@ end
 
 msg_files(twin::Twin) = msg_files(twin.router)
 
-function save_data_at_rest(router, ::FileStore)
-    fn = messages_fn(router, router.msg_df[end, 1]) # the newest ts value
-    @debug "[broker] persisting messages on disk: $fn"
-    save_object(fn, router.msg_df)
-end
-
 function broker_reset(broker_name="broker")
-    rm(messages_dir(broker_name), force=true, recursive=true)
     bdir = broker_dir(broker_name)
+    dbpath = joinpath(rembus_dir(), "$broker_name.ducklake")
+    @debug "removing $dbpath"
+    rm(dbpath, force=true)
     if isdir(bdir)
         foreach(
             d -> rm(d, force=true, recursive=true),
@@ -521,7 +506,7 @@ end
 # For the future. See: https://ducklake.select/docs/stable/duckdb/unsupported_features
 #create_enum(en, db::Archiver) = nothing
 
-function create_schema(jsonstr::AbstractString, db)
+function create_schema(jsonstr::AbstractString)
     config = JSON3.read(jsonstr, Dict)
     tables = config["tables"]
 
@@ -554,6 +539,30 @@ function service_install(
     router, topic, code, ctx=nothing, node=nothing
 )
     @info "installing service [$topic]"
-    save_service(router, topic, code)
+    save_callback(router, "services", topic, code)
+    return "ok"
+end
+
+function service_uninstall(
+    router, topic, code, ctx=nothing, node=nothing
+)
+    @info "uninstalling service [$topic]"
+    delete_callback(router, "services", topic)
+    return "ok"
+end
+
+function subscriber_install(
+    router, topic, code, ctx=nothing, node=nothing
+)
+    @info "installing subscriber [$topic]"
+    save_callback(router, "subscribers", topic, code)
+    return "ok"
+end
+
+function subscriber_uninstall(
+    router, topic, code, ctx=nothing, node=nothing
+)
+    @info "uninstalling subscriber [$topic]"
+    delete_callback(router, "subscribers", topic)
     return "ok"
 end

@@ -1,4 +1,5 @@
 using DataFrames
+using DuckDB
 using JSONTables
 using JSON3
 using HTTP
@@ -109,7 +110,15 @@ function check_sentinel(ctx; sentinel=missing, max_wait=10)
     return sts
 end
 
-function run_broker(init, secure, ws, tcp, zmq, http, name, reset, authenticated)
+function run_broker(
+    init,
+    secure,
+    ws, tcp, zmq, http,
+    name,
+    reset,
+    authenticated,
+    datadir=nothing, dbpath=nothing
+)
     router = nothing
     if get(ENV, "BROKER_RUNNING", "0") == "0"
         if reset
@@ -126,8 +135,15 @@ function run_broker(init, secure, ws, tcp, zmq, http, name, reset, authenticated
             zmq=zmq,
             http=http,
             name=name,
+            datadir=datadir,
+            dbpath=dbpath,
             authenticated=authenticated,
         )
+
+        twin = Rembus.bind(router)
+
+        # Load installed services and subscribers
+        Rembus.load_callbacks(twin)
 
         start_proxy(name, router)
     end
@@ -138,6 +154,8 @@ end
 function execute(
     fn,
     testname;
+    datadir=nothing,
+    dbpath=nothing,
     authenticated=false,
     reset=true,
     setup=nothing,
@@ -148,7 +166,9 @@ function execute(
     http=nothing,
     secure=false,
 )
-    router = run_broker(setup, secure, ws, tcp, zmq, http, testname, reset, authenticated)
+    router = run_broker(
+        setup, secure, ws, tcp, zmq, http, testname, reset, authenticated, datadir, dbpath
+    )
 
     if !isnothing(router)
         Rembus.islistening(
@@ -172,16 +192,24 @@ end
 
 # name become an admin
 function set_admin(broker, name)
-    broker_dir = joinpath(Rembus.rembus_dir(), broker)
-    if !isdir(broker_dir)
-        mkdir(broker_dir)
-    end
+    con = Rembus.dbconnect(broker=broker)
 
-    # add admin privilege to client with name equals to test_private
-    fn = joinpath(broker_dir, "admins.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(Set([name])))
-    end
+    DuckDB.execute(
+        con,
+        """
+        CREATE TABLE IF NOT EXISTS admin (
+            name TEXT NOT NULL,
+            twin TEXT
+        )"""
+    )
+
+
+    DuckDB.execute(
+        con,
+        "INSERT INTO admin (name,twin) VALUES (?, ?)",
+        [broker, name]
+    )
+    close(con)
 end
 
 function remove_keys(broker_name, cid)

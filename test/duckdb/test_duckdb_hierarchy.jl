@@ -31,11 +31,11 @@ function metric(topic, value; ctx, node)
     ctx[topic] = value
 end
 
-function run(con)
+function run()
     temperature = 20.0
     jsonstr = read(joinpath(@__DIR__, "test_hierarchy.json"), String)
     ctx = Dict()
-    bro = component(con, schema=jsonstr)
+    bro = component(schema=jsonstr)
 
     sub = component("hsub")
     inject(sub, ctx)
@@ -64,24 +64,24 @@ function run(con)
     @test isa(ctx["veneto/agordo/temperature"], Dict)
     @test isa(ctx["veneto/belluno/temperature"], Float64)
 
+    con = DuckDB.DB(Rembus.top_router(bro.router).dbpath)
     df = DataFrame(DuckDB.execute(con, "select * from temperature"))
+    close(con)
+
     @test nrow(df) == 1
     @test df[1, :regione] == "veneto"
     @test df[1, :loc] == "agordo"
 end
 
 @info "[duckdb_hierarchy] start"
-con = DuckDB.DB()
-
 try
     init_ducklake()
-    run(con)
+    run()
 catch e
     @test false
     @error "[duckdb_hierarchy] server error: $e"
     showerror(stdout, e, catch_backtrace())
 finally
     shutdown()
-    close(con)
 end
 @info "[duckdb_hierarchy] stop"
