@@ -203,16 +203,16 @@ end
     @test time() - t > 2.0
 end
 
-@testitem "no message dir" begin
-    router = Rembus.get_router(name="test_router_2")
-    mdir = Rembus.messages_dir(router)
-    if isdir(mdir)
-        rm(mdir, recursive=true)
-    end
-
-    @test !isdir(mdir)
-    msgs = Rembus.msg_files(router)
-    @test isempty(msgs)
-
-    shutdown()
-end
+#@testitem "no message dir" begin
+#    router = Rembus.get_router(name="test_router_2")
+#    mdir = Rembus.messages_dir(router)
+#    if isdir(mdir)
+#        rm(mdir, recursive=true)
+#    end
+#
+#    @test !isdir(mdir)
+#    #msgs = Rembus.msg_files(router)
+#    #@test isempty(msgs)
+#
+#    shutdown()
+#end

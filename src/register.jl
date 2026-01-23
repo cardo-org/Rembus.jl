@@ -130,6 +130,8 @@ function check_token(router, tenant, token::AbstractString)
     end
 end
 
+isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
+
 #=
     register(router, msg)
 

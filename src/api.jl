@@ -228,7 +228,7 @@ function component(;
     load_callbacks(twin)
 
     twin.enc = enc
-    return add_failovers(twin, failovers)
+    return handle_connection(twin, failovers)
 end
 
 """

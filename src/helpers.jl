@@ -46,6 +46,13 @@ function rembus_dir()
     return get(ENV, "REMBUS_DIR", default_rembus_dir())
 end
 
+function broker_dir(router::AbstractRouter)
+    r = top_router(router)
+    joinpath(r.settings.rembus_dir, r.process.supervisor.id)
+end
+
+broker_dir(name::AbstractString) = joinpath(rembus_dir(), name)
+
 function init_log(level=nothing)
     if !haskey(ENV, "JULIA_DEBUG")
         isnothing(level) ? logging("warn") : logging(level)
@@ -291,7 +298,7 @@ end
 Methods related to the persistence of Pubsub messages.
 =#
 
-messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
+#messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
 
 function encode_message(msg::PubSubMsg)
     io = IOBuffer()
@@ -354,20 +361,20 @@ function save_message(pd, router)
 end
 
 
-function get_data(pkt)
-    payload = decode(pkt)
-    ptype = payload[1] & 0x0f
-    flags = payload[1] & 0xf0
-    if ptype == TYPE_PUB
-        if flags > QOS0
-            data = dataframe_if_tagvalue(payload[4])
-        else
-            data = dataframe_if_tagvalue(payload[3])
-        end
-    end
-
-    return data
-end
+#function get_data(pkt)
+#    payload = decode(pkt)
+#    ptype = payload[1] & 0x0f
+#    flags = payload[1] & 0xf0
+#    if ptype == TYPE_PUB
+#        if flags > QOS0
+#            data = dataframe_if_tagvalue(payload[4])
+#        else
+#            data = dataframe_if_tagvalue(payload[3])
+#        end
+#    end
+#
+#    return data
+#end
 
 function data_at_rest(
     ; from=LastReceived, broker="broker", datadir=nothing, dbpath=nothing
@@ -408,33 +415,33 @@ function twin_topics(twin::Twin)
     return topics
 end
 
-function from_disk_messages(twin::Twin, fn)
-    path = joinpath(messages_dir(twin.router), fn)
-    df = load_object(path)
-    interests = twin_topics(twin)
-    filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
-    if !isempty(filtered)
-        filtered.msg = decode.(Vector{UInt8}.(filtered.pkt))
-        send_messages(twin, filtered)
-    end
-end
+#function from_disk_messages(twin::Twin, fn)
+#    path = joinpath(messages_dir(twin.router), fn)
+#    df = load_object(path)
+#    interests = twin_topics(twin)
+#    filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
+#    if !isempty(filtered)
+#        filtered.msg = decode.(Vector{UInt8}.(filtered.pkt))
+#        send_messages(twin, filtered)
+#    end
+#end
 
 function from_memory_messages(twin::Twin)
     router = top_router(twin.router)
     send_messages(twin, router.msg_df)
 end
 
-file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
+#file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
 
-function msg_files(router)
-    mdir = messages_dir(router)
-    if !isdir(mdir)
-        return String[]
-    end
-    return sort(readdir(mdir), lt=file_lt)
-end
-
-msg_files(twin::Twin) = msg_files(twin.router)
+#function msg_files(router)
+#    mdir = messages_dir(router)
+#    if !isdir(mdir)
+#        return String[]
+#    end
+#    return sort(readdir(mdir), lt=file_lt)
+#end
+#
+#msg_files(twin::Twin) = msg_files(twin.router)
 
 function broker_reset(broker_name="broker")
     bdir = broker_dir(broker_name)

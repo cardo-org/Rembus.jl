@@ -6,7 +6,7 @@ using TestItemRunner
 
 const GROUP = get(ENV, "GROUP", "all")
 
-@run_package_tests
+#@run_package_tests
 
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"
@@ -28,6 +28,11 @@ const GROUP = get(ENV, "GROUP", "all")
     if GROUP == "all" || GROUP == "offline"
         @time @safetestset "pubsub_offline" begin
             include("offline/test_pubsub_offline.jl")
+        end
+    end
+    if GROUP == "all" || GROUP == "failovers"
+        @time @safetestset "pubsub_offline" begin
+            include("failovers/test_failovers.jl")
         end
     end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "mqtt")

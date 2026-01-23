@@ -27,7 +27,6 @@ function closedb(db::DuckDB.DB)
 end
 
 function with_db(f, router::Router)
-    #con = DuckDB.DB(router.dbpath)
     con = router.con
 
     if !isopen(con)
@@ -38,9 +37,13 @@ function with_db(f, router::Router)
     try
         return f(con)
     finally
-        #DuckDB.close(con)
         unlock(ducklock)
     end
+end
+
+function with_db_read(f, router::Router)
+    reader = DuckDB.connect(router.con)
+    return f(reader)
 end
 
 function columndef(col::Rembus.Column)
@@ -87,9 +90,9 @@ function delete(router::Router, table, obj)
 end
 
 function query(router, table, obj)
-    with_db(router) do con
+    with_db_read(router) do con
         if isnothing(obj)
-            df = DataFrame(DuckDB.execute(con, "SELECT * FROM $(table.name)"))
+            df = DataFrame(DuckDB.execute(con, "SELECT * FROM rl.$(table.name)"))
         else
             allowed = ("where", "when")
             bad = filter(k -> !(k in allowed), keys(obj))
@@ -112,7 +115,7 @@ function query(router, table, obj)
             end
 
             @debug "query: SELECT * FROM $(table.name) $at $where_cond"
-            df = DataFrame(DuckDB.execute(con, "SELECT * FROM $(table.name) $at $where_cond"))
+            df = DataFrame(DuckDB.execute(con, "SELECT * FROM rl.$(table.name) $at $where_cond"))
         end
         return df
     end
@@ -240,7 +243,7 @@ function boot(router::Router)
     con = dbconnect(datadir=data_dir, dbpath=db_name)
     create_tables(router, con)
     router.con = con
-    Rembus.load_configuration(router)
+    load_configuration(router)
 end
 
 ## See: enum type: likely to be supported in the future:
@@ -590,8 +593,7 @@ function save_data_at_rest(router::Rembus.Router)
                 end
             end
         catch e
-            @error "[$router] DuckDB: $e"
-            showerror(stdout, e, catch_backtrace())
+            @error "[$router] save_data_at_rest: $e"
         finally
             # clear the in-memory message dataframe
             empty!(router.msg_df)
@@ -695,6 +697,17 @@ function sync_cfg(con, router_name, table_name, new_df)
         DuckDB.execute(con, "SELECT * FROM $table_name WHERE name='$router_name'")
     )
     sync_table(con, table_name, current_df, new_df)
+end
+
+function exposed_topics(router::Router, twin::Twin)
+    topics = String[]
+    for (topic, twins) in router.topic_impls
+        if twin in twins
+            push!(topics, topic)
+        end
+    end
+
+    return topics
 end
 
 function save_twin(router, twin)
@@ -896,5 +909,32 @@ function save_received_acks(twin)
         insertcols!(current_df, 1, :name .=> name)
         insertcols!(current_df, 2, :twin .=> rid(twin))
         sync_twin(con, name, rid(twin), "wait_ack2", current_df)
+    end
+end
+
+#=
+    save_configuration(router::Router)
+
+Persist router security settings: admins and private topics.
+=#
+function save_configuration(router::Router)
+    callback_or(router, :save_configuration) do
+        @debug "[$router] saving configuration to $(broker_dir(router.id))"
+        save_topic_auth(router)
+        save_admins(router)
+    end
+end
+
+#=
+    load_configuration(router::Router)
+
+Load from db router security settings: admins and private topics.
+=#
+function load_configuration(router)
+    callback_or(router, :load_configuration) do
+        @debug "[$router] loading configuration from $(broker_dir(router.id))"
+        load_topic_auth(router)
+        load_admins(router)
+        router.owners = load_tenants(router)
     end
 end

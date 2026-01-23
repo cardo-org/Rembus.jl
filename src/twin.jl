@@ -10,7 +10,6 @@ function start_twin(router::Router, twin::Twin)
     startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
     yield()
     router.id_twin[id] = twin
-    #router.twin_initialize(router.shared, twin)
     return twin
 end
 
@@ -415,10 +414,19 @@ function component(url::RbURL, router::AbstractRouter, enc=CBOR, failovers=[])
 
     twin = bind(router, url)
     twin.enc = enc
-    return add_failovers(twin, failovers)
+    return handle_connection(twin, failovers)
 end
 
-function add_failovers(twin::Twin, failovers)
+"""
+    handle_connection(twin::Twin, failovers)
+
+Setup the twin connection handling and initiate the connection.
+
+* Add failover URLs to the twin and setup the reconnect handler.
+* Setup the reconnect handler.
+* Connect the twin.
+"""
+function handle_connection(twin::Twin, failovers)
     twin.failovers = [twin.uid]
     for failover in failovers
         cid = RbURL(failover)
@@ -515,6 +523,13 @@ function rembus_ca()
     throw(CABundleNotFound())
 end
 
+#=
+    reconnect(twin::Twin, url::RbURL)
+
+Attempt to reconnect to the given `url`.
+
+The `url` is the primary url of the twin or one of its failover urls.`
+=#
 function reconnect(twin::Twin, url::RbURL)
     twin.uid = url
     isconnected = false
@@ -567,7 +582,7 @@ function reconnect(twin::Twin)
     end
 end
 
-"""
+#=
     do_connect(twin::Twin)
 
 Connect to the endpoint declared with `REMBUS_BASE_URL` env variable.
@@ -576,7 +591,7 @@ Connect to the endpoint declared with `REMBUS_BASE_URL` env variable.
 
 A component is considered anonymous when a different and random UUID is used as
 component identifier each time the application connect to the broker.
-"""
+=#
 function do_connect(twin::Twin)
     if !isopen(twin.socket)
         router = top_router(twin.router)
@@ -1051,29 +1066,6 @@ function rpc_request(router::Router, msg, implementor_rule)
     return msg
 end
 
-function messages_files(node, from_msg)
-    allfiles = msg_files(node)
-    nowts = time()
-    mdir = Rembus.messages_dir(node)
-    files = filter(allfiles) do fn
-        if isa(node, Twin) && parse(Int, fn) <= node.mark
-            # The message was already delivered when the
-            # component was previously online.
-            return false
-        else
-            ftime = mtime(joinpath(mdir, fn))
-            delta = nowts - ftime
-            if delta * 1_000_000 > from_msg
-                @debug "skip $fn: mtime: $(unix2datetime(ftime)) ($delta secs from now)"
-                return false
-            end
-        end
-        return true
-    end
-
-    return files
-end
-
 
 function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
@@ -1108,9 +1100,6 @@ function await_attestation(router::Router, twin::Twin, socket, msg)
 end
 
 function challenge(router::Router, twin::Twin, msgid)
-    #    if haskey(twin.handler, "challenge")
-    #        challenge_val = twin.handler["challenge"](twin)
-    #    else
     if isdefined(router.plugin, :challenge)
         challenge_fn = getfield(router.plugin, :challenge)
         challenge_val = challenge_fn(twin)

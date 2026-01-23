@@ -2,7 +2,7 @@ using Pkg
 using Coverage
 
 try
-    Pkg.test("Rembus", coverage=true)
+    Pkg.test("Rembus", coverage=true, julia_args=["--depwarn=no"])
 catch e
     @error "coverage: $e"
 finally
