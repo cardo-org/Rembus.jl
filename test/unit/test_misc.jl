@@ -45,6 +45,7 @@ end
 
     router = Rembus.Router{Rembus.Twin}(bro)
     Rembus.boot(router)
+    Rembus.load_configuration(router)
     fn = Rembus.acks_file(router, comp)
     if isfile(fn)
         rm(fn)
@@ -53,13 +54,13 @@ end
     url = Rembus.RbURL(comp)
     twin = Rembus.Twin(url, router)
     msg = Rembus.PubSubMsg(twin, "topic", "data", Rembus.QOS2)
-    twin.ackdf = Rembus.load_received_acks(router, url)
+    twin.ackdf = Rembus.load_received_acks(router, url, Rembus.top_router(router).con)
     Rembus.add_pubsub_id(twin, msg)
-    Rembus.save_received_acks(twin)
+    Rembus.save_received_acks(twin, Rembus.top_router(router).con)
 
     # reload the acks file
     twin2 = Rembus.Twin(url, router)
-    twin2.ackdf = Rembus.load_received_acks(router, url)
+    twin2.ackdf = Rembus.load_received_acks(router, url, Rembus.top_router(router).con)
     @test nrow(twin2.ackdf) == 1
     @test twin.ackdf[1, :] == twin2.ackdf[1, :]
 end
@@ -141,10 +142,10 @@ end
     router = Rembus.get_router(name="myrouter", http=6754)
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
-    Rembus.save_topic_auth(router)
+    Rembus.save_topic_auth(router, router.con)
 
     router.topic_auth = Dict()
-    Rembus.load_topic_auth(router)
+    Rembus.load_topic_auth(router, router.con)
     @test router.topic_auth == cfg
 
     shutdown()
@@ -203,16 +204,13 @@ end
     @test time() - t > 2.0
 end
 
-#@testitem "no message dir" begin
-#    router = Rembus.get_router(name="test_router_2")
-#    mdir = Rembus.messages_dir(router)
-#    if isdir(mdir)
-#        rm(mdir, recursive=true)
-#    end
-#
-#    @test !isdir(mdir)
-#    #msgs = Rembus.msg_files(router)
-#    #@test isempty(msgs)
-#
-#    shutdown()
-#end
+@testitem "no message dir" begin
+    router = Rembus.get_router(name="test_router_2")
+    mdir = Rembus.messages_dir(router)
+    if isdir(mdir)
+        rm(mdir, recursive=true)
+    end
+
+    @test !isdir(mdir)
+    shutdown()
+end

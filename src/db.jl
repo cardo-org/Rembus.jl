@@ -17,6 +17,8 @@ const typemap = Dict(
 
 const ducklock = ReentrantLock()
 
+dbpath(twin) = top_router(twin.router).dbpath
+
 function closedb(db::DuckDB.DB)
     lock(ducklock)
     try
@@ -46,17 +48,17 @@ function with_db_read(f, router::Router)
     return f(reader)
 end
 
-function columndef(col::Rembus.Column)
+function columndef(col::Column)
     return "$(col.name) $(col.type)" *
            (col.nullable == false ? " NOT NULL" : "") *
            (col.default !== nothing ? " DEFAULT '$(col.default)'" : "")
 end
 
-function columns(tabledef::Rembus.Table)
+function columns(tabledef::Table)
     return [t.name for t in tabledef.fields]
 end
 
-function set_default(row::DataFrameRow, tabledef::Rembus.Table, d; add_nullable=true)
+function set_default(row::DataFrameRow, tabledef::Table, d; add_nullable=true)
     for col in tabledef.fields
         name = col.name
         if haskey(d, name)
@@ -243,13 +245,12 @@ function boot(router::Router)
     con = dbconnect(datadir=data_dir, dbpath=db_name)
     create_tables(router, con)
     router.con = con
-    load_configuration(router)
 end
 
 ## See: enum type: likely to be supported in the future:
 ##    https://ducklake.select/docs/stable/duckdb/unsupported_features
 ##
-#function Rembus.create_enum(en, con::DuckDB.DB)
+#function create_enum(en, con::DuckDB.DB)
 #    ename = en["name"]
 #    tostrings = ["'$v'" for v in en["values"]]
 #    evalues = join(tostrings, ",")
@@ -370,7 +371,7 @@ function getobj(topic, values)
     return Dict{String,Any}(v)
 end
 
-function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
+function append(con::DuckDB.DB, tabledef::Table, df)
     topic = tabledef.name
     tblfields = columns(tabledef)
     appender = DuckDB.Appender(con, topic)
@@ -388,7 +389,7 @@ function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
                     continue
                 end
             elseif format == "dataframe"
-                df = Rembus.dataframe_if_tagvalue(values[1])
+                df = dataframe_if_tagvalue(values[1])
                 if names(df) == tblfields
                     df_extras(tabledef, df, row)
                     DuckDB.register_data_frame(con, df, "df_view")
@@ -423,7 +424,7 @@ function append(con::DuckDB.DB, tabledef::Rembus.Table, df)
     end
 end
 
-function extras(tabledef::Rembus.Table, fields::Vector, row)
+function extras(tabledef::Table, fields::Vector, row)
     vals = []
     if haskey(tabledef.extras, "recv_ts")
         push!(vals, row.recv)
@@ -435,7 +436,7 @@ function extras(tabledef::Rembus.Table, fields::Vector, row)
     return vals
 end
 
-function df_extras(tabledef::Rembus.Table, df, row)
+function df_extras(tabledef::Table, df, row)
     if haskey(tabledef.extras, "recv_ts")
         df[!, tabledef.extras["recv_ts"]] .= row.recv
     end
@@ -445,7 +446,7 @@ function df_extras(tabledef::Rembus.Table, df, row)
 end
 
 
-function get_type(col::Rembus.Column)
+function get_type(col::Column)
     if col.nullable
         return Union{typemap[col.type],Missing}
     else
@@ -453,7 +454,7 @@ function get_type(col::Rembus.Column)
     end
 end
 
-function get_format(data, table::Rembus.Table)
+function get_format(data, table::Table)
     """Return the format of the message data."""
     fmt = "sequence"
     len = length(data)
@@ -461,7 +462,7 @@ function get_format(data, table::Rembus.Table)
         arg = data[1]
         if isa(arg, Dict)
             fmt = "key_value"
-        elseif isa(arg, Rembus.Tag) && arg.id == Rembus.DATAFRAME_TAG
+        elseif isa(arg, Tag) && arg.id == DATAFRAME_TAG
             fmt = "dataframe"
         end
     elseif len == 0 && contains(table.topic, ":")
@@ -471,7 +472,7 @@ function get_format(data, table::Rembus.Table)
     return fmt
 end
 
-function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
+function upsert(con::DuckDB.DB, tabledef::Table, df)
     tname = tabledef.name
     fields = columns(tabledef)
     indexes = tabledef.keys
@@ -508,7 +509,7 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
                 continue
             end
         elseif format == "dataframe"
-            df = Rembus.dataframe_if_tagvalue(data[1])
+            df = dataframe_if_tagvalue(data[1])
             df_extras(tabledef, df, row)
             if names(df) == fields
                 append!(tdf, df)
@@ -555,9 +556,10 @@ function upsert(con::DuckDB.DB, tabledef::Rembus.Table, df)
     DuckDB.unregister_data_frame(con, "df_view")
 end
 
-function save_data_at_rest(router::Rembus.Router)
+function save_data_at_rest(router::Router, ::DuckDB.DB)
     if !isopen(router.con)
         @warn "[$router] save_data_at_rest failed: db is closed"
+        @info "unsaved messages:\n$(router.msg_df)"
         return nothing
     end
 
@@ -570,7 +572,7 @@ function save_data_at_rest(router::Rembus.Router)
                 :recv, :slot, :qos, :uid, :topic,
                 :pkt => ByRow(p -> tobase64(p)) => :data
             )
-            df[!, :name] .= bname(router)
+            df[!, :name] .= rid(router)
             DuckDB.register_data_frame(con, df, "df_msg")
             DuckDB.execute(
                 con,
@@ -614,7 +616,7 @@ function frombase64(str)
 end
 
 """
-    send_data_at_rest(twin::Rembus.Twin, max_period::Float64, con::DuckDB.DB
+    send_data_at_rest(twin::Twin, max_period::Float64, con::DuckDB.DB
 
 Send persisted and cached messages.
 
@@ -622,11 +624,11 @@ Send persisted and cached messages.
 
 Valid time period for sending old messages: `[min(twin.topic.msg_from, max_period), now_ts]`
 """
-function send_data_at_rest(twin::Rembus.Twin, max_period::Float64)
+function send_data_at_rest(twin::Twin, max_period::Float64, ::DuckDB.DB)
     with_db(top_router(twin.router)) do con
-        if Rembus.hasname(twin) && (max_period > 0.0)
-            name = bname(twin.router)
-            min_ts = Rembus.uts() - max_period
+        if hasname(twin) && (max_period > 0.0)
+            name = rid(twin.router)
+            min_ts = uts() - max_period
             df = DataFrame(
                 DuckDB.execute(
                     con,
@@ -634,17 +636,17 @@ function send_data_at_rest(twin::Rembus.Twin, max_period::Float64)
                     [name, min_ts]
                 )
             )
-            interests = Rembus.twin_topics(twin)
+            interests = twin_topics(twin)
             filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
             if !isempty(filtered)
                 filtered = transform(
                     filtered,
                     :data => ByRow(data -> frombase64(data)) => :pkt
                 )
-                Rembus.send_messages(twin, filtered)
+                send_messages(twin, filtered)
             end
 
-            Rembus.from_memory_messages(twin)
+            from_memory_messages(twin)
         end
     end
 end
@@ -710,10 +712,10 @@ function exposed_topics(router::Router, twin::Twin)
     return topics
 end
 
-function save_twin(router, twin)
+function save_twin(router, twin, ::DuckDB.DB)
     with_db(router) do con
         tid = rid(twin)
-        name = bname(router)
+        name = rid(router)
         current_df = DataFrame(
             "name" => name,
             "twin" => tid,
@@ -725,7 +727,7 @@ function save_twin(router, twin)
         current_df = DataFrame(
             "name" => name,
             "twin" => tid,
-            "topic" => Rembus.exposed_topics(router, twin),
+            "topic" => exposed_topics(router, twin),
         )
         sync_twin(con, name, tid, "exposer", current_df)
 
@@ -738,9 +740,9 @@ function save_twin(router, twin)
     end
 end
 
-function load_twin(router, twin)
+function load_twin(router, twin, ::DuckDB.DB)
     with_db(router) do con
-        name = bname(router)
+        name = rid(router)
         df = DataFrame(DuckDB.execute(
             con,
             "SELECT topic, msg_from FROM subscriber WHERE name='$name' AND twin='$(rid(twin))'"
@@ -779,11 +781,11 @@ function load_twin(router, twin)
     end
 end
 
-function load_tenants(router)
+function load_tenants(router, ::DuckDB.DB)
     with_db(router) do con
         df = DataFrame(DuckDB.execute(
             con,
-            "SELECT twin, secret FROM tenant WHERE name='$(bname(router))'"
+            "SELECT twin, secret FROM tenant WHERE name='$(rid(router))'"
         ))
         return Dict(df.twin .=> df.secret)
     end
@@ -795,7 +797,7 @@ end
 Save the tenants table.
 =#
 function save_tenants(broker::AbstractString, tenants::Dict)
-    con = Rembus.dbconnect(broker=broker)
+    con = dbconnect(broker=broker)
     DuckDB.execute(
         con,
         """
@@ -817,19 +819,19 @@ function save_tenants(broker::AbstractString, tenants::Dict)
 
 end
 
-function load_admins(router)
+function load_admins(router, ::DuckDB.DB)
     with_db(router) do con
         df = DataFrame(DuckDB.execute(
             con,
-            "SELECT twin FROM admin WHERE name='$(bname(router))'"
+            "SELECT twin FROM admin WHERE name='$(rid(router))'"
         ))
         router.admins = Set{String}(df.twin)
     end
 end
 
-function save_admins(router)
+function save_admins(router, ::DuckDB.DB)
     with_db(router) do con
-        name = bname(router)
+        name = rid(router)
         current_df = DataFrame(
             "name" => name,
             "twin" => collect(router.admins)
@@ -838,10 +840,10 @@ function save_admins(router)
     end
 end
 
-function load_topic_auth(router)
+function load_topic_auth(router, ::DuckDB.DB)
     with_db(router) do con
         df = DataFrame(
-            DuckDB.execute(con, "SELECT twin, topic FROM topic_auth WHERE name='$(bname(router))'")
+            DuckDB.execute(con, "SELECT twin, topic FROM topic_auth WHERE name='$(rid(router))'")
         )
         topics = Dict()
         for (twin_name, topic) in eachrow(df)
@@ -855,9 +857,9 @@ function load_topic_auth(router)
     end
 end
 
-function save_topic_auth(router)
+function save_topic_auth(router, ::DuckDB.DB)
     with_db(router) do con
-        name = bname(router)
+        name = rid(router)
         current_df = DataFrame("name" => String[], "twin" => String[], "topic" => String[])
 
         for (topic, cmp_true) in router.topic_auth
@@ -875,14 +877,14 @@ end
 Load from file the ids of received acks of Pub/Sub messages
 awaiting Ack2 acknowledgements.
 =#
-function load_received_acks(router, component::Rembus.RbURL)
+function load_received_acks(router, component::RbURL, ::DuckDB.DB)
     df = with_db(router) do con
         if isopen(con)
             tw = rid(component)
             return DataFrame(
                 DuckDB.execute(
                     con,
-                    "SELECT ts, id FROM wait_ack2 WHERE name='$(bname(router))' AND twin='$tw'"
+                    "SELECT ts, id FROM wait_ack2 WHERE name='$(rid(router))' AND twin='$tw'"
                 )
             )
         end
@@ -902,15 +904,16 @@ end
 Save to file the ids of received acks of Pub/Sub messages
 waitings Ack2 acknowledgements.
 =#
-function save_received_acks(twin)
+function save_received_acks(twin, ::DuckDB.DB)
     with_db(top_router(twin.router)) do con
-        name = bname(twin.router)
+        name = rid(twin.router)
         current_df = copy(twin.ackdf)
         insertcols!(current_df, 1, :name .=> name)
         insertcols!(current_df, 2, :twin .=> rid(twin))
         sync_twin(con, name, rid(twin), "wait_ack2", current_df)
     end
 end
+
 
 #=
     save_configuration(router::Router)
@@ -920,8 +923,8 @@ Persist router security settings: admins and private topics.
 function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "[$router] saving configuration to $(broker_dir(router.id))"
-        save_topic_auth(router)
-        save_admins(router)
+        save_topic_auth(router, router.con)
+        save_admins(router, router.con)
     end
 end
 
@@ -933,8 +936,8 @@ Load from db router security settings: admins and private topics.
 function load_configuration(router)
     callback_or(router, :load_configuration) do
         @debug "[$router] loading configuration from $(broker_dir(router.id))"
-        load_topic_auth(router)
-        load_admins(router)
-        router.owners = load_tenants(router)
+        load_topic_auth(router, router.con)
+        load_admins(router, router.con)
+        router.owners = load_tenants(router, router.con)
     end
 end

@@ -321,7 +321,7 @@ end
 
 function persist(router)
     if !isempty(router.msg_df)
-        save_data_at_rest(router)
+        save_data_at_rest(router, router.con)
         router.msg_df = msg_dataframe()
     end
 end
@@ -355,6 +355,7 @@ function save_message(pd, router)
         elseif isshutdown(msg)
             close(tmr)
             persist(router)
+            closedb(router.con)
             break
         end
     end

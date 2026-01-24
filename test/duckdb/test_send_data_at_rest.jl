@@ -43,9 +43,8 @@ function run()
             )
         ])))
 
-    # for JIT compiler
-    cli = sub(ctx)
-    close(cli)
+    # For creating the DuckDB tables.
+    sleep(1)
 
     pub = component("duckdb_pub")
 

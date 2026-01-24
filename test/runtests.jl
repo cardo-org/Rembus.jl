@@ -6,7 +6,7 @@ using TestItemRunner
 
 const GROUP = get(ENV, "GROUP", "all")
 
-#@run_package_tests
+@run_package_tests
 
 @testset "Rembus" begin
     if GROUP == "all" || GROUP == "unit"
@@ -31,7 +31,7 @@ const GROUP = get(ENV, "GROUP", "all")
         end
     end
     if GROUP == "all" || GROUP == "failovers"
-        @time @safetestset "pubsub_offline" begin
+        @time @safetestset "failovers" begin
             include("failovers/test_failovers.jl")
         end
     end

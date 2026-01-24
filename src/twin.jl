@@ -7,7 +7,9 @@ function start_twin(router::Router, twin::Twin)
     id = rid(twin)
     spec = process(id, twin_task, args=(twin,), force_interrupt_after=30.0)
     twin.process = spec
-    startup(Visor.from_supervisor(router.process.supervisor, "twins"), spec)
+    twin_sv = Visor.from_supervisor(router.process.supervisor, "twins")
+    startup(twin_sv, spec)
+
     yield()
     router.id_twin[id] = twin
     return twin
@@ -558,7 +560,7 @@ function reconnect(twin::Twin, url::RbURL)
                 end
 
                 isconnected = true
-                send_data_at_rest(twin, twin.failover_from)
+                send_data_at_rest(twin, twin.failover_from, router.con)
             end
         end
     catch e
@@ -691,7 +693,7 @@ function setidentity(router::Router, twin::Twin, msg; isauth=false)
     router.id_twin[rid(twin)] = twin
     setname(twin.process, rid(twin))
     twin.isauth = isauth
-    load_twin(router, twin)
+    load_twin(router, twin, router.con)
     setup_twin(twin.router, twin)
     return nothing
 end
@@ -1071,7 +1073,7 @@ function start_reactive(pd, twin::Twin, from_msg::Float64)
     twin.reactive = true
     @debug "[$twin] start reactive from: $(from_msg)"
     router = top_router(twin.router)
-    return send_data_at_rest(twin, from_msg)
+    return send_data_at_rest(twin, from_msg, router.con)
 end
 
 #=
@@ -1361,7 +1363,7 @@ function detach(twin)
     # save the state to disk
     router = top_router(twin.router)
     if !isrepl(twin.uid) && hasname(twin)
-        save_twin(router, twin)
+        save_twin(router, twin, router.con)
     end
 
     if !isa(twin.socket, Float)
@@ -1370,7 +1372,7 @@ function detach(twin)
         twin.socket = Float(twin.socket.out, twin.socket.direct)
 
         if !isempty(twin.ackdf) && hasname(twin)
-            save_received_acks(twin)
+            save_received_acks(twin, router.con)
         end
 
         # Remove the twin from the router tables.

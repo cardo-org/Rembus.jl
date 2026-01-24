@@ -149,6 +149,8 @@ Adapter(a) = Adapter{a}()
 
 abstract type Archiver end
 
+struct FileStore <: Archiver end
+
 mutable struct RbURL
     id::String
     tenant::String
@@ -206,7 +208,9 @@ isrepl(c::RbURL) = c.protocol === :repl
 """
 Return an url representing an anonymous component.
 """
-anonym(; host="127.0.0.1", port=DEFAULT_WS_PORT) = RbURL(host=host, port=port)
+anonym(; protocol=:ws, host="127.0.0.1", port=DEFAULT_WS_PORT) = RbURL(
+    protocol=protocol, host=host, port=port
+)
 
 struct AckState
     ack2::Bool
@@ -619,7 +623,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     end
 end
 
-bname(r::AbstractRouter) = top_router(r).id
+rid(r::AbstractRouter) = top_router(r).id
 
 function upstream!(router, upstream_router)
     router.upstream = upstream_router
@@ -687,7 +691,7 @@ Base.hash(t::Twin, h::UInt) = hash(rid(t), h)
 
 """
 $(TYPEDSIGNATURES)
-Return the identifier of the component (`R`embus `ID`entifier).
+Return the name of the component (`R`rembus `ID`entifier).
 
 ```julia
 rb = component("ws://myhost.org:8000/myname")
@@ -724,7 +728,7 @@ function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
     router = top_router(twin.router)
-    send_data_at_rest(twin, msg_from)
+    send_data_at_rest(twin, msg_from, router.con)
     return nothing
 end
 

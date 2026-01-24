@@ -23,13 +23,13 @@ setup_twin(r, twin::Twin) = nothing
 
 function bind(router::Router, url=RbURL(protocol=:repl))
     twin = lock(router.lock) do
-        df = load_received_acks(router, url)
+        df = load_received_acks(router, url, router.con)
         if haskey(router.id_twin, rid(url))
             twin = router.id_twin[rid(url)]
         else
             twin = Twin(url, bottom_router(router))
             twin.ackdf = df
-            load_twin(router, twin)
+            load_twin(router, twin, router.con)
         end
 
         if !isdefined(twin, :process) || istaskdone(twin.process.task)
@@ -529,9 +529,6 @@ function router_task(self, router::Router, implementor_rule)
         if broker_isnamed(router) && isopen(router.con)
             save_configuration(router)
         end
-
-        # close the duckdb connection
-        closedb(router.con)
     end
 end
 
@@ -775,7 +772,15 @@ function get_router(;
         bp = process("broker", tsk, args=(router,), force_interrupt_after=30.0)
         router.process = bp
 
-        boot(router)
+
+        if any(!isnothing, (ws, tcp, zmq, http))
+            boot(router)
+        else
+            router.con = FileStore()
+        end
+
+        load_configuration(router)
+
         init(router)
 
         start_broker(
@@ -836,10 +841,11 @@ function start_broker(
         restart=:transient,
         force_interrupt_after=30.0)
 
+    twin_sv = supervisor("twins", terminateif=:shutdown)
     tasks = [
         router.archiver,
         router.process,
-        supervisor("twins", terminateif=:shutdown)
+        twin_sv
     ]
 
     if prometheus !== nothing

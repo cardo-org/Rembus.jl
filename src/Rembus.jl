@@ -39,7 +39,7 @@ export RembusError,
 
 export
     add_plugin,
-    bname,
+    dbpath,
     authorize,
     unauthorize,
     get_private_topics,
@@ -96,6 +96,7 @@ include("broker.jl")
 include("admin.jl")
 include("register.jl")
 include("db.jl")
+include("filestore.jl")
 include("deploy.jl")
 include("auth.jl")
 include("transport.jl")
