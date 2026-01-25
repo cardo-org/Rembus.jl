@@ -192,24 +192,37 @@ end
 
 # name become an admin
 function set_admin(broker, name)
-    con = Rembus.dbconnect(broker=broker)
+    if haskey(ENV, "REMBUS_FILESTORE")
+        broker_dir = joinpath(Rembus.rembus_dir(), broker)
+        if !isdir(broker_dir)
+            mkdir(broker_dir)
+        end
 
-    DuckDB.execute(
-        con,
-        """
-        CREATE TABLE IF NOT EXISTS admin (
-            name TEXT NOT NULL,
-            twin TEXT
-        )"""
-    )
+        # add admin privilege to client with name equals to test_private
+        fn = joinpath(broker_dir, "admins.json")
+        open(fn, "w") do io
+            write(io, JSON3.write(Set([name])))
+        end
+    else
+        con = Rembus.dbconnect(broker=broker)
+
+        DuckDB.execute(
+            con,
+            """
+            CREATE TABLE IF NOT EXISTS admin (
+                name TEXT NOT NULL,
+                twin TEXT
+            )"""
+        )
 
 
-    DuckDB.execute(
-        con,
-        "INSERT INTO admin (name,twin) VALUES (?, ?)",
-        [broker, name]
-    )
-    close(con)
+        DuckDB.execute(
+            con,
+            "INSERT INTO admin (name,twin) VALUES (?, ?)",
+            [broker, name]
+        )
+        close(con)
+    end
 end
 
 function remove_keys(broker_name, cid)

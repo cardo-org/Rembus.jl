@@ -59,6 +59,11 @@ try
     request_timeout!(20)
     rb = broker(ws=8010, name="ack_never_send")
 
+    if haskey(ENV, "REMBUS_FILESTORE")
+        msg_dir = joinpath(Rembus.broker_dir(rb.router), "messages")
+        foreach(rm, readdir(msg_dir, join=true))
+    end
+
     Rembus.settings(rb).ack_timeout = 0.5
     run(pub_url, sub_url)
 catch e

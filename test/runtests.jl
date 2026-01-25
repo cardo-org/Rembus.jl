@@ -50,7 +50,9 @@ const GROUP = get(ENV, "GROUP", "all")
             include("swdistribution/test_swdistribution.jl")
         end
     end
-    if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "duckdb")
+    if !Base.Sys.iswindows() &&
+       !haskey(ENV, "REMBUS_FILESTORE") &&
+       (GROUP == "all" || GROUP == "duckdb")
         @time @safetestset "format" begin
             include("duckdb/test_format.jl")
         end
@@ -131,7 +133,6 @@ const GROUP = get(ENV, "GROUP", "all")
             include("json-rpc/test_jsonrpc_register.jl")
         end
     end
-    #return
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "anonym" begin
             include("api/test_anonym.jl")

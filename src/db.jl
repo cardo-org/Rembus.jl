@@ -797,26 +797,32 @@ end
 Save the tenants table.
 =#
 function save_tenants(broker::AbstractString, tenants::Dict)
-    con = dbconnect(broker=broker)
-    DuckDB.execute(
-        con,
-        """
-        CREATE TABLE IF NOT EXISTS tenant (
-            name TEXT NOT NULL,
-            twin TEXT NOT NULL,
-            secret TEXT NOT NULL
-        )"""
-    )
-
-    for (twin, secret) in tenants
+    if haskey(ENV, "REMBUS_FILESTORE")
+        fn = joinpath(broker_dir(broker), TENANTS_FILE)
+        open(fn, "w") do f
+            JSON3.write(f, tenants)
+        end
+    else
+        con = dbconnect(broker=broker)
         DuckDB.execute(
             con,
-            "INSERT INTO tenant (name,twin,secret) VALUES (?, ?, ?)",
-            [broker, twin, secret]
+            """
+            CREATE TABLE IF NOT EXISTS tenant (
+                name TEXT NOT NULL,
+                twin TEXT NOT NULL,
+                secret TEXT NOT NULL
+            )"""
         )
-    end
-    close(con)
 
+        for (twin, secret) in tenants
+            DuckDB.execute(
+                con,
+                "INSERT INTO tenant (name,twin,secret) VALUES (?, ?, ?)",
+                [broker, twin, secret]
+            )
+        end
+        close(con)
+    end
 end
 
 function load_admins(router, ::DuckDB.DB)

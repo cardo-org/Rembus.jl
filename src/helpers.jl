@@ -361,31 +361,52 @@ function save_message(pd, router)
     end
 end
 
+function get_data(pkt)
+    payload = decode(pkt)
+    ptype = payload[1] & 0x0f
+    flags = payload[1] & 0xf0
+    if ptype == TYPE_PUB
+        if flags > QOS0
+            data = dataframe_if_tagvalue(payload[4])
+        else
+            data = dataframe_if_tagvalue(payload[3])
+        end
+    end
 
-#function get_data(pkt)
-#    payload = decode(pkt)
-#    ptype = payload[1] & 0x0f
-#    flags = payload[1] & 0xf0
-#    if ptype == TYPE_PUB
-#        if flags > QOS0
-#            data = dataframe_if_tagvalue(payload[4])
-#        else
-#            data = dataframe_if_tagvalue(payload[3])
-#        end
-#    end
-#
-#    return data
-#end
+    return data
+end
 
 function data_at_rest(
     ; from=LastReceived, broker="broker", datadir=nothing, dbpath=nothing
 )
-    con = dbconnect(broker=broker, datadir=datadir, dbpath=dbpath)
-    return DataFrame(DuckDB.execute(
-        con,
-        "SELECT * FROM message WHERE name=?",
-        [broker]
-    ))
+    if haskey(ENV, "REMBUS_FILESTORE")
+        files = messages_files(broker, to_microseconds(from))
+        result = DataFrame(
+            recv=UInt64[],
+            slot=UInt32[],
+            qos=UInt8[],
+            uid=Msgid[],
+            topic=String[],
+            pkt=Vector{UInt8}[],
+            data=Any[]
+        )
+        for fn in files
+            path = joinpath(messages_dir(broker), fn)
+            if isfile(path)
+                df = load_object(path)
+                df.data = get_data.(Vector{UInt8}.(df.pkt))
+                result = vcat(result, df)
+            end
+        end
+        return result
+    else
+        con = dbconnect(broker=broker, datadir=datadir, dbpath=dbpath)
+        return DataFrame(DuckDB.execute(
+            con,
+            "SELECT * FROM message WHERE name=?",
+            [broker]
+        ))
+    end
 end
 
 

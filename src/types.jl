@@ -625,6 +625,8 @@ end
 
 rid(r::AbstractRouter) = top_router(r).id
 
+hasname(r::Router) = !(is_uuid4(r.id) || all(isdigit, r.id))
+
 function upstream!(router, upstream_router)
     router.upstream = upstream_router
     upstream_router.downstream = router

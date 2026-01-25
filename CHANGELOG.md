@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `when` keyword to `query_*` payload.
 
+- Add `REMBUS_FILESTORE` environment variable to enable file-based persistence.
+
 ### Changed
 
 - Set `archiver_interval` default to 1 second.

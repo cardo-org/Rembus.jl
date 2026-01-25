@@ -773,10 +773,16 @@ function get_router(;
         router.process = bp
 
 
-        if any(!isnothing, (ws, tcp, zmq, http))
+        if any(!isnothing, (ws, tcp, zmq, http)) && !haskey(ENV, "REMBUS_FILESTORE")
             boot(router)
         else
             router.con = FileStore()
+            if hasname(router)
+                msg_dir = messages_dir(router.id)
+                if !isdir(msg_dir)
+                    mkdir(msg_dir)
+                end
+            end
         end
 
         load_configuration(router)
