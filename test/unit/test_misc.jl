@@ -44,7 +44,11 @@ end
     mkpath(dir)
 
     router = Rembus.Router{Rembus.Twin}(bro)
-    Rembus.boot(router)
+    if haskey(ENV, "REMBUS_FILESTORE")
+        router.con = Rembus.FileStore()
+    else
+        Rembus.boot(router)
+    end
     Rembus.load_configuration(router)
     fn = Rembus.acks_file(router, comp)
     if isfile(fn)
@@ -143,11 +147,9 @@ end
     cfg = Dict("mytopic" => Dict("mycid" => true))
     router.topic_auth = cfg
     Rembus.save_topic_auth(router, router.con)
-
     router.topic_auth = Dict()
     Rembus.load_topic_auth(router, router.con)
     @test router.topic_auth == cfg
-
     shutdown()
 end
 
@@ -162,9 +164,7 @@ end
     # log something
     @info "this is a info log"
     @warn "this is a warn log"
-
     @test isfile(logfile)
-
     # reset log to default
     ENV["BROKER_LOG"] = "stdout"
     Rembus.logging("info")

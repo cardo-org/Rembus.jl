@@ -2,6 +2,8 @@ closedb(::FileStore) = nothing
 
 Base.isopen(::FileStore) = true
 
+lock_msgfile::ReentrantLock = ReentrantLock()
+
 function messages_files(node, from_msg)
     allfiles = msg_files(node)
     nowts = time()
@@ -106,9 +108,15 @@ messages_fn(router, ts) = joinpath(messages_dir(router), string(ts))
 
 function from_disk_messages(twin::Twin, fn)
     path = joinpath(messages_dir(twin.router), fn)
-    df = load_object(path)
-    interests = twin_topics(twin)
-    filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
+    lock(lock_msgfile)
+    filtered = []
+    try
+        df = load_object(path)
+        interests = twin_topics(twin)
+        filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
+    finally
+        unlock(lock_msgfile)
+    end
     if !isempty(filtered)
         filtered.msg = decode.(Vector{UInt8}.(filtered.pkt))
         send_messages(twin, filtered)
@@ -130,7 +138,12 @@ msg_files(twin::Twin) = msg_files(twin.router)
 function save_data_at_rest(router, ::FileStore)
     fn = messages_fn(router, router.msg_df[end, 1]) # the newest ts value
     @debug "[broker] persisting messages on disk: $fn"
-    save_object(fn, router.msg_df)
+    lock(lock_msgfile)
+    try
+        save_object(fn, router.msg_df)
+    finally
+        unlock(lock_msgfile)
+    end
 end
 
 function load_topic_auth(router, ::FileStore)
