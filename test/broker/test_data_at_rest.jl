@@ -47,9 +47,10 @@ function run(pub_url, sub_url)
         publish(pub, "foo_qos0", count, qos=Rembus.QOS0)
         count += 1
     end
-    sleep(1)
+    sleep(0.5)
     close(pub)
     close(sub)
+    sleep(0.5)
 end
 
 ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
