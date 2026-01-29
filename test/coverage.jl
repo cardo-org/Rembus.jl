@@ -35,6 +35,7 @@ for dir in [
     "test/http",
     "test/json-rpc",
     "test/prometheus",
+    "test/swdistribution",
 ]
     foreach(rm, filter(endswith(".cov"), readdir(dir, join=true)))
 end
