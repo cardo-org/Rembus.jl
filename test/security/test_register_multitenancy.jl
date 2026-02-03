@@ -1,17 +1,13 @@
 include("../utils.jl")
+include("../../tools/tenant.jl")
 
 using DataFrames
 
 broker_name = "register_multitenancy"
 
 function init(pin)
-    broker_dir = Rembus.broker_dir(broker_name)
-    if !isdir(broker_dir)
-        mkdir(broker_dir)
-    end
-
-    tenant_settings = Dict("com" => pin, "org" => pin)
-    Rembus.save_tenants(broker_name, tenant_settings)
+    add_tenant("com", pin, broker_name)
+    add_tenant("org", pin, broker_name)
 end
 
 function run(url)

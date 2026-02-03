@@ -41,10 +41,10 @@ using Pkg; Pkg.add("Rembus")
 ## Basic Concepts
 
 The scope of Rembus is to facilitate communication between distributed
-applications. Each application instrumented by Rembus is called a *Component*.
+applications.
 
-A `Component` can communicate with other components using two main communication
-patterns:
+An application instrumented by Rembus uses the concept of `Component` to
+abstract the two communication patterns:
 
 * Remote Procedure Call (RPC): a client component invokes a function on a server
   component and waits for the result.
@@ -59,9 +59,79 @@ A `Component` presents one or many of these roles:
 * invoke a remote function on another component.
 * route messages between components (broker role).
 
-## Broker
+The are three factory constructors to create a `Component`, each one
+reflecting its main role:
 
-A broker is a special component that routes messages between components.
+* `component(url::String)`: a component that connects to a broker or a server.
+
+* `broker()`: a component that listen for connection requests and routes
+   messages between components.
+
+* `server()`: a component that listen for connection requests from others
+  components. A server does not route messages between connected components.
+
+## Component
+
+Create a component that connects to `myhost.org` on port `8000` with the unique
+name `mynode`:
+
+```julia
+using Rembus
+node = component("ws://myhost.org:8000/mynode")
+```
+
+The `node` handle can be used to invoke remote functions and publish messages
+to Pub/Sub topics.
+
+```julia
+# Invoke a remote function 'get_status' on the remote component
+status = rpc(node, "get_status", Dict("verbose"=>true))
+
+# Publish a message to the topic 'alerts/temperature' with a dictionary payload
+publish(node, "alerts/temperature", Dict("value"=>75.0, "unit"=>"C"))
+```
+
+A remote component, named `myservices`, implements and exposes the `get_status`
+method:
+
+```julia
+function get_status(options::Dict)
+    if haskey(options, "verbose") && options["verbose"]
+        return Dict(
+            "status"=>"ok",
+            "uptime"=>uptime(),
+            "load"=>cpuload(),
+            "mem_free"=>memfree()
+        )
+    else
+        return Dict("status"=>"ok", "uptime"=>uptime())
+    end
+end
+
+node = component("ws://myhost.org:8000/myservices")
+expose(node, get_status)
+wait(node)
+```
+
+To subscribe to Pub/Sub topics use the `subscribe` function:
+
+```julia
+function alert_handler(topic, payload; ctx=nothing, node=nothing)
+    println("message from $topic: $payload")
+end
+
+subscribe(node, "alerts/temperature", alert_handler)
+wait(node)
+```
+
+A subscriber function receives messages but not return a response like RPC
+calls.
+
+Note that both the exposer and the subscriber components must call `wait(node)`
+to keep the component running and processing incoming requests.
+
+
+## Broker
 
 Start a broker component listening on the default WebSocket port `8000`:
 
@@ -96,7 +166,7 @@ Rembus has built-in support for persisting data using DuckDB
 [DuckLake](https://ducklake.select/).
 
 The DuckLake "analytical data lake" provides for fast-store and powerful query
-fgeatures for large datasets.
+features for large datasets.
 
 The DuckLake storage backend can be configured using the `DUCKLAKE_URL`
 environment variable and supports multiple database engines:

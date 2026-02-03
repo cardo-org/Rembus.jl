@@ -1,4 +1,5 @@
 include("../utils.jl")
+include("../../tools/tenant.jl")
 
 # tests: 17
 
@@ -7,15 +8,10 @@ using DataFrames
 broker_name = "register_multiple_users"
 
 function multiple_users(pin)
-    broker_dir = Rembus.broker_dir(broker_name)
-    tenants_settings = Dict(
-        "t1" => pin,
-        "t2" => pin
-    )
-    if !isdir(broker_dir)
-        mkdir(broker_dir)
+    for tenant in ["t1", "t2"]
+        add_tenant(tenant, pin, broker_name)
     end
-    Rembus.save_tenants(broker_name, tenants_settings)
+
 end
 
 function run(cid)

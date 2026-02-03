@@ -199,7 +199,7 @@ function set_admin(broker, name)
         end
 
         # add admin privilege to client with name equals to test_private
-        fn = joinpath(broker_dir, "admins.json")
+        fn = joinpath(broker_dir, Rembus.ADMINS_FILE)
         open(fn, "w") do io
             write(io, JSON3.write(Set([name])))
         end

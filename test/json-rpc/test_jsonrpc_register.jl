@@ -1,16 +1,11 @@
 include("../utils.jl")
+include("../../tools/tenant.jl")
 
 broker_name = "test_jsonrpc_register"
 pin = "11223344"
 
 function init(pin)
-    broker_dir = Rembus.broker_dir(broker_name)
-    if !isdir(broker_dir)
-        mkpath(broker_dir)
-    end
-
-    tenant_settings = Dict("." => pin)
-    Rembus.save_tenants(broker_name, tenant_settings)
+    add_tenant(".", pin, broker_name)
 end
 
 function run()

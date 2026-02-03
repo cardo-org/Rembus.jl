@@ -451,7 +451,7 @@ mutable struct Settings
         request_timeout = get(
             cfg,
             "request_timeout",
-            parse(Float64, get(ENV, "REMBUS_TIMEOUT", "10"))
+            parse(Float64, get(ENV, "REMBUS_TIMEOUT", "20"))
         )
         challenge_timeout = get(
             cfg,

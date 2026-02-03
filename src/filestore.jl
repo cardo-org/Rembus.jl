@@ -161,7 +161,7 @@ function save_topic_auth(router, ::FileStore)
 end
 
 function load_admins(router, ::FileStore)
-    fn = joinpath(broker_dir(router.id), "admins.json")
+    fn = joinpath(broker_dir(router.id), ADMINS_FILE)
     @debug "loading $fn"
     if isfile(fn)
         content = read(fn, String)
@@ -169,13 +169,6 @@ function load_admins(router, ::FileStore)
     end
 end
 
-function save_admins(router, ::FileStore)
-    @debug "saving admins"
-    fn = joinpath(broker_dir(router), "admins.json")
-    open(fn, "w") do io
-        write(io, JSON3.write(router.admins))
-    end
-end
 
 #=
 

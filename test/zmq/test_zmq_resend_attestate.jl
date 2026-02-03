@@ -1,23 +1,12 @@
 include("../utils.jl")
+include("../../tools/tenant.jl")
 
 broker_name = "zmq_resend_attestate"
 pin = "11223344"
 node_url = "zmq://:8012/zmq_resend_attestate_node"
 
-#Rembus.debug!()
-
 function init(pin)
-    broker_dir = Rembus.broker_dir(broker_name)
-    if !isdir(broker_dir)
-        mkpath(broker_dir)
-    end
-
-    @info "creating tenants in $broker_dir"
-    tenant_settings = Dict("." => pin)
-    if !isdir(broker_dir)
-        mkdir(broker_dir)
-    end
-    Rembus.save_tenants(broker_name, tenant_settings)
+    add_tenant(".", pin, broker_name)
 end
 
 @info "[zmq_resend_attestate] start"

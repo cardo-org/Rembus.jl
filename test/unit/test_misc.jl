@@ -75,6 +75,7 @@ end
 end
 
 @testitem "default_broker" begin
+    ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus")
     rb = broker()
     @test Rembus.islistening(rb, wait=10)
 
@@ -84,6 +85,7 @@ end
 end
 
 @testitem "default_server" begin
+    ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus")
     rb = server()
     @test Rembus.islistening(rb, wait=10)
     shutdown()

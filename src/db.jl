@@ -197,7 +197,7 @@ function create_tables(router, con)
             """
             CREATE TABLE IF NOT EXISTS tenant (
                 name TEXT NOT NULL,
-                twin TEXT NOT NULL,
+                tenant TEXT NOT NULL,
                 secret TEXT NOT NULL
             )""",
             """
@@ -785,43 +785,9 @@ function load_tenants(router, ::DuckDB.DB)
     with_db(router) do con
         df = DataFrame(DuckDB.execute(
             con,
-            "SELECT twin, secret FROM tenant WHERE name='$(rid(router))'"
+            "SELECT tenant, secret FROM tenant WHERE name='$(rid(router))'"
         ))
-        return Dict(df.twin .=> df.secret)
-    end
-end
-
-#=
-    save_tenants(router, tenants::AbstractString)
-
-Save the tenants table.
-=#
-function save_tenants(broker::AbstractString, tenants::Dict)
-    if haskey(ENV, "REMBUS_FILESTORE")
-        fn = joinpath(broker_dir(broker), TENANTS_FILE)
-        open(fn, "w") do f
-            JSON3.write(f, tenants)
-        end
-    else
-        con = dbconnect(broker=broker)
-        DuckDB.execute(
-            con,
-            """
-            CREATE TABLE IF NOT EXISTS tenant (
-                name TEXT NOT NULL,
-                twin TEXT NOT NULL,
-                secret TEXT NOT NULL
-            )"""
-        )
-
-        for (twin, secret) in tenants
-            DuckDB.execute(
-                con,
-                "INSERT INTO tenant (name,twin,secret) VALUES (?, ?, ?)",
-                [broker, twin, secret]
-            )
-        end
-        close(con)
+        return Dict(df.tenant .=> df.secret)
     end
 end
 
@@ -835,16 +801,6 @@ function load_admins(router, ::DuckDB.DB)
     end
 end
 
-function save_admins(router, ::DuckDB.DB)
-    with_db(router) do con
-        name = rid(router)
-        current_df = DataFrame(
-            "name" => name,
-            "twin" => collect(router.admins)
-        )
-        sync_cfg(con, name, "admin", current_df)
-    end
-end
 
 function load_topic_auth(router, ::DuckDB.DB)
     with_db(router) do con
@@ -930,7 +886,6 @@ function save_configuration(router::Router)
     callback_or(router, :save_configuration) do
         @debug "[$router] saving configuration to $(broker_dir(router.id))"
         save_topic_auth(router, router.con)
-        save_admins(router, router.con)
     end
 end
 

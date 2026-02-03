@@ -33,6 +33,7 @@ const JSON::UInt8 = UInt8(0x01)
 const HR_CHALLENGE = "chnge"
 const HR_CONN_DOWN = "cdown"
 
+const ADMINS_FILE = "admins.json"
 const TENANTS_FILE = "tenants.json"
 const TENANT_COMPONENT = "tenant_component.json"
 
