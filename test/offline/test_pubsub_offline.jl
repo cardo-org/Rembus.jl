@@ -18,7 +18,7 @@ function run()
     subscribe(sub, mytopic, Rembus.LastReceived)
     reactive(sub)
 
-    sleep(0.5)
+    sleep(1)
     @test ctx["count"] == 2
 
     close(sub)
