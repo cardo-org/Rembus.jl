@@ -6,7 +6,7 @@ using Rembus
 
 
 function load_file(broker_name)
-    dir = broker_dir(broker_name)
+    dir = Rembus.broker_dir(broker_name)
     mkpath(dir)
 
     fn = joinpath(dir, Rembus.TENANTS_FILE)
@@ -21,7 +21,7 @@ function load_file(broker_name)
 end
 
 function save_file(broker_name, tenants)
-    fn = joinpath(broker_dir(broker_name), Rembus.TENANTS_FILE)
+    fn = joinpath(Rembus.broker_dir(broker_name), Rembus.TENANTS_FILE)
     open(fn, "w") do f
         JSON3.write(f, tenants; indent=2)
     end

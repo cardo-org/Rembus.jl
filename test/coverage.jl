@@ -13,6 +13,7 @@ end
 
 for dir in [
     "src",
+    "tools",
     "ext",
     "test",
     "test/ack",
