@@ -28,7 +28,7 @@ function run(pub_url, sub_url)
     ctx = Ctx()
 
     sub = connect(Rembus.RbURL(sub_url), name="saved_messages_sub")
-    @test isnothing(subscribe(sub, foo, Rembus.LastReceived))
+    @test isnothing(subscribe(sub, foo))
     inject(sub, ctx)
     reactive(sub)
 
@@ -45,7 +45,7 @@ function run(pub_url, sub_url)
 
     # the pub component does not retry to send the messages,
     # so the sub should receive 1+setting.send_retries messages
-    # from the broker and the default send_retries equals 3
+    # from the broker and the broker send_retries equals 3
     @test ctx.data1 == 4
     @test ctx.data2 == 4
 end
@@ -65,6 +65,7 @@ try
     end
 
     Rembus.settings(rb).ack_timeout = 0.5
+    Rembus.settings(rb).send_retries = 3
     run(pub_url, sub_url)
 catch e
     @error "[ack_never_send] error: $e"

@@ -466,7 +466,7 @@ mutable struct Settings
         send_retries = get(
             cfg,
             "send_retries",
-            parse(Int, get(ENV, "REMBUS_SEND_RETRIES", "3"))
+            parse(Int, get(ENV, "REMBUS_SEND_RETRIES", "10"))
         )
         reconnect_period = get(
             cfg,
