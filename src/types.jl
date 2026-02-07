@@ -526,6 +526,18 @@ struct Table
     ) = new(table, columns, keys, extras, topic, delete_topic)
 end
 
+function columns(tabledef::Table)
+    return [t.name for t in tabledef.fields]
+end
+
+function all_columns(table::Table)
+    cols = columns(table)
+    for (_, col_name) in table.extras
+        push!(cols, col_name)
+    end
+    return cols
+end
+
 
 abstract type AbstractRouter end
 

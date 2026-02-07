@@ -54,10 +54,6 @@ function columndef(col::Column)
            (col.default !== nothing ? " DEFAULT '$(col.default)'" : "")
 end
 
-function columns(tabledef::Table)
-    return [t.name for t in tabledef.fields]
-end
-
 function set_default(row::DataFrameRow, tabledef::Table, d; add_nullable=true)
     for col in tabledef.fields
         name = col.name
@@ -390,12 +386,14 @@ function append(con::DuckDB.DB, tabledef::Table, df)
                 end
             elseif format == "dataframe"
                 df = dataframe_if_tagvalue(values[1])
-                if names(df) == tblfields
+                missing_fields = setdiff(Set(tblfields), Set(names(df)))
+                if isempty(missing_fields)
                     df_extras(tabledef, df, row)
+                    allcols = join(all_columns(tabledef), ",")
                     DuckDB.register_data_frame(con, df, "df_view")
                     DuckDB.execute(
                         con,
-                        "INSERT INTO $topic SELECT * FROM df_view"
+                        "INSERT INTO $topic SELECT $allcols FROM df_view"
                     )
                     DuckDB.unregister_data_frame(con, "df_view")
                 else
@@ -436,15 +434,23 @@ function extras(tabledef::Table, fields::Vector, row)
     return vals
 end
 
-function df_extras(tabledef::Table, df, row)
+function df_extras(tabledef::Table, df::DataFrame, row)
+    # recv_ts
     if haskey(tabledef.extras, "recv_ts")
-        df[!, tabledef.extras["recv_ts"]] .= row.recv
+        cname = tabledef.extras["recv_ts"]
+        if cname ∉ names(df)
+            df[!, cname] = fill(row.recv, nrow(df))
+        end
     end
+
+    # slot
     if haskey(tabledef.extras, "slot")
-        df[!, tabledef.extras["slot"]] .= row.slot
+        cname = tabledef.extras["slot"]
+        if cname ∉ names(df)
+            df[!, cname] = fill(row.slot, nrow(df))
+        end
     end
 end
-
 
 function get_type(col::Column)
     if col.nullable
