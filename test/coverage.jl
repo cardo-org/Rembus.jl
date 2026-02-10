@@ -24,6 +24,7 @@ for dir in [
     "test/keyspace",
     "test/offline",
     "test/broker",
+    "test/filestore",
     "test/twin",
     "test/errors",
     "test/security",

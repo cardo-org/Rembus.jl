@@ -152,7 +152,8 @@ endpoint.
 > `wait(bro)` is mandatory only when the broker is started in a script: in a
 REPL session is a no-op.
 
-See [broker documentation](docs/src/api.md#component) for more details on how to configure the broker.
+See [broker documentation](docs/src/api.md#component) for more details on how to
+configure the broker.
 
 The one-line shortcut for starting a broker from the terminal shell is:
 

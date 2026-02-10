@@ -535,7 +535,15 @@ end
 # For the future. See: https://ducklake.select/docs/stable/duckdb/unsupported_features
 #create_enum(en, db::Archiver) = nothing
 
-function create_schema(jsonstr::AbstractString)
+
+function create_schema(schema::AbstractString)
+
+    if startswith(schema, r"^\s*{")
+        jsonstr = schema
+    else
+        jsonstr = read(schema, String)
+    end
+
     config = JSON3.read(jsonstr, Dict)
     tables = config["tables"]
 
