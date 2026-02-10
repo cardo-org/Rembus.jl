@@ -313,6 +313,41 @@ function transport_connect(rb::Twin)
     return rb
 end
 
+function gethost(remote_ip)
+    # Reverse DNS lookup
+    rhost = try
+        getnameinfo(remote_ip)
+    catch
+        string(remote_ip)
+    end
+    return rhost
+end
+
+function remote_host(socket::WS)
+    bio = socket.sock.io.io
+    remote_ip = if bio isa Sockets.TCPSocket
+        getpeername(bio)[1]
+    else
+        getpeername(bio.bio)[1]
+    end
+
+    return gethost(remote_ip)
+end
+
+function remote_host(socket::TCP)
+    remote_ip = getpeername(socket.sock)[1]
+    return gethost(remote_ip)
+end
+
+function remote_host(socket::TLS)
+    bio = socket.sock.bio
+    remote_ip = getpeername(bio)[1]
+    return gethost(remote_ip)
+end
+
+remote_host(socket::ZDealer) = "unknown"
+
+
 """
     component(urls::Vector)
 
@@ -416,6 +451,10 @@ function component(url::RbURL, router::AbstractRouter, enc=CBOR, failovers=[])
 
     twin = bind(router, url)
     twin.enc = enc
+
+    ## Load installed services and subscribers
+    #load_callbacks(twin)
+
     return handle_connection(twin, failovers)
 end
 
@@ -607,6 +646,7 @@ function do_connect(twin::Twin)
     end
 
     if isopen(twin.socket)
+        load_callbacks(twin)
         if !isnothing(twin.connected)
             c = twin.connected
             # time granted to remote component for booting.
@@ -713,6 +753,7 @@ function verify_signature(router::Router, twin::Twin, msg)
         hash = MbedTLS.digest(MD_SHA256, plain)
         MbedTLS.verify(ctx, MD_SHA256, hash, msg.signature)
     catch e
+        @info "verify signature: $e"
         if isa(e, MbedTLS.MbedException) &&
            e.ret == MbedTLS.MBEDTLS_ERR_RSA_VERIFY_FAILED
             rethrow()
@@ -800,6 +841,7 @@ function attestation(router::Router, twin::Twin, msg, authenticate=true)
         # The named component is connected,
         # send a message to component_info topic.
         twin_event(twin, "connection_up")
+        twin_up(twin)
 
         reason = get_topics(router, twin)
         @debug "[$twin] exported topics: $reason"
@@ -1022,7 +1064,8 @@ function manage_target(router, twin, target_twin, msg)
             local_fn(router, twin, msg)
         else
             # check if remote expose the topic
-            if haskey(router.topic_impls, msg.topic)
+            if haskey(router.topic_impls, msg.topic) ||
+               msg.topic in BUILTINS_CMD
                 put!(target_twin.process.inbox, msg)
             else
                 put!(
@@ -1286,7 +1329,7 @@ function twin_receiver(twin::Twin)
 
         # Send the connection_down message to component_info topic.
         twin_event(twin, "connection_down")
-
+        twin_down(twin)
     end
 
     return nothing
@@ -1318,6 +1361,7 @@ function client_receiver(router::Router, socket)
     twin = bind(router, RbURL())
     twin.socket = socket
     @debug "[$twin] anonymous client connected"
+    ra = repr(UInt64(pointer_from_objref(router)))
     challenge_if_auth(router, twin)
     # ws/tcp socket receiver task
     twin_receiver(twin)
@@ -1362,7 +1406,7 @@ function detach(twin)
     end
     # save the state to disk
     router = top_router(twin.router)
-    if !isrepl(twin.uid) && hasname(twin)
+    if !isbroker(twin.uid) && hasname(twin)
         save_twin(router, twin, router.con)
     end
 

@@ -100,7 +100,7 @@ mutable struct AdminReqMsg{T} <: RembusTopicMsg
         return new{typeof(data)}(msgid, topic, data, target, flags, twin)
     end
 
-    function AdminReqMsg(twin::Twin, topic::String, data, target=nothing, flags=0x0)
+    function AdminReqMsg(twin::Twin, topic::AbstractString, data, target=nothing, flags=0x0)
         return new{typeof(data)}(id(), topic, data, target, flags, twin)
     end
 end

@@ -20,8 +20,8 @@ function run()
     broker_name = "duckdb_schema"
     Rembus.broker_reset(broker_name)
 
-    jsonstr = read(joinpath(@__DIR__, "test_schema.json"), String)
-    bro = component(name=broker_name, schema=jsonstr)
+    schema = joinpath(@__DIR__, "test_schema.json")
+    bro = component(name=broker_name, schema=schema)
 
     pub = component("duckdb_pub")
 

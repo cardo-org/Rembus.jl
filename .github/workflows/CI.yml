@@ -11,6 +11,8 @@ on:
 
 env:
   DEPLOY_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/broker
+  MQTT_HOST: 127.0.0.1
+  MQTT_PORT: 1883
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,7 +20,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -31,30 +33,20 @@ jobs:
           - '1.12'
         os:
           - ubuntu-latest
-          - windows-latest
-        arch:
-          - x64
-
-    env:
-      MQTT_HOST: 127.0.0.1
-      MQTT_PORT: 1883
+          - macos-latest
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install ssh-keygen on Windows
-        if: runner.os == 'Windows'
-        run: choco install openssh
-        shell: cmd
-
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          arch: ${{ matrix.os == 'ubuntu-latest' && 'x64' || 'aarch64' }}
 
       - uses: julia-actions/cache@v2
 
-      - name: Install Mosquitto on Ubuntu
+      # Install Mosquitto on Linux
+      - name: Install Mosquitto on Linux
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -62,10 +54,27 @@ jobs:
           sudo systemctl enable mosquitto
           sudo systemctl start mosquitto
 
-      - name: Wait for Mosquitto to be ready
-        if: runner.os == 'Linux'
+      # Install Mosquitto on macOS
+      - name: Install Mosquitto on macOS
+        if: runner.os == 'macOS'
         run: |
-          for i in {1..10}; do
+          brew update
+          brew install mosquitto
+          # Create minimal config for CI
+          mkdir -p $HOME/mosquitto
+          cat <<EOF > $HOME/mosquitto/mosquitto.conf
+          listener 1883
+          allow_anonymous true
+          persistence false
+          EOF
+    
+          # Start Mosquitto in background
+          /opt/homebrew/opt/mosquitto/sbin/mosquitto -c $HOME/mosquitto/mosquitto.conf &
+
+      # Wait for Mosquitto to be ready
+      - name: Wait for Mosquitto
+        run: |
+          for i in {1..20}; do
             nc -z ${MQTT_HOST} ${MQTT_PORT} && echo "Mosquitto is up" && exit 0
             echo "Waiting for Mosquitto..."
             sleep 1
@@ -74,24 +83,10 @@ jobs:
           exit 1
 
       - uses: julia-actions/julia-buildpkg@v1
-        if: runner.os == 'Windows'
-        env:
-          REMBUS_FILESTORE: 1
-
-      - uses: julia-actions/julia-buildpkg@v1
-        if: runner.os != 'Windows'
 
       - uses: julia-actions/julia-runtest@v1
-        if: runner.os == 'Windows'
         with:
           depwarn: 'no'
-        env:
-          REMBUS_FILESTORE: 1
-
-      - uses: julia-actions/julia-runtest@v1
-        if: runner.os != 'Windows'
-        with:
-          depwarn: 'no'          
 
       - uses: julia-actions/julia-processcoverage@v1
 

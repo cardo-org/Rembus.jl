@@ -328,6 +328,8 @@ function expose(twin::Twin, name::AbstractString, func::Function)
     router = top_router(twin.router)
     router.local_function[name] = func
     msg = AdminReqMsg(twin, name, Dict{String,Any}(COMMAND => EXPOSE_CMD), rid(twin))
+
+    ra = repr(UInt64(pointer_from_objref(router)))
     return send_msg(twin, msg) |> fetch
 end
 

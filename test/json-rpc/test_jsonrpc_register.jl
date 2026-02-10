@@ -12,12 +12,12 @@ function run()
     url = "jsonrpc_register_node"
     node = Rembus.RbURL(url)
     private_key = joinpath(Rembus.rembus_dir(), rid(node), ".secret")
-    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(rid(node)).ecdsa.pem")
+    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(rid(node)).rsa.pem")
 
     rm(private_key, force=true)
     rm(public_key, force=true)
 
-    register(url, pin, scheme=Rembus.SIG_ECDSA, enc=Rembus.JSON)
+    register(url, pin, scheme=Rembus.SIG_RSA, enc=Rembus.JSON)
 
     @test isfile(private_key)
     @test isfile(public_key)

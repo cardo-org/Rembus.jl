@@ -468,7 +468,6 @@ end
 function broker_reset(broker_name="broker")
     bdir = broker_dir(broker_name)
     dbpath = joinpath(rembus_dir(), "$broker_name.ducklake")
-    @debug "removing $dbpath"
     rm(dbpath, force=true)
     if isdir(bdir)
         foreach(
@@ -535,7 +534,15 @@ end
 # For the future. See: https://ducklake.select/docs/stable/duckdb/unsupported_features
 #create_enum(en, db::Archiver) = nothing
 
-function create_schema(jsonstr::AbstractString)
+
+function create_schema(schema::AbstractString)
+
+    if startswith(schema, r"^\s*{")
+        jsonstr = schema
+    else
+        jsonstr = read(schema, String)
+    end
+
     config = JSON3.read(jsonstr, Dict)
     tables = config["tables"]
 
@@ -564,11 +571,16 @@ function create_schema(jsonstr::AbstractString)
     return tables
 end
 
-function service_install(
-    router, topic, code, ctx=nothing, node=nothing
+function service_list(
+    router, getbody, ctx=nothing, node=nothing
 )
-    @info "installing service [$topic]"
-    save_callback(router, "services", topic, code)
+    return list_callback(router, "services", getbody)
+end
+
+function service_install(
+    router, cfg, ctx=nothing, node=nothing
+)
+    add_callback(router, "services", cfg)
     return "ok"
 end
 
@@ -576,15 +588,20 @@ function service_uninstall(
     router, topic, code, ctx=nothing, node=nothing
 )
     @info "uninstalling service [$topic]"
-    delete_callback(router, "services", topic)
+    remove_callback(router, "services", topic)
     return "ok"
 end
 
-function subscriber_install(
-    router, topic, code, ctx=nothing, node=nothing
+function subscriber_list(
+    router, getbody, ctx=nothing, node=nothing
 )
-    @info "installing subscriber [$topic]"
-    save_callback(router, "subscribers", topic, code)
+    return list_callback(router, "subscribers", getbody)
+end
+
+function subscriber_install(
+    router, cfg, ctx=nothing, node=nothing
+)
+    add_callback(router, "subscribers", cfg)
     return "ok"
 end
 
@@ -592,6 +609,6 @@ function subscriber_uninstall(
     router, topic, code, ctx=nothing, node=nothing
 )
     @info "uninstalling subscriber [$topic]"
-    delete_callback(router, "subscribers", topic)
+    remove_callback(router, "subscribers", topic)
     return "ok"
 end

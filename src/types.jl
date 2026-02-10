@@ -203,7 +203,7 @@ end
 
 hasname(c::RbURL) = !(is_uuid4(c.id) || all(isdigit, c.id))
 
-isrepl(c::RbURL) = c.protocol === :repl
+isbroker(c::RbURL) = c.protocol === :repl
 
 """
 Return an url representing an anonymous component.
@@ -773,7 +773,7 @@ $(TYPEDSIGNATURES)
 Check if the component is connected to the broker.
 """
 function Base.isopen(rb::Twin)::Bool
-    if isrepl(rb.uid)
+    if isbroker(rb.uid)
         return isdefined(rb, :process) && !istaskdone(rb.process.task)
     else
         return isopen(rb.socket)
@@ -785,7 +785,7 @@ $(TYPEDSIGNATURES)
 Wait for RPC requests and Pub/Sub messages.
 """
 function Base.wait(rb::Twin; reactive=true)
-    if reactive && !isrepl(rb.uid)
+    if reactive && !isbroker(rb.uid)
         Rembus.reactive(rb, reactive)
     end
 

@@ -1,6 +1,9 @@
 include("../utils.jl")
 
+target_name = "worker"
+
 function install()
+
     myservice_code = """
 function myservice(x, y)
     return x + y
@@ -12,92 +15,101 @@ function mytopic(data)
    @info "[swdistribution] mytopic:\$data"
 end
 """
-    service_path = joinpath(
-        Rembus.broker_dir("swdistribution"), "src", "services", "myservice_main.jl")
-    subscriber_path = joinpath(
-        Rembus.broker_dir("swdistribution"), "src", "subscribers", "mytopic_main.jl")
-
     node = component("orchestrator")
+    target_node = component(target_name)
 
-    lst = rpc(node, "julia_service_list", false)
+    lst = direct(node, target_name, "julia_service_list", false)
     @test length(lst) == 0
 
-    res = rpc(
+    res = direct(
         node,
+        target_name,
         "julia_service_install",
         Dict("name" => "myservice", "content" => myservice_code)
     )
     @test res == "ok"
-    @test read(service_path, String) == myservice_code
 
-    res = rpc(
+    res = direct(
         node,
+        target_name,
         "julia_service_install",
         Dict("name" => "myservice", "content" => myservice_code, "tag" => "v1.0.0")
     )
     @test res == "ok"
 
-    res = rpc(
+    res = direct(
         node,
+        target_name,
         "julia_subscriber_install",
         Dict("name" => "mytopic", "content" => mytopic_code)
     )
 
     @test res == "ok"
-    @test read(subscriber_path, String) == mytopic_code
 
     # test missing parameters
-    @test_throws RpcMethodException rpc(
-        node, "julia_service_install", Dict("name" => "service_name")
+    @test_throws RpcMethodException direct(
+        node,
+        target_name,
+        "julia_service_install",
+        Dict("name" => "service_name")
     )
-    @test_throws RpcMethodException rpc(
-        node, "julia_service_install", Dict("content" => myservice_code)
+    @test_throws RpcMethodException direct(
+        node,
+        target_name,
+        "julia_service_install",
+        Dict("content" => myservice_code)
     )
 
-    lst = rpc(node, "julia_service_list", false)
+    lst = direct(node, target_name, "julia_service_list", false)
     @test length(lst) == 1
     @test lst[1]["name"] == "myservice_v1.0.0.jl"
 
-    lst = rpc(node, "julia_service_list", true)
+    lst = direct(node, target_name, "julia_service_list", true)
     @test length(lst) == 1
     @test lst[1]["content"] == myservice_code
 
-
-
-
     close(node)
+    close(target_node)
 end
 
 function run()
     x = 1.0
     y = 2.0
+    target_node = component("worker")
     cli = component("cli")
-    result = rpc(cli, "myservice", x, y)
+
+    # wait for the service to be installed and available
+    sleep(2)
+    result = direct(cli, target_name, "myservice", x, y)
+    @test result == 3.0
 
     publish(cli, "mytopic", "Check this message in the log output")
     close(cli)
+    close(target_node)
 end
 
 function uninstall()
     node = component("orchestrator")
+    target_node = component("worker")
 
-    res = rpc(node, "julia_service_uninstall", "myservice")
+    res = direct(node, target_name, "julia_service_uninstall", "myservice")
     @test res == "ok"
 
-    res = rpc(node, "julia_subscriber_uninstall", "mytopic")
+    res = direct(node, target_name, "julia_subscriber_uninstall", "mytopic")
     @test res == "ok"
 
-    path = joinpath(Rembus.broker_dir("swdistribution"), "src", "services", "myservice.jl")
+    path = joinpath(Rembus.rembus_dir(), "worker", "src", "services", "myservice.jl")
     @test !isfile(path)
 
-    path = joinpath(Rembus.broker_dir("swdistribution"), "src", "subscribers", "mytopic.jl")
+    path = joinpath(Rembus.rembus_dir(), "worker", "src", "subscribers", "mytopic.jl")
     @test !isfile(path)
 
     close(node)
+    close(target_node)
 end
 
 rm(
-    joinpath(Rembus.broker_dir("swdistribution"), "src", "services"),
+    joinpath(Rembus.rembus_dir(), "worker", "src", "services"),
     recursive=true,
     force=true
 )

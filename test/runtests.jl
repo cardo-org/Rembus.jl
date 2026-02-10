@@ -49,6 +49,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "swdistribution" begin
             include("swdistribution/test_swdistribution.jl")
         end
+        @time @safetestset "direct_swdistribution" begin
+            include("swdistribution/test_direct_swdistribution.jl")
+        end
     end
     if !Base.Sys.iswindows() &&
        !haskey(ENV, "REMBUS_FILESTORE") &&
@@ -112,6 +115,31 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "twin_timeout" begin
             include("broker/test_twin_timeout.jl")
         end
+    end
+    if GROUP == "all" || GROUP == "filestore"
+        ENV["REMBUS_FILESTORE"] = 1
+        @time @safetestset "fs_misc" begin
+            include("filestore/test_fs_misc.jl")
+        end
+        @time @safetestset "fs_upload" begin
+            include("filestore/test_fs_upload.jl")
+        end
+        @time @safetestset "fs_pool" begin
+            include("filestore/test_fs_pool.jl")
+        end
+        @time @safetestset "fs_setup" begin
+            include("filestore/test_fs_setup.jl")
+        end
+        @time @safetestset "fs_upload_message" begin
+            include("filestore/test_fs_upload_messages.jl")
+        end
+        @time @safetestset "fs_data_at_rest" begin
+            include("filestore/test_fs_data_at_rest.jl")
+        end
+        @time @safetestset "private_topic" begin
+            include("filestore/test_fs_private_topic.jl")
+        end
+        pop!(ENV, "REMBUS_FILESTORE")
     end
     if GROUP == "all" || GROUP == "json-rpc"
         @time @safetestset "jsonrpc" begin
@@ -226,8 +254,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "authenticated" begin
             include("security/test_authenticated.jl")
         end
-        @time @safetestset "register" begin
-            include("security/test_register.jl")
+        if !Sys.isapple()
+            @time @safetestset "register" begin
+                include("security/test_register.jl")
+            end
+        else
+            @info "Skipping test_register on macOS (MbedTLS ECDSA limitation)"
         end
         @time @safetestset "register_authenticated" begin
             include("security/test_register_authenticated.jl")

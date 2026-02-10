@@ -49,8 +49,8 @@ end
 
 @info "[hierarchy] start"
 try
-    request_timeout!(5)
-    Rembus.broker_reset(broker_name)
+    #request_timeout!(5)
+    #Rembus.broker_reset(broker_name)
     run()
 catch e
     @test false

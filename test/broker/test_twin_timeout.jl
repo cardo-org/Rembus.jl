@@ -11,13 +11,10 @@ function run()
     ENV["REMBUS_TIMEOUT"] = "0.5"
     bro = component(name="bro1")
 
-    @info "[twin_timeout] request_timeout: $(bro.router.settings.request_timeout)"
-
     srv = component("srv")
     expose(srv, myservice)
 
     cli = component("cli")
-
 
     try
         rpc(cli, "myservice")

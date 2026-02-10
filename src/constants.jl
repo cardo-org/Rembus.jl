@@ -1,4 +1,4 @@
-const VERSION = "1.2.3"
+const VERSION = "julia_1.2.3"
 
 const Protocols = Set{String}(["ws", "wss", "tcp", "tls", "zmq"])
 
@@ -57,7 +57,17 @@ The from argument of the subscribe methods may assume the values:
 const Now = 0.0
 const LastReceived = Inf
 
-
+const BUILTINS_CMD = [
+    "julia_service_list",
+    "julia_service_install",
+    "julia_service_uninstall",
+    "julia_subscriber_list",
+    "julia_subscriber_install",
+    "julia_subscriber_uninstall",
+    "version",
+    "uptime",
+    "rid"
+]
 const REACTIVE_CMD = "reactive"
 const RESET_ROUTER_CMD = "reset_router"
 const SHUTDOWN_CMD = "shutdown"

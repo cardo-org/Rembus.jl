@@ -1,6 +1,8 @@
 closedb(::FileStore) = nothing
 
+# COV_EXCL_START
 Base.isopen(::FileStore) = true
+# COV_EXCL_STOP
 
 lock_msgfile::ReentrantLock = ReentrantLock()
 
@@ -127,10 +129,11 @@ file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
 
 function msg_files(router)
     mdir = messages_dir(router)
-    if !isdir(mdir)
-        return String[]
+    msgs = String[]
+    if isdir(mdir)
+        msgs = sort(readdir(mdir), lt=file_lt)
     end
-    return sort(readdir(mdir), lt=file_lt)
+    return msgs
 end
 
 msg_files(twin::Twin) = msg_files(twin.router)
@@ -252,13 +255,13 @@ function save_twin(router::Router, twin::Twin, ::FileStore)
     twinid = rid(twin)
     twin_cfg = Dict()
 
-    if hasname(twin) && haskey(router.id_twin, twinid) && !isrepl(twin.uid)
+    if hasname(twin) && haskey(router.id_twin, twinid) && !isbroker(twin.uid)
         twin_cfg["subscribers"] = twin.msg_from
         twin_cfg["exposers"] = exposed_topics(router, twin)
         twin_cfg["mark"] = twin.mark
 
         if is_uuid4(router.process.supervisor.id)
-            @debug "[$twin] is a pool element: skipping twin configuration save"
+            @debug "[$twin] is a pool: skipping twin configuration save"
             return nothing
         end
 

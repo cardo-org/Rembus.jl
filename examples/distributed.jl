@@ -121,8 +121,9 @@ function main(cli)
         res = rpc(
             cli,
             "julia_service_install",  # software distribution topic
-            "stats",                  # remote RPC service name
-            stats_src,      # function source code
+            Dict("name" => "stats",       # remote RPC service name
+                "content" => stats_src,      # function source code
+            )
         )
 
         println("Service installation result: ", res)

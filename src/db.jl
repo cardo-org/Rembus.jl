@@ -151,6 +151,15 @@ function create_tables(router, con)
     try
         tables = [
             """
+            CREATE TABLE IF NOT EXISTS component (
+                broker TEXT NOT NULL,
+                host TEXT NOT NULL,
+                twin TEXT NOT NULL,
+                status TEXT,
+                last_changed TIMESTAMP
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS message (
                 name TEXT NOT NULL,
                 recv UBIGINT,
@@ -906,5 +915,49 @@ function load_configuration(router)
         load_topic_auth(router, router.con)
         load_admins(router, router.con)
         router.owners = load_tenants(router, router.con)
+    end
+end
+
+function twin_down(twin)
+    """Persist the twin status to DB."""
+    router = top_router(twin.router)
+    if isa(router.con, FileStore) || !hasname(twin)
+        return
+    end
+
+    now = Dates.now(Dates.UTC)
+
+    with_db(router) do db
+        DBInterface.execute(db,
+            """
+            UPDATE component SET status = 'down', last_changed = ?
+            WHERE broker = ? AND twin = ?
+            """,
+            [now, router.id, rid(twin)])
+    end
+end
+
+function twin_up(twin)
+    """Persist the twin status to DB."""
+    router = top_router(twin.router)
+    if isa(router.con, FileStore) || !hasname(twin) || isa(twin.socket, ZRouter)
+        return
+    end
+
+    rhost = remote_host(twin.socket)
+    now = Dates.now(Dates.UTC)
+
+    with_db(router) do db
+        DBInterface.execute(db,
+            "DELETE FROM component WHERE broker = ? AND twin = ?",
+            [router.id, rid(twin)]
+        )
+
+        DBInterface.execute(db,
+            """
+            INSERT INTO component (broker, host, twin, status, last_changed)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [router.id, rhost, rid(twin), "up", now])
     end
 end

@@ -217,23 +217,31 @@ function init(router::Router)
     router.local_function["uptime"] = (ctx=missing, twin=nothing) -> uptime(router)
     router.local_function["version"] = (ctx=missing, twin=nothing) -> Rembus.VERSION
 
-    router.local_function["julia_service_install"] = (
-        name,
-        cnt,
+    router.local_function["julia_service_list"] = (
+        getbody=false,
         ctx=missing,
         twin=nothing
-    ) -> service_install(router, name, cnt, ctx, twin)
+    ) -> service_list(router, getbody, ctx, twin)
+    router.local_function["julia_service_install"] = (
+        cfg,
+        ctx=missing,
+        twin=nothing
+    ) -> service_install(router, cfg, ctx, twin)
     router.local_function["julia_service_uninstall"] = (
         name,
         ctx=missing,
         twin=nothing
     ) -> service_uninstall(router, name, ctx, twin)
-    router.local_function["julia_subscriber_install"] = (
-        name,
-        cnt,
+    router.local_function["julia_subscriber_list"] = (
+        getbody=false,
         ctx=missing,
         twin=nothing
-    ) -> subscriber_install(router, name, cnt, ctx, twin)
+    ) -> subscriber_list(router, getbody, ctx, twin)
+    router.local_function["julia_subscriber_install"] = (
+        cfg,
+        ctx=missing,
+        twin=nothing
+    ) -> subscriber_install(router, cfg, ctx, twin)
     router.local_function["julia_subscriber_uninstall"] = (
         name,
         ctx=missing,
@@ -544,7 +552,7 @@ Server main task.
 A server does nor route messages between connected nodes.
 =#
 function server_task(self, router::Router)
-    router_task(self, router, isrepl)
+    router_task(self, router, isbroker)
 end
 
 # Find an implementor.
