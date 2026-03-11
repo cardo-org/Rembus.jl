@@ -1,4 +1,4 @@
-const VERSION = "julia_1.2.3"
+const VERSION = "julia_1.2.4"
 
 const Protocols = Set{String}(["ws", "wss", "tcp", "tls", "zmq"])
 

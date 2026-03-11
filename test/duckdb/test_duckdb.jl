@@ -15,7 +15,7 @@ function nowts()
 end
 
 function run()
-    bro = component()
+    bro = component(name="test_duck")
     # set admin role for sub component
     push!(Rembus.top_router(bro.router).admins, "duckdb_pub")
 
