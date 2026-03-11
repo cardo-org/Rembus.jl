@@ -55,10 +55,7 @@ function run()
     close(pub)
     close(bro)
 
-    # Force close the db
-    close(Rembus.top_router(bro.router).con)
-
-    sleep(1)
+    sleep(2)
     con = DuckDB.DB(dbpath)
     df = DataFrame(DuckDB.execute(con, "select * from subscriber"))
     @test nrow(df) == 3
@@ -66,7 +63,7 @@ function run()
     @test nrow(df) == 2
     df = DataFrame(DuckDB.execute(con, "select * from mark"))
 
-    close(con)
+    Rembus.closedb(con)
 
     @test nrow(df) == 3
 end
