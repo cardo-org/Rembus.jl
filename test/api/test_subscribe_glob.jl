@@ -30,11 +30,11 @@ end
 function run(admin_component)
     ctx = TestCtx()
     subscribe_glob_sub = "subscribe_glob_sub"
-    subzmq = "zmq://:8002/subscribe_glob_subzmq"
+    subzmq = "zmq://:8336/subscribe_glob_subzmq"
     sub_noshared = "subscribe_glob_another_sub"
 
     producer = "subscribe_glob_producer"
-    producerzmq = "zmq://:8002/subscribe_glob_producerzmq"
+    producerzmq = "zmq://:8336/subscribe_glob_producerzmq"
     my_private_topic = "my_private_topic"
 
     subscribe_glob_sub_ = connect(subscribe_glob_sub)

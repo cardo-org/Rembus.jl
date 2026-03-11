@@ -38,8 +38,8 @@ function test_get_router()
     name = "myrouter"
     add_tenant(".", "mysecret", name)
 
-    r1 = Rembus.get_router(name=name, ws=8000, tcp=8001, zmq=8002, prometheus=9000)
-    r2 = Rembus.get_router(name=name, ws=8000, tcp=8001, zmq=8002, prometheus=9000)
+    r1 = Rembus.get_router(name=name, ws=8338, tcp=8337, zmq=8336, prometheus=9000)
+    r2 = Rembus.get_router(name=name, ws=8338, tcp=8337, zmq=8336, prometheus=9000)
     @test r1 === r2
 
     Rembus.uptime(r1)

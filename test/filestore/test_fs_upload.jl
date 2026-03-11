@@ -6,7 +6,7 @@ myservice2() = "ok"
 mytopic() = nothing
 
 function run()
-    bro = broker(name="fs_upload", ws=8000)
+    bro = broker(name="fs_upload", ws=8338)
     Rembus.islistening(bro, protocol=[:ws], wait=10)
     srv1 = component("srv1")
     srv2 = component("srv2")
@@ -30,7 +30,7 @@ end
 
 function restart()
     @info "restarting ..."
-    bro = broker(name="fs_upload", ws=8000, zmq=8002, prometheus=7071)
+    bro = broker(name="fs_upload", ws=8338, zmq=8336, prometheus=7071)
     Rembus.islistening(bro, protocol=[:ws], wait=10)
     srv1 = component("srv1")
     srv2 = component("srv2")

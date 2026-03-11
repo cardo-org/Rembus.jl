@@ -17,12 +17,12 @@ myservice(x, y) = x + y
 function run()
     x = 1
     y = 2
-    bro = broker(ws=8000, name=broker_name)
-    failover_url = "ws://:8001"
+    bro = broker(ws=8338, name=broker_name)
+    failover_url = "ws://:8337"
     c1 = component("ha_c1", failovers=[failover_url])
     c2 = component("ha_c2", failovers=[failover_url])
 
-    failover = component(failover_name, ws=8001)
+    failover = component(failover_name, ws=8337)
     expose(c2, myservice)
 
     @test rpc(c1, "rid") === broker_name
@@ -44,7 +44,7 @@ function run()
     shutdown(failover)
 
     # Restart the main broker.
-    bro = broker(ws=8000, name=broker_name)
+    bro = broker(ws=8338, name=broker_name)
 
     # Wait for the main broker to take over.
     Rembus.islistening(bro, wait=20)

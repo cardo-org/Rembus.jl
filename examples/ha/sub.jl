@@ -6,7 +6,7 @@ end
 
 function main(name)
     ctx = Dict()
-    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8001")
+    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8337")
     rb = component(name, failovers=[failover])
     subscribe(rb, mytopic)
     inject(rb, ctx)

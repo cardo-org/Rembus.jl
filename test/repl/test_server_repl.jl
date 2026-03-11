@@ -6,7 +6,7 @@ using HTTP
 Base.isinteractive() = true
 
 function start_server()
-    rb = broker(ws=8000, name="server_repl")
+    rb = broker(ws=8338, name="server_repl")
 
     #rpc_service(x) = x
     rpc_service(x; ctx=nothing, node=nothing) = x

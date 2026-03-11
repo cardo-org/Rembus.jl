@@ -3,7 +3,7 @@ include("../utils.jl")
 using Prometheus
 
 function run()
-    repl = broker(ws=8000)
+    repl = broker(ws=8338)
 
     Rembus.islistening(repl, wait=10)
     rb = connect()

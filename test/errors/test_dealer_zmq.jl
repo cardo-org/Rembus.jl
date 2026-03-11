@@ -59,7 +59,7 @@ function wrong_header_2(identity, socket)
 end
 
 function run()
-    rb = Rembus.connect("zmq://:8002/dealer_zmq_cut")
+    rb = Rembus.connect("zmq://:8336/dealer_zmq_cut")
 
     res = rpc(rb, "version")
     @info "response: $res"

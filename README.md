@@ -72,12 +72,12 @@ reflecting its main role:
 
 ## Component
 
-Create a component that connects to `myhost.org` on port `8000` with the unique
+Create a component that connects to `myhost.org` on port `8338` with the unique
 name `mynode`:
 
 ```julia
 using Rembus
-node = component("ws://myhost.org:8000/mynode")
+node = component("ws://myhost.org:8338/mynode")
 ```
 
 The `node` handle can be used to invoke remote functions and publish messages
@@ -108,7 +108,7 @@ function get_status(options::Dict)
     end
 end
 
-node = component("ws://myhost.org:8000/myservices")
+node = component("ws://myhost.org:8338/myservices")
 expose(node, get_status)
 wait(node)
 ```
@@ -130,10 +130,9 @@ calls.
 Note that both the exposer and the subscriber components must call `wait(node)`
 to keep the component running and processing incoming requests.
 
-
 ## Broker
 
-Start a broker component listening on the default WebSocket port `8000`:
+Start a broker component listening on the default WebSocket port `8338`:
 
 ```julia
 using Rembus
@@ -258,7 +257,7 @@ function telemetry(topic, payload; ctx=nothing, node=nothing)
     println("📡 telemetry on $topic: $payload")
 end
 
-meter = component("ws://localhost:8000/mymeter")
+meter = component("ws://localhost:8338/mymeter")
 
 subscribe(meter, "**/telemetry", telemetry)
 
@@ -275,8 +274,8 @@ payload:
 ```julia
 using Rembus
 
-pub = component("ws://localhost:8000/my_edge_gateway")
-# ws, localhost and 8000 are the default values, so you can omit them
+pub = component("ws://localhost:8338/my_edge_gateway")
+# ws, localhost and 8338 are the default values, so you can omit them
 # pub = component("my_edge_gateway"))
 
 publish(pub, "belluno/HVAC/agordo.sala1/sensor")

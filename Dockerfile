@@ -8,9 +8,9 @@ COPY --chown=ubuntu:ubuntu ./bin/init_keystore ./bin/init_keystore
 RUN chmod -R a+w ./share/julia
 RUN chmod +x ./bin/init_keystore
 
-EXPOSE 8000
-EXPOSE 8001
-EXPOSE 8002
+EXPOSE 8338
+EXPOSE 8337
+EXPOSE 8336
 EXPOSE 9100
 
 USER ubuntu

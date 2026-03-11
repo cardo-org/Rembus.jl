@@ -34,7 +34,7 @@ function run()
     @test_throws RembusTimeout connect(node)
 end
 
-execute(run, "challenge", authenticated=true, ws=8000, setup=setup)
+execute(run, "challenge", authenticated=true, ws=8338, setup=setup)
 
 function Rembus.transport_send(socket::Rembus.AbstractPlainSocket, msg::Rembus.Attestation)
     pkt = [Rembus.TYPE_ATTESTATION, Rembus.id2bytes(msg.id), msg.cid, msg.signature, msg.meta]

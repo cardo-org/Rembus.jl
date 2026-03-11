@@ -31,7 +31,7 @@ function run(request_url, subscriber_url, exposer_url)
 
     connect("")
 
-    rb = connect("tcp://:8001")
+    rb = connect("tcp://:8337")
     @test isopen(rb)
     close(rb)
 
@@ -132,9 +132,9 @@ end
 function run()
     ws_ping_interval!(0)
     zmq_ping_interval!(0)
-    for exposer_url in ["zmq://:8002/request_impl", "request_impl"]
-        for subscriber_url in ["zmq://:8002/request_sub", "request_sub"]
-            for request_url in ["zmq://:8002/request_client", "request_client"]
+    for exposer_url in ["zmq://:8336/request_impl", "request_impl"]
+        for subscriber_url in ["zmq://:8336/request_sub", "request_sub"]
+            for request_url in ["zmq://:8336/request_client", "request_client"]
                 @debug "rpc endpoints: $exposer_url, $subscriber_url, $request_url"
                 run(request_url, subscriber_url, exposer_url)
             end

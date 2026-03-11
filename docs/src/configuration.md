@@ -8,7 +8,7 @@ A component is affected by the following environment variables.
 |----------|-------|-------|
 |`REMBUS_DIR`|\$HOME/.config/rembus|Rembus root directory|
 |`REMBUS_FILESTORE`||If exists messages/settings are persisted to HDF5/JSON files|
-|`REMBUS_BASE_URL`|ws://localhost:8000|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8000/myclient"`|
+|`REMBUS_BASE_URL`|ws://localhost:8338|Default base url when defining component with  a simple string instead of a complete url. `@component "myclient"` is equivalent to `@component "ws://localhost:8338/myclient"`|
 |`REMBUS_TIMEOUT`|5|Maximum number of seconds waiting for rpc responses|
 |`REMBUS_SEND_RETRIES`|10|Maximum number of QOS1/QOS2 packet retrasmissions when no ACK is received|
 |`REMBUS_ACK_TIMEOUT`|2|Maximum number of seconds waiting for pub/sub ack messages|

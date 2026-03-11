@@ -21,12 +21,12 @@ end
 function run()
     ctx = Dict()
     msg = "ola"
-    bro = broker(ws=8000, name=broker_name)
-    failover_url = "ws://:8001"
+    bro = broker(ws=8338, name=broker_name)
+    failover_url = "ws://:8337"
     publisher = component("ha_pub_publisher", failovers=[failover_url])
     subscriber = component("ha_pub_subscriber", failovers=[failover_url])
 
-    failover = component(failover_name, ws=8001)
+    failover = component(failover_name, ws=8337)
 
     inject(subscriber, ctx)
     subscribe(subscriber, mytopic)
@@ -54,7 +54,7 @@ function run()
     @test length(ctx) === 2
 
     #    # Restart the main broker.
-    #    bro = broker(ws=8000, name=broker_name)
+    #    bro = broker(ws=8338, name=broker_name)
     #
     #    # Wait for the main broker to take over.
     #    sleep(3)

@@ -3,7 +3,7 @@ using Rembus
 Rembus.info!()
 
 function main()
-    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8001")
+    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8337")
     rb = component("myclient", failovers=[failover])
 
     x = 1

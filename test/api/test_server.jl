@@ -8,10 +8,10 @@ cli_service(val) = val * 2
 
 function run()
     # a loopback condition throws an error
-    @test_throws ErrorException component("my_cmp", ws=8000)
+    @test_throws ErrorException component("my_cmp", ws=8338)
 
     ctx = Dict()
-    srv = server(name="server", ws=8000)
+    srv = server(name="server", ws=8338)
     expose(srv, srv_service)
     subscribe(srv, srv_topic)
     inject(srv, ctx)

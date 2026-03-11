@@ -78,17 +78,17 @@ In a distributed system governed by the Rembus middleware there are two types of
 The first step for a Component application is to bind to a Broker and declare its name:
 
 ```julia
-@component "ws://broker.com:8000/organizer"
+@component "ws://broker.com:8338/organizer"
 ```
 
-The above declares a component `organizer` that will connect to the broker hosted at `broker.com` with protocol `ws` served at port `8000`.
+The above declares a component `organizer` that will connect to the broker hosted at `broker.com` with protocol `ws` served at port `8338`.
 
 > There are some sensible defaults that may help to keep the code clean:
 > the url of the broker may be set with the environment variable REMBUS_BASE_URL:
 >
 > `export REMBUS_BASE_URL=<protocol>://<host>:<port>`
 >
-> If `REMBUS_BASE_URL` is not defined the default url will be `ws://127.0.0.1:8000`.
+> If `REMBUS_BASE_URL` is not defined the default url will be `ws://127.0.0.1:8338`.
 >
 > In this case the component may be declared as:
 >
@@ -298,4 +298,3 @@ function power(ctx, component, df::DataFrame)
     return df
 end
 ```
-

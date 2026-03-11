@@ -11,7 +11,7 @@ end
 function run()
     for node in [
         "register_authenticated_node",
-        "zmq://:8002/register_authenticated_zmqnode"
+        "zmq://:8336/register_authenticated_zmqnode"
     ]
         reg(node)
     end
@@ -49,8 +49,8 @@ end
 execute(
     run,
     broker_name,
-    ws=8000,
-    zmq=8002,
+    ws=8338,
+    zmq=8336,
     authenticated=true,
     setup=() -> init(pin)
 )

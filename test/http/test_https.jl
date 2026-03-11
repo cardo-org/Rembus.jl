@@ -48,7 +48,7 @@ function run()
     password = "aaa"
     init(authenticated_component, password)
 
-    rb = connect("wss://:8000/https_myapp")
+    rb = connect("wss://:8338/https_myapp")
     expose(rb, myservice)
     subscribe(rb, mytopic)
     reactive(rb)

@@ -3,7 +3,7 @@ include("../utils.jl")
 function run()
     component(ws=9000, name="bro1")
 
-    bro2 = component(ws=8000, name="bro2")
+    bro2 = component(ws=8338, name="bro2")
 
     Rembus.settings(bro2).connection_mode = Rembus.authenticated
 

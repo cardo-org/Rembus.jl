@@ -25,7 +25,7 @@ end
 
 function run()
     request_timeout!(10)
-    bro = broker(name=broker_name, ws=8000)
+    bro = broker(name=broker_name, ws=8338)
 
     bro.router.local_function["login"] = custom_login
 

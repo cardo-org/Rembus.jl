@@ -109,7 +109,7 @@ function copy_from(fn, msg)
 end
 
 function spliturl(url::String)
-    baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8000")
+    baseurl = get(ENV, "REMBUS_BASE_URL", "ws://127.0.0.1:8338")
     baseuri = URI(baseurl)
     uri = URI(url)
     props = queryparams(uri)

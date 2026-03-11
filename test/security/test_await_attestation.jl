@@ -28,4 +28,4 @@ function run()
     @test_throws RembusError connect(node)
 end
 
-execute(run, broker_name, ws=8000, authenticated=true, setup=setup)
+execute(run, broker_name, ws=8338, authenticated=true, setup=setup)

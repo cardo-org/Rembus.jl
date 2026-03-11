@@ -708,7 +708,7 @@ $(TYPEDSIGNATURES)
 Return the name of the component (`R`rembus `ID`entifier).
 
 ```julia
-rb = component("ws://myhost.org:8000/myname")
+rb = component("ws://myhost.org:8338/myname")
 rid(rb) === "myname"
 ```
 """

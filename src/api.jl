@@ -35,7 +35,7 @@ customizable security, authentication, and routing policies.
 
     ### Default Behavior
     If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
-    for WebSocket connections on port `8000`.
+    for WebSocket connections on port `8338`.
 - `enc=Rembus.CBOR`: wire message format for sending messages
    Set to `Rembus.JSON` for JSON-RPC-2.0 text encoding.
 """
@@ -65,7 +65,7 @@ customizable security and authentication.
 
 ### Default Behavior
 If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
-for WebSocket connections on port `8000`.
+for WebSocket connections on port `8338`.
 """
 function server(;
     name::AbstractString="server",
@@ -109,18 +109,18 @@ In case of connection lost the underlying supervision logic attempts to reconnec
 broker until it succeed.
 
 The `url` argument specifies the connection details for the component. For example,
-the URL `ws://127.0.0.1:8000/foo` specifies:
+the URL `ws://127.0.0.1:8338/foo` specifies:
 
 - **Protocol**: `ws` (WebSocket). Other supported protocols: `wss`, `tcp`, `tls`, `zmq`.
 - **Address**: `127.0.0.1` (localhost).
-- **Port**: `8000`.
+- **Port**: `8338`.
 - **Component Name**: `foo`.
 
 Anonymous connections omit the path part of the URL.
 
 If not specified, Rembus considers the above values as the default values.
 
-This means the URL `ws://127.0.0.1:8000/foo` is equivalent to simply `foo`.
+This means the URL `ws://127.0.0.1:8338/foo` is equivalent to simply `foo`.
 
 Additionally, a component may listen for incoming connections on configured ports, enabling
 it to act as a broker. These ports are specified using keyword arguments.
@@ -240,7 +240,7 @@ A disconnection from the remote endpoint will not trigger automatic reconnection
 
 # Example
 
-rb = connect("ws://127.0.0.1:8000/mycomponent")
+rb = connect("ws://127.0.0.1:8338/mycomponent")
 """
 connect(url::AbstractString;
     enc=CBOR,

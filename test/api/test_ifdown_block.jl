@@ -9,7 +9,7 @@ cli_service(val) = val * 2
 function start_delayed(ctx)
     sleep(2)
 
-    bro = broker(name="ifdown_block", ws=8000)
+    bro = broker(name="ifdown_block", ws=8338)
     inject(bro, ctx)
     expose(bro, srv_service)
     subscribe(bro, srv_topic)

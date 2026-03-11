@@ -11,7 +11,7 @@ function run()
     expose(server, myservice)
     subscribe(server, mytopic)
 
-    url = "ws://127.0.0.1:8000/pool_c1"
+    url = "ws://127.0.0.1:8338/pool_c1"
     rb = connect(url)
     expose(rb, cliservice)
     subscribe(rb, clitopic)

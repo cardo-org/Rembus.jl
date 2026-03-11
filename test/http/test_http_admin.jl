@@ -46,7 +46,7 @@ function run()
     init(admin, password)
 
     # subscribe and expose some methods
-    rb = connect("wss://:8000/mycomponent")
+    rb = connect("wss://:8338/mycomponent")
     expose(rb, myservice)
     subscribe(rb, mytopic)
 

@@ -5,7 +5,7 @@ function myservice(x, y)
 end
 
 function main()
-    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8001")
+    failover = get(ENV, "REMBUS_FAILOVER", "ws://:8337")
     url = Rembus.RbURL(failover)
     rb = component("srv1", ws=url.port)
     expose(rb, myservice1)

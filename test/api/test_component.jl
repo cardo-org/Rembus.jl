@@ -28,9 +28,9 @@ function run()
         @info "router node: $node"
     end
 
-    #for url in ["ws://127.0.0.1:8000/c1", "zmq://127.0.0.1:8002/c1"]
-    #for url in ["zmq://127.0.0.1:8002/c1"]
-    for url in ["ws://127.0.0.1:8000/rpc_c1"]
+    #for url in ["ws://127.0.0.1:8338/c1", "zmq://127.0.0.1:8336/c1"]
+    #for url in ["zmq://127.0.0.1:8336/c1"]
+    for url in ["ws://127.0.0.1:8338/rpc_c1"]
         rb = connect(url)
         response = rpc(rb, "myservice", "hello")
         @info "response=$response"

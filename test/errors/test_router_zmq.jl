@@ -117,7 +117,7 @@ end
 function run()
     context = ZMQ.Context()
     socket = ZMQ.Socket(context, DEALER)
-    ZMQ.connect(socket, "tcp://127.0.0.1:8002")
+    ZMQ.connect(socket, "tcp://127.0.0.1:8336")
     wrong_message_type(socket)
     wrong_identity(socket)
     no_empty_message(socket)

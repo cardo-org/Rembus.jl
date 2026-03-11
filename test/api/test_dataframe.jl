@@ -11,7 +11,7 @@ function run()
     df1 = DataFrame(:a => 1:10)
     df2 = DataFrame(:a => 1:1000)
     df3 = DataFrame(:a => 1:1_000_000)
-    for url in ["tcp://127.0.0.1:8001/dataframe_c1"]
+    for url in ["tcp://127.0.0.1:8337/dataframe_c1"]
         rb = connect(url)
         # HEADER_LEN2
         response = rpc(rb, "myservice", df1, df2)

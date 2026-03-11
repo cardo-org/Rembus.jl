@@ -46,8 +46,8 @@ function connect_secure()
     try
         hname = gethostname()
         for cid in [
-            "tls://$hname:8001/connect_errors_aaa",
-            "wss://$hname:8000/connect_errors_bbb"
+            "tls://$hname:8337/connect_errors_aaa",
+            "wss://$hname:8338/connect_errors_bbb"
         ]
             rb = connect(cid)
 
@@ -66,14 +66,14 @@ end
 function no_cacert()
     host = gethostname()
     try
-        connect("tls://$host:8001")
+        connect("tls://$host:8337")
         @test false
     catch e
         @test isa(e, Rembus.CABundleNotFound)
     end
 
     try
-        connect("wss://$host:8000")
+        connect("wss://$host:8338")
         @test false
     catch e
         @test isa(e, Rembus.CABundleNotFound)
@@ -84,7 +84,7 @@ end
 function invalid_cacert()
     host = gethostname()
     try
-        connect("tls://$host:8001")
+        connect("tls://$host:8337")
         @test false
     catch e
         @test isa(e, Base.IOError)
@@ -92,7 +92,7 @@ function invalid_cacert()
     end
 
     try
-        connect("wss://$host:8000")
+        connect("wss://$host:8338")
         @test false
     catch e
         @test isa(e, HTTP.Exceptions.ConnectError)
@@ -103,7 +103,7 @@ end
 function wrong_keys(cid)
     host = gethostname()
     try
-        connect("tls://$host:8001/$cid")
+        connect("tls://$host:8337/$cid")
         @test false
     catch e
         @test isa(e, Rembus.RembusError)
@@ -111,7 +111,7 @@ function wrong_keys(cid)
     end
 
     try
-        connect("wss://$host:8000/$cid")
+        connect("wss://$host:8338/$cid")
         @test false
     catch e
         @test isa(e, Rembus.RembusError)
@@ -122,14 +122,14 @@ end
 function missing_keys(cid)
     host = gethostname()
     try
-        connect("tls://$host:8001/$cid")
+        connect("tls://$host:8337/$cid")
         @test false
     catch e
         @test isa(e, ErrorException)
     end
 
     try
-        connect("wss://$host:8000/$cid")
+        connect("wss://$host:8338/$cid")
         @test false
     catch e
         @test isa(e, ErrorException)
@@ -151,24 +151,24 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore -n $hname`)
-        execute(connect_secure, broker_name, secure=true, tcp=8001, ws=8000)
+        execute(connect_secure, broker_name, secure=true, tcp=8337, ws=8338)
 
         delete!(ENV, "HTTP_CA_BUNDLE")
-        execute(no_cacert, "connect_errors_no_cacert", secure=true, tcp=8001, ws=8000)
+        execute(no_cacert, "connect_errors_no_cacert", secure=true, tcp=8337, ws=8338)
 
         # test rembus_ca() method
         target_dir = joinpath(Rembus.rembus_dir(), "ca")
         mkpath(target_dir)
         mv(joinpath(test_keystore, REMBUS_CA), joinpath(target_dir, REMBUS_CA), force=true)
-        execute(connect_secure, "connect_errors_default_ca", secure=true, tcp=8001, ws=8000)
+        execute(connect_secure, "connect_errors_default_ca", secure=true, tcp=8337, ws=8338)
 
         cid = "connect_errors_wrong_keys"
         generate_wrong_keys(cid)
-        execute(() -> wrong_keys(cid), broker_name, reset=false, secure=true, tcp=8001, ws=8000)
+        execute(() -> wrong_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338)
 
         private_fn = Rembus.pkfile(cid)
         rm(private_fn)
-        execute(() -> missing_keys(cid), broker_name, reset=false, secure=true, tcp=8001, ws=8000)
+        execute(() -> missing_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338)
 
         # create a ca cert that does not signed the original certificate
         cacert = joinpath(target_dir, REMBUS_CA)
@@ -179,7 +179,7 @@ else
             -subj "/CN=Rembus/C=IT/L=Trento" \
             -keyout /dev/null -out $cacert`)
 
-        execute(invalid_cacert, "connect_errors_invalid_cacert", secure=true, tcp=8001, ws=8000)
+        execute(invalid_cacert, "connect_errors_invalid_cacert", secure=true, tcp=8337, ws=8338)
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

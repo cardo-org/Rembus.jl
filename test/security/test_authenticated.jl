@@ -73,7 +73,7 @@ function test_errors()
     sleep(rb.router.settings.challenge_timeout + 0.1)
     @test !isopen(rb)
 
-    rb = component("ws://:8000", failovers=["myfailover"])
+    rb = component("ws://:8338", failovers=["myfailover"])
     sleep(rb.router.settings.challenge_timeout + 0.1)
     @test !isopen(rb)
 
@@ -82,4 +82,4 @@ function test_errors()
 
 end
 
-execute(run, broker_name, ws=8000, authenticated=true, setup=setup)
+execute(run, broker_name, ws=8338, authenticated=true, setup=setup)

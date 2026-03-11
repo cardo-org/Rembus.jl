@@ -49,7 +49,7 @@ function start_proxy(supervisor_name, downstream_router)
 end
 
 function start_broker(name)
-    router = Rembus.get_router(name=name, ws=8000)
+    router = Rembus.get_router(name=name, ws=8338)
     start_proxy(name, router)
     return Rembus.bind(router)
 end
@@ -59,10 +59,10 @@ function run()
     y = 2
     bro = start_broker(broker_name)
 
-    failover_url = "ws://:8001"
+    failover_url = "ws://:8337"
     c1 = component("ha_setup_c1", failovers=[failover_url])
 
-    failover = component(failover_name, ws=8001)
+    failover = component(failover_name, ws=8337)
     expose(failover, myservice)
 
     @test rpc(c1, "rid") === broker_name

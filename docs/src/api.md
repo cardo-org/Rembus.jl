@@ -61,7 +61,7 @@ customizable security, authentication, and routing policies.
   `Rembus.JSON` for JSON-RPC-2.0 text encoding.
 
 > If `ws`, `tcp`, and `zmq` are all set to `nothing`, the broker will default to listening
-> for WebSocket connections on port `8000`.
+> for WebSocket connections on port `8338`.
 
 ## component
 
@@ -81,10 +81,10 @@ the addition of:
 For example:
 
 ```julia
-rb = component("ws://hostname:8000/mycomponent")
+rb = component("ws://hostname:8338/mycomponent")
 ```
 
-Connect to a broker that listens at the connection point `ws://hostname:8000`
+Connect to a broker that listens at the connection point `ws://hostname:8338`
 and return the `rb` handle used by the other APIs for exchanging data and
 commands.
 
@@ -100,11 +100,11 @@ create a component that is able to connect to a broker and at the same time
 to act as a broker for other components.
 
 ```julia
-rb = component("ws://hostname:8000/mycomponent", ws=9000)
+rb = component("ws://hostname:8338/mycomponent", ws=9000)
 ```
 
 Start a broker that listens on the WebSocket port `9000` and connect to a
-broker defined at the connection point `ws://hostname:8000`.
+broker defined at the connection point `ws://hostname:8338`.
 
 ## connect
 
@@ -123,11 +123,11 @@ A disconnection from the remote endpoint will not trigger automatic
 reconnection, for example:
 
 ```julia
-rb = connect("ws://hostname:8000/mycomponent")
+rb = connect("ws://hostname:8338/mycomponent")
 ```
 
 Connects to a broker that listens at the connection point
-`ws://hostname:8000` and returns the `rb` handle used by the other APIs for
+`ws://hostname:8338` and returns the `rb` handle used by the other APIs for
 exchanging data and commands.
 
 If the broker is not reachable the `connect` function will throw an Exception

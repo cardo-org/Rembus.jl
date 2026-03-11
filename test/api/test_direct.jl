@@ -22,9 +22,9 @@ function run()
     server = component("myserver", ws=10000)
     expose(server, myservice)
 
-    #for url in ["ws://127.0.0.1:8000/c1", "zmq://127.0.0.1:8002/c1"]
-    #for url in ["zmq://127.0.0.1:8002/c1"]
-    for url in ["ws://127.0.0.1:8000/c1"]
+    #for url in ["ws://127.0.0.1:8338/c1", "zmq://127.0.0.1:8336/c1"]
+    #for url in ["zmq://127.0.0.1:8336/c1"]
+    for url in ["ws://127.0.0.1:8338/c1"]
         rb = connect(url)
         response = direct(rb, "myserver", "myservice", "hello")
         @info "response=$response"

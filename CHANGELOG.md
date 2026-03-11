@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] -
+
+### Changed
+
+- Changed the default ports for reducing the probability of conflict with other
+  services:
+  - 8338 -> 8338 (ws)
+  - 8001 -> 8337 (tcp)
+  - 8002 -> 8336 (zmq)
+
 ## [1.2.3] - 2026-02-09
 
 ### Added

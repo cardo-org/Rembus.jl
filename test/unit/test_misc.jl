@@ -70,8 +70,8 @@ end
 end
 
 @testitem "get_router" begin
-    r1 = Rembus.get_router(name="myrouter", ws=8000, tcp=8001, zmq=8002, prometheus=9000)
-    r2 = Rembus.get_router(name="myrouter", ws=8000, tcp=8001, zmq=8002, prometheus=9000)
+    r1 = Rembus.get_router(name="myrouter", ws=8338, tcp=8337, zmq=8336, prometheus=9000)
+    r2 = Rembus.get_router(name="myrouter", ws=8338, tcp=8337, zmq=8336, prometheus=9000)
     @test r1 === r2
 
     Rembus.uptime(r1)
@@ -182,7 +182,7 @@ end
     header = read(io, UInt8)
     @test isempty(Rembus.get_meta(io, header))
 
-    io = IOBuffer(encode([Rembus.TYPE_IDENTITY, 2, 3, Dict("ws" => 8000)]))
+    io = IOBuffer(encode([Rembus.TYPE_IDENTITY, 2, 3, Dict("ws" => 8338)]))
     header = read(io, UInt8)
     for i in 1:3
         v = Rembus.decode_internal(io)

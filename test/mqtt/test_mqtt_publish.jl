@@ -33,7 +33,7 @@ function run()
 
     ctx = Dict{String,Any}("count" => 0)
 
-    broker = component("mqtt://$host:$port/mosca", ws=8000)
+    broker = component("mqtt://$host:$port/mosca", ws=8338)
 
     # wait for connection establishement
     @test Rembus.islistening(broker, wait=10)

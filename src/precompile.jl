@@ -99,14 +99,14 @@ function alltypes(client, server)
 end
 
 pool()
-rpc_api("ws://:8000")
+rpc_api("ws://:8338")
 
-for pub_url in ["tcp://:8001/pub", "ws://:8000/pub"]
-    for sub_url in ["tcp://:8001/tcpsub", "ws://:8000/wssub"]
+for pub_url in ["tcp://:8337/pub", "ws://:8338/pub"]
+    for sub_url in ["tcp://:8337/tcpsub", "ws://:8338/wssub"]
         pubsub(pub_url, sub_url)
     end
 end
 
-rpc_api("tcp://:8001")
-rpc_api("zmq://:8002")
-alltypes("zmq://:8002/client", "zmq://:8002/server")
+rpc_api("tcp://:8337")
+rpc_api("zmq://:8336")
+alltypes("zmq://:8336/client", "zmq://:8336/server")

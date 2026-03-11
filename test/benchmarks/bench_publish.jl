@@ -40,7 +40,7 @@ end
 
 
 try
-    bro = broker(ws=8000)
+    bro = broker(ws=8338)
     run()
 catch e
     @error "[publish]: $e"

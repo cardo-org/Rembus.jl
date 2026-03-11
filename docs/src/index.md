@@ -6,7 +6,7 @@ CurrentModule = Rembus
 
 Rembus is a Julia package designed for building distributed applications using
 both Publish/Subscribe (Pub/Sub) and Remote Procedure Call (RPC) communication
-patterns. 
+patterns.
 
 A key distinguishing feature of Rembus is its highly flexible role
 system, allowing a single application to act as a client, server, publisher,
@@ -52,20 +52,20 @@ Starting a basic WebSocket Broker:
 ```julia
 using Rembus
 
-component() # Starts a WebSocket server listening on port 8000
+component() # Starts a WebSocket server listening on port 8338
 ```
 
-The connection point for this broker is `ws://host:8000`.
+The connection point for this broker is `ws://host:8338`.
 
 A Broker can also function as a Component, connecting to another broker while
 simultaneously acting as a local broker:
 
 ```julia
 using Rembus
-rb = component("ws://myhost:8000/mynode", ws=9000)
+rb = component("ws://myhost:8338/mynode", ws=9000)
 ```
 
-Here, the `mynode` component connects to the broker at `myhost:8000` and also
+Here, the `mynode` component connects to the broker at `myhost:8338` and also
 acts as a broker, accepting WebSocket connections on port `9000` and routing
 messages between its connected components.
 
@@ -87,16 +87,16 @@ name (optional for anonymous components).
 Example connecting a named component:
 
 ```julia
-rb = component("ws://host:8000/my_component")
+rb = component("ws://host:8338/my_component")
 ```
 
 A Component can also act as a Broker:
 
 ```julia
-pub = component("ws://host:8000/my_pub", ws=9000)
+pub = component("ws://host:8338/my_pub", ws=9000)
 ```
 
-The `my_pub` component communicates with the broker at `host:8000` and
+The `my_pub` component communicates with the broker at `host:8338` and
 simultaneously acts as a WebSocket broker on port `9000` for other components..
 
 **Types of Components:**
@@ -139,7 +139,7 @@ Rembus.brokerd()
 ```
 
 This script starts a Rembus broker with a default WebSocket server on port
-`8000`. Use command-line arguments (e.g., `./broker -t 8001 -z 8002`) to enable
+`8338`. Use command-line arguments (e.g., `./broker -t 8337 -z 8336`) to enable
 TCP and ZeroMQ transports.
 
 ```text

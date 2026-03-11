@@ -23,7 +23,7 @@ const SIG_ECDSA = 0x2
 
 const CONNECTION_ID = 0x12345678deadbeef
 
-const DEFAULT_WS_PORT::Int = 8000
+const DEFAULT_WS_PORT::Int = 8338
 
 # Payload encodings for the rembus messages.
 const CBOR::UInt8 = UInt8(0x00)

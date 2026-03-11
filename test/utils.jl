@@ -160,9 +160,9 @@ function execute(
     reset=true,
     setup=nothing,
     check_listeners=[:ws],
-    ws=8000,
-    tcp=8001,
-    zmq=8002,
+    ws=8338,
+    tcp=8337,
+    zmq=8336,
     http=nothing,
     secure=false,
 )

@@ -53,7 +53,7 @@ function run()
 
     server = Dict()
     for i in 1:M
-        name = @sprintf "tcp://:8001/myserver_%06i" i
+        name = @sprintf "tcp://:8337/myserver_%06i" i
         server[i] = component(name)
         ### expose(server[i], "myservice$i", (x) -> x * i)
         expose(server[i], "myservice$i", (x) -> x)
@@ -61,7 +61,7 @@ function run()
 
     client = Dict()
     for i in 1:N
-        name = @sprintf "tcp://:8001/client_%06i" i
+        name = @sprintf "tcp://:8337/client_%06i" i
         client[i] = connect(name)
     end
 
@@ -78,6 +78,6 @@ function run()
     end
 end
 
-rb = broker(tcp=8001)
+rb = broker(tcp=8337)
 run()
 wait(rb)

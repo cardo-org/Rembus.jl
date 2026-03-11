@@ -62,7 +62,7 @@ function main()
     name = args["name"]
     topic = args["topic"]
 
-    # Connect to a local broker (default: localhost:8000)
+    # Connect to a local broker (default: localhost:8338)
     node = component(name)
 
     subscribe(node, topic, telemetry)

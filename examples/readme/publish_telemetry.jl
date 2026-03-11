@@ -48,7 +48,7 @@ end
 
 args = command_line()
 
-# Connect to a local component listening to port 8000
+# Connect to a local component listening to port 8338
 pub = component(args["name"])
 
 # Send a sensor message: think of it as a sensor provisioning message.

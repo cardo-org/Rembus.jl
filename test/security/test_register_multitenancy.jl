@@ -64,7 +64,7 @@ function run(url)
 end
 
 function decommission(url)
-    client = connect("zmq://:8002/wrong_cid")
+    client = connect("zmq://:8336/wrong_cid")
 
     try
         Rembus.unregister(client)
@@ -109,7 +109,7 @@ pin = "11223344"
 
 setup() = init(pin)
 try
-    url = "zmq://:8002/$cid"
+    url = "zmq://:8336/$cid"
     execute(() -> run(url), "register_multitenancy", setup=setup)
 
     @info "[register_multitenancy] 2nd round"

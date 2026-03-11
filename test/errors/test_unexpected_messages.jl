@@ -34,4 +34,4 @@ function wrong_admin_command()
     @test_throws RembusError fetch(res_future)
 end
 
-execute(run, "unexpected_messages", ws=8000)
+execute(run, "unexpected_messages", ws=8338)

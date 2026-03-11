@@ -13,7 +13,7 @@ function testcase(puburl)
 end
 
 function run()
-    for pub in ["ack_timeout_pub", "zmq://:8002/ack_timeout_pub"]
+    for pub in ["ack_timeout_pub", "zmq://:8336/ack_timeout_pub"]
         testcase(pub)
     end
 end

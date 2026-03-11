@@ -12,7 +12,7 @@ Rembus.info!()
 broker_name = "simo_broker"
 server_name = "simo_server"
 
-postfix = "ws://127.0.0.1:8000"
+postfix = "ws://127.0.0.1:8338"
 
 fixture = Dict(
     "a@$postfix" => 1,
@@ -96,7 +96,7 @@ function run()
     rb = component(pool, name="simo_pool")
     Rembus.add_plugin(rb, SiMo())
 
-    srv = component(server_name, ws=8001)
+    srv = component(server_name, ws=8337)
     expose(srv, myservice)
     inject(srv, ctx)
 

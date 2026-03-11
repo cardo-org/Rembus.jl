@@ -628,7 +628,7 @@ end
 
 Connect to the endpoint declared with `REMBUS_BASE_URL` env variable.
 
-`REMBUS_BASE_URL` default to `ws://127.0.0.1:8000`
+`REMBUS_BASE_URL` default to `ws://127.0.0.1:8338`
 
 A component is considered anonymous when a different and random UUID is used as
 component identifier each time the application connect to the broker.

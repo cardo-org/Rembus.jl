@@ -92,7 +92,7 @@ function run(ok_cid, ko_cid)
     # store test related info
     ctx = Dict()
 
-    bro = broker(name=broker_name, ws=8000)
+    bro = broker(name=broker_name, ws=8338)
     Rembus.set_plugin(bro, CarontePlugin, ctx)
 
     Rembus.islistening(bro, protocol=[:ws], wait=10)

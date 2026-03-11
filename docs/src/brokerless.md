@@ -38,6 +38,6 @@ exposed by the server. The client can also publish messages to the server.
 ```julia
 using Rembus
 
-rb = component("ws://localhost:8000/my_client")
+rb = component("ws://localhost:8338/my_client")
 response = rpc(rb, "my_service", x, y)
 ```
