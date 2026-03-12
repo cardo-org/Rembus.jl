@@ -1,7 +1,7 @@
 include("../utils.jl")
 
 function run()
-    bro = broker(ws=8338)
+    bro = broker(name="test_reconnect", ws=8338)
 
     rb = component("reconnect_component")
     @test rpc(rb, "version") == Rembus.VERSION
@@ -9,7 +9,7 @@ function run()
     shutdown(bro)
     sleep(1)
     @test !isopen(rb)
-    bro = broker(ws=8338)
+    bro = broker(name="test_reconnect", ws=8338)
     sleep(3)
     @test isopen(rb)
 
