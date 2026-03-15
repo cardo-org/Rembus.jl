@@ -129,7 +129,9 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_STRIPPED }}
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_STRIPPED }}
+            ${{ env.DOCKER_IMAGE }}:latest
 
   docs:
     name: Documentation
