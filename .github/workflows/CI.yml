@@ -43,7 +43,7 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.os == 'ubuntu-latest' && 'x64' || 'aarch64' }}
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # Install Mosquitto on Linux
       - name: Install Mosquitto on Linux
@@ -119,12 +119,12 @@ jobs:
       - name: Build sv shim
         run: gcc shims/sv.c -o build/bin/sv
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -145,7 +145,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - name: Configure doc environment
         shell: julia --project=docs --color=yes {0}
         run: |
