@@ -363,7 +363,7 @@ function subscribe(
     func::Function,
     from::Union{Real,Period,Dates.CompoundPeriod}=Now
 )
-    from_now = to_microseconds(from)
+    from_now = to_nanoseconds(from)
     router = top_router(twin.router)
     router.local_function[name] = func
     router.local_subscriber[name] = from_now
@@ -487,7 +487,7 @@ function reactive(
         Dict(
             COMMAND => REACTIVE_CMD,
             STATUS => true,
-            MSG_FROM => to_microseconds(from))
+            MSG_FROM => to_nanoseconds(from))
     )
     twin.reactive = true
     return send_msg(twin, msg) |> fetch

@@ -1112,11 +1112,11 @@ function rpc_request(router::Router, msg, implementor_rule)
 end
 
 
-function start_reactive(pd, twin::Twin, from_msg::Float64)
+function start_reactive(pd, twin::Twin, msg_from::Float64)
     twin.reactive = true
-    @debug "[$twin] start reactive from: $(from_msg)"
+    @debug "[$twin] start reactive from: $(msg_from)"
     router = top_router(twin.router)
-    return send_data_at_rest(twin, from_msg, router.con)
+    return send_data_at_rest(twin, msg_from, router.con)
 end
 
 #=

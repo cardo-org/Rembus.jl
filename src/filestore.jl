@@ -6,7 +6,7 @@ Base.isopen(::FileStore) = true
 
 lock_msgfile::ReentrantLock = ReentrantLock()
 
-function messages_files(node, from_msg)
+function messages_files(node, msg_from)
     allfiles = msg_files(node)
     nowts = time()
     mdir = messages_dir(node)
@@ -18,7 +18,7 @@ function messages_files(node, from_msg)
         else
             ftime = mtime(joinpath(mdir, fn))
             delta = nowts - ftime
-            if delta * 1_000_000 > from_msg
+            if delta * 1_000_000 > msg_from
                 @debug "skip $fn: mtime: $(unix2datetime(ftime)) ($delta secs from now)"
                 return false
             end

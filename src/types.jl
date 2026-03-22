@@ -738,7 +738,7 @@ function ifdown_block(rb::Twin)
     return nothing
 end
 
-function failover_queue!(twin::Twin, topic::AbstractString; msg_from=Inf)
+function failover_queue!(twin::Twin, topic::AbstractString; msg_from=LastReceived)
     twin.failover_from = msg_from
     twin.msg_from[topic] = msg_from
     router = top_router(twin.router)

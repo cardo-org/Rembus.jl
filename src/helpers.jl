@@ -143,13 +143,13 @@ function spliturl(url::String)
     return (name, domain(name), protocol, host, port, props)
 end
 
-function to_microseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})
+function to_nanoseconds(msg_from::Union{Real,Period,Dates.CompoundPeriod})
     if isa(msg_from, Real)
         return msg_from
     elseif isa(msg_from, Period)
-        return Microsecond(msg_from).value
+        return Nanosecond(msg_from).value
     elseif isa(msg_from, Dates.CompoundPeriod)
-        return sum(Microsecond.(msg_from.periods)).value
+        return sum(Nanosecond.(msg_from.periods)).value
     end
 end
 
@@ -380,7 +380,7 @@ function data_at_rest(
     ; from=LastReceived, broker="broker", datadir=nothing, dbpath=nothing
 )
     if haskey(ENV, "REMBUS_FILESTORE")
-        files = messages_files(broker, to_microseconds(from))
+        files = messages_files(broker, to_nanoseconds(from))
         result = DataFrame(
             recv=UInt64[],
             slot=UInt32[],
