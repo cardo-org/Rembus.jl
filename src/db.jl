@@ -22,7 +22,7 @@ dbpath(twin) = top_router(twin.router).dbpath
 function closedb(db::DuckDB.DB)
     lock(ducklock)
     try
-        DBInterface.execute(db, "CHECKPOINT")
+        #DBInterface.execute(db, "CHECKPOINT")
         return DuckDB.close(db)
     finally
         unlock(ducklock)

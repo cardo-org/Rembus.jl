@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `msg_from`: microsecond -> nanosecond
+- msg_from: microsecond -> nanosecond
 
 ### Fixed
 
