@@ -6,16 +6,8 @@ function myservice(x, y)
     return x + y
 end
 """
-
-    mytopic_code = """
-function mytopic(data)
-   @info "[swdistribution] mytopic:\$data"
-end
-"""
     service_path = joinpath(
         Rembus.broker_dir("swdistribution"), "src", "services", "myservice_main.jl")
-    subscriber_path = joinpath(
-        Rembus.broker_dir("swdistribution"), "src", "subscribers", "mytopic_main.jl")
 
     node = component("orchestrator")
 
@@ -37,15 +29,6 @@ end
     )
     @test res == "ok"
 
-    res = rpc(
-        node,
-        "julia_subscriber_install",
-        Dict("name" => "mytopic", "content" => mytopic_code)
-    )
-
-    @test res == "ok"
-    @test read(subscriber_path, String) == mytopic_code
-
     # test missing parameters
     @test_throws RpcMethodException rpc(
         node, "julia_service_install", Dict("name" => "service_name")
@@ -62,9 +45,6 @@ end
     @test length(lst) == 1
     @test lst[1]["content"] == myservice_code
 
-
-
-
     close(node)
 end
 
@@ -74,7 +54,6 @@ function run()
     cli = component("cli")
     result = rpc(cli, "myservice", x, y)
 
-    publish(cli, "mytopic", "Check this message in the log output")
     close(cli)
 end
 
@@ -84,13 +63,7 @@ function uninstall()
     res = rpc(node, "julia_service_uninstall", "myservice")
     @test res == "ok"
 
-    res = rpc(node, "julia_subscriber_uninstall", "mytopic")
-    @test res == "ok"
-
     path = joinpath(Rembus.broker_dir("swdistribution"), "src", "services", "myservice.jl")
-    @test !isfile(path)
-
-    path = joinpath(Rembus.broker_dir("swdistribution"), "src", "subscribers", "mytopic.jl")
     @test !isfile(path)
 
     close(node)

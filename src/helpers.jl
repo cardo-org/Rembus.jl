@@ -437,33 +437,10 @@ function twin_topics(twin::Twin)
     return topics
 end
 
-#function from_disk_messages(twin::Twin, fn)
-#    path = joinpath(messages_dir(twin.router), fn)
-#    df = load_object(path)
-#    interests = twin_topics(twin)
-#    filtered = df[findall(el -> ismissing(el) ? false : el in interests, df.topic), :]
-#    if !isempty(filtered)
-#        filtered.msg = decode.(Vector{UInt8}.(filtered.pkt))
-#        send_messages(twin, filtered)
-#    end
-#end
-
 function from_memory_messages(twin::Twin)
     router = top_router(twin.router)
     send_messages(twin, router.msg_df)
 end
-
-#file_lt(f1, f2) = parse(Int, f1) < parse(Int, f2)
-
-#function msg_files(router)
-#    mdir = messages_dir(router)
-#    if !isdir(mdir)
-#        return String[]
-#    end
-#    return sort(readdir(mdir), lt=file_lt)
-#end
-#
-#msg_files(twin::Twin) = msg_files(twin.router)
 
 function broker_reset(broker_name="broker")
     bdir = broker_dir(broker_name)

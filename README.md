@@ -185,7 +185,15 @@ located at `$HOME/.config/rembus/rembus.duckdb`.
 the broker.
 
 A broker can be configured to persist Pub/Sub messages to a DuckLake storage
-using a custom schema definition for the topics that are defined in the schema.
+using a custom schema definition for the topics of interest.
+
+```julia
+using Rembus
+
+schema = joinpath(@__DIR__, "schema.json")
+bro = broker(schema=schema)
+wait(bro)
+```
 
 For example the following JSON formatted schema defines two tables: `sensor` and
 `telemetry`.
@@ -196,8 +204,7 @@ physical sensor deployed in a `site`
 `telemetry` table store periodic `temperature` and `pressure` telemetry data
 sent by the sensor motes.
 
-```julia
-json_string = """
+```json
 {
     "tables": [
         {
@@ -222,27 +229,11 @@ json_string = """
         }
     ]
 }
-"""
 ```
 
 The `sensor` table persists messages published to topics matching the
 pattern `:site/:type/:dn/sensor` where `:site`, `:type` and `:dn` are dynamic
 topic segments that are mapped to the corresponding table columns.
-
-## Broker embedded with a Data Lake
-
-With [DuckLake](https://ducklake.select/) enabled Rembus can persist and
-retrieve Pub/Sub messages in batches directly from DuckDB.
-
-```julia
-# DuckDB use the package extension mechanism, so DuckDB MUST BE loaded first
-# to enable DuckLake support.
-using DuckDB
-using Rembus
-
-bro = broker(DuckDB.DB(), schema=json_string)
-wait(bro)
-```
 
 Full example: [broker](examples/readme/broker.jl)
 
@@ -263,8 +254,6 @@ subscribe(meter, "**/telemetry", telemetry)
 
 wait(meter)
 ```
-
-Full example: [subscribe_telemetry.jl](examples/readme/subscribe_telemetry.jl)
 
 ## Pub/Sub publisher
 
@@ -298,12 +287,14 @@ Full example: [publish_telemetry.jl](examples/readme/publish_telemetry.jl)
 
 ## Query Data at Rest
 
-For each table object defined in the `schema.json` are exposed two services, one
-for querying and one for deleting data at rest:
+For each table object defined in the `schema.json` are exposed three
+automatically cretaed RPC services:
 
 * `query_{table}` for selecting items.
 
 * `delete_{table}` for deleting items;
+
+* `upsert_{table}` for inserting/updating items;
 
 For example for getting the `telemetry` data at rest:
 

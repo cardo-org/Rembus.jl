@@ -72,6 +72,8 @@ end
 @info "[duckdb] start"
 try
     ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
+    ENV["DUCKLAKE_URL"] = "ducklake:/tmp/rembus/test_duck.ducklake"
+    @info "dburl:$(Rembus.dburl(broker="test_duck"))"
     init_ducklake()
     run()
 
@@ -84,5 +86,6 @@ catch e
     showerror(stdout, e, catch_backtrace())
 finally
     shutdown()
+    pop!(ENV, "DUCKLAKE_URL")
 end
 @info "[duckdb] stop"

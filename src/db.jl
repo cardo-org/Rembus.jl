@@ -4,6 +4,7 @@ const typemap = Dict(
     "UTINYINT" => Int8,
     "SMALLINT" => Int16,
     "INTEGER" => Int32,
+    "BIGINT" => Int64,
     "HUGEINT" => Int128,
     "UTINYINT" => UInt8,
     "USMALLINT" => UInt16,
@@ -17,36 +18,71 @@ const typemap = Dict(
 
 const ducklock = ReentrantLock()
 
-dbpath(twin) = top_router(twin.router).dbpath
+function dburl(; broker="broker", datadir=nothing, dbpath=nothing)
+    if isnothing(datadir)
+        datadir = joinpath(rembus_dir(), broker)
+    end
 
-function closedb(db::DuckDB.DB)
+    if isnothing(dbpath)
+        if haskey(ENV, "DUCKLAKE_URL")
+            dbpath = ENV["DUCKLAKE_URL"]
+        else
+            dbpath = "ducklake:$datadir.ducklake"
+        end
+    end
+
+    return "ATTACH '$dbpath' AS rl (DATA_PATH '$datadir')"
+end
+
+function dbconnect(; broker="broker", datadir=nothing, dbpath=nothing)
+    url = dburl(broker=broker, datadir=datadir, dbpath=dbpath)
     lock(ducklock)
     try
-        #DBInterface.execute(db, "CHECKPOINT")
-        return DuckDB.close(db)
+        con = DuckDB.DB()
+        DuckDB.execute(con, "INSTALL ducklake")
+        @debug "[DuckDB] url:$url"
+        DuckDB.execute(con, url)
+        DuckDB.execute(con, "USE rl")
+        return con
     finally
         unlock(ducklock)
     end
 end
 
-function with_db(f, router::Router)
-    con = router.con
-
-    if !isopen(con)
-        return nothing
+function closedb(db::DuckDB.DB)
+    lock(ducklock) do
+        try
+            DBInterface.execute(db, "CHECKPOINT")
+        catch e
+            @warn "[closedb] checkpoint: $e"
+        end
+        DBInterface.close!(db)
     end
+end
 
+function with_db(f, router::Router)
     lock(ducklock)
     try
-        return f(con)
+        if !isopen(router.con)
+            @info "[$router] with_db: reopening db"
+            router.con = dbconnect(
+                broker=router.id, datadir=router.datadir, dbpath=router.dbpath
+            )
+        end
+
+        return f(router.con)
     finally
         unlock(ducklock)
     end
 end
 
 function with_db_read(f, router::Router)
-    reader = DuckDB.connect(router.con)
-    return f(reader)
+    reader = DBInterface.connect(router.con)
+    try
+        return f(reader)
+    finally
+        DBInterface.close!(reader)
+    end
 end
 
 function columndef(col::Column)
@@ -69,6 +105,66 @@ function set_default(row::DataFrameRow, tabledef::Table, d; add_nullable=true)
                 d[name] = missing
             end
         end
+    end
+end
+
+function rpc_upsert(router::Router, table, obj)
+    with_db(router) do con
+        ts = uts()
+        df = if isa(obj, Dict)
+            obj = if haskey(table.extras, "recv_ts")
+                merge(Dict{String,Any}(obj), Dict("recv_ts" => ts))
+            end
+            DataFrame(Dict(k => [v] for (k, v) in obj))
+        elseif isa(obj, Vector)
+            if haskey(table.extras, "recv_ts")
+                obj = if haskey(table.extras, "recv_ts")
+                    [merge(Dict{String,Any}(d), Dict("recv_ts" => ts)) for d in obj]
+                end
+            end
+            DataFrame(Dict(k => [d[k] for d in obj] for k in keys(obj[1])))
+        elseif isa(obj, DataFrame)
+            if haskey(table.extras, "recv_ts")
+                obj[!, "recv_ts"] = fill(ts, nrow(obj))
+            end
+            obj
+        else
+            error("[rpc_upsert] unsupported object type: $(typeof(obj))")
+        end
+
+        topic = table.name
+
+        if haskey(table.extras, "recv_ts")
+            rename!(df, "recv_ts" => table.extras["recv_ts"])
+        end
+
+        cols = names(df)
+        col_list = join(cols, ", ")
+        DuckDB.register_data_frame(con, df, "df_view")
+        if isempty(table.keys)
+            DuckDB.execute(
+                con,
+                "INSERT INTO $topic ($col_list) SELECT $col_list FROM df_view"
+            )
+        else
+            tkeys = table.keys
+            conds = String[]
+            for key in tkeys
+                push!(conds, "df_view.$key=$topic.$key")
+            end
+            cond_str = join(conds, " AND ")
+            val_list = join(["df_view.$c" for c in cols], ", ")
+            update_list = join(["$c = df_view.$c" for c in setdiff(cols, tkeys)], ", ")
+
+            DuckDB.execute(
+                con,
+                """MERGE INTO $topic USING df_view ON $cond_str
+                   WHEN MATCHED THEN UPDATE SET $update_list
+                   WHEN NOT MATCHED THEN INSERT ($col_list) VALUES ($val_list)
+                """
+            )
+        end
+        DuckDB.unregister_data_frame(con, "df_view")
     end
 end
 
@@ -120,31 +216,6 @@ function query(router, table, obj)
     end
 end
 
-function dbconnect(; broker="broker", datadir=nothing, dbpath=nothing)
-    if isnothing(datadir)
-        datadir = joinpath(rembus_dir(), broker)
-    end
-
-    if isnothing(dbpath)
-        if haskey(ENV, "DUCKLAKE_URL")
-            dbpath = ENV["DUCKLAKE_URL"]
-        else
-            dbpath = "ducklake:$datadir.ducklake"
-        end
-    end
-
-    lock(ducklock)
-    try
-        con = DuckDB.DB()
-        DuckDB.execute(con, "INSTALL ducklake")
-        @debug "[DuckDB] ATTACH '$dbpath' AS rl (DATA_PATH '$datadir')"
-        DuckDB.execute(con, "ATTACH '$dbpath' AS rl (DATA_PATH '$datadir')")
-        DuckDB.execute(con, "USE rl")
-        return con
-    finally
-        unlock(ducklock)
-    end
-end
 
 
 function create_tables(router, con)
@@ -236,6 +307,7 @@ function create_tables(router, con)
             @debug "[DuckDB] CREATE TABLE IF NOT EXISTS $tname ($cols)"
             DuckDB.execute(con, "CREATE TABLE IF NOT EXISTS $tname ($cols)")
 
+            router.local_function["upsert_$tname"] = (obj = nothing) -> rpc_upsert(router, tabledef, obj)
             router.local_function["delete_$tname"] = (obj = nothing) -> delete(router, tabledef, obj)
             router.local_function["query_$tname"] = (obj = nothing) -> query(router, tabledef, obj)
         end
@@ -248,7 +320,7 @@ function boot(router::Router)
     db_name = router.dbpath
     data_dir = router.datadir
 
-    con = dbconnect(datadir=data_dir, dbpath=db_name)
+    con = dbconnect(broker=router.id, datadir=data_dir, dbpath=db_name)
     create_tables(router, con)
     router.con = con
 end
@@ -573,12 +645,6 @@ function upsert(con::DuckDB.DB, tabledef::Table, df)
 end
 
 function save_data_at_rest(router::Router, ::DuckDB.DB)
-    if !isopen(router.con)
-        @warn "[$router] save_data_at_rest failed: db is closed"
-        @info "unsaved messages:\n$(router.msg_df)"
-        return nothing
-    end
-
     with_db(router) do con
         @debug "[$router] Persisting messages to DuckDB $con"
 
@@ -857,19 +923,13 @@ awaiting Ack2 acknowledgements.
 =#
 function load_received_acks(router, component::RbURL, ::DuckDB.DB)
     df = with_db(router) do con
-        if isopen(con)
-            tw = rid(component)
-            return DataFrame(
-                DuckDB.execute(
-                    con,
-                    "SELECT ts, id FROM wait_ack2 WHERE name='$(rid(router))' AND twin='$tw'"
-                )
+        tw = rid(component)
+        return DataFrame(
+            DuckDB.execute(
+                con,
+                "SELECT ts, id FROM wait_ack2 WHERE name='$(rid(router))' AND twin='$tw'"
             )
-        end
-    end
-
-    if isnothing(df)
-        df = DataFrame("ts" => UInt64[], "id" => UInt64[])
+        )
     end
 
     return df
