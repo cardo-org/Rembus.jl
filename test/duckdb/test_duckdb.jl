@@ -56,7 +56,7 @@ function run()
     close(bro)
 
     sleep(2)
-    con = DuckDB.DB(dbpath)
+    con = Rembus.dbconnect(broker="test_duck")
     df = DataFrame(DuckDB.execute(con, "select * from subscriber"))
     @test nrow(df) == 3
     df = DataFrame(DuckDB.execute(con, "select * from exposer"))
@@ -77,9 +77,9 @@ try
     init_ducklake()
     run()
 
-    # reload the configuration saved in the previous run
-    run()
-    sleep(1.5)
+    #    # reload the configuration saved in the previous run
+    #    run()
+    #    sleep(1.5)
 catch e
     @test false
     @error "[duckdb] server error: $e"

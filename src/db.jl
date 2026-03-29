@@ -52,9 +52,10 @@ end
 function closedb(db::DuckDB.DB)
     lock(ducklock) do
         try
-            DBInterface.execute(db, "CHECKPOINT")
+            DuckDB.execute(db, "USE memory.main")
+            DuckDB.execute(db, "DETACH rl")
         catch e
-            @warn "[closedb] checkpoint: $e"
+            @warn "[closedb] detach: $e"
         end
         DBInterface.close!(db)
     end

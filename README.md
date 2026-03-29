@@ -288,7 +288,7 @@ Full example: [publish_telemetry.jl](examples/readme/publish_telemetry.jl)
 ## Query Data at Rest
 
 For each table object defined in the `schema.json` are exposed three
-automatically cretaed RPC services:
+automatically created RPC services:
 
 * `query_{table}` for selecting items.
 
