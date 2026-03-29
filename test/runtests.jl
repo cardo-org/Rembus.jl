@@ -49,6 +49,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "swdistribution" begin
             include("swdistribution/test_swdistribution.jl")
         end
+        @time @safetestset "swdistribution_subscriber" begin
+            include("swdistribution/test_swdistribution_subscriber.jl")
+        end
         @time @safetestset "direct_swdistribution" begin
             include("swdistribution/test_direct_swdistribution.jl")
         end
@@ -76,6 +79,12 @@ const GROUP = get(ENV, "GROUP", "all")
         end
         @time @safetestset "duckdb_hierarchy" begin
             include("duckdb/test_duckdb_hierarchy.jl")
+        end
+        @time @safetestset "upsert_rpc" begin
+            include("duckdb/test_upsert_rpc.jl")
+        end
+        @time @safetestset "db_fail" begin
+            include("duckdb/test_db_fail.jl")
         end
     end
     if GROUP == "all" || GROUP == "broker"

@@ -5,6 +5,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.6] - 2026-03-
 
+### Added
+
+- `upsert_<topic>` RPC service for topic in schema.
+
 ### Changed
 
 - msg_from: microsecond -> nanosecond

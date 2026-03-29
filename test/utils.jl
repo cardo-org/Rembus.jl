@@ -238,7 +238,7 @@ function remove_keys(broker_name, cid)
 end
 
 
-function init_ducklake(; reset=true)
+function init_ducklake(; broker="broker", reset=true)
     if haskey(ENV, "DUCKLAKE_URL")
         if startswith(ENV["DUCKLAKE_URL"], "ducklake:postgres")
             dbname = "rembus_test"
@@ -259,7 +259,7 @@ function init_ducklake(; reset=true)
             ENV["DUCKLAKE_URL"] = "ducklake:sqlite:$db_file"
         end
     elseif reset
-        rm(joinpath(Rembus.rembus_dir(), "broker.ducklake"); force=true, recursive=true)
-        rm(Rembus.broker_dir("broker"); force=true, recursive=true)
+        rm(joinpath(Rembus.rembus_dir(), "$broker.ducklake"); force=true, recursive=true)
+        rm(Rembus.broker_dir(broker); force=true, recursive=true)
     end
 end

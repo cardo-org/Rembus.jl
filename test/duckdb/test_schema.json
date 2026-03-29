@@ -46,7 +46,6 @@
   },
   {
     "table": "topic4",
-    "delete_topic": "topic4/delete",
     "columns": [
       { "col": "name", "type": "TEXT", "nullable": false },
       { "col": "type", "type": "TEXT" },
