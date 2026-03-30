@@ -14,7 +14,8 @@ function nowts()
     return UInt32(t - t % 900)
 end
 
-function run()
+
+function run_scenario()
     bro = component(name="test_duck")
     # set admin role for sub component
     push!(Rembus.top_router(bro.router).admins, "duckdb_pub")
@@ -49,23 +50,29 @@ function run()
     tw = Rembus.top_router(bro.router).id_twin["duckdb_pub"]
     tw.ackdf = DataFrame(:ts => UInt64[1], :id => Rembus.Msgid[2])
 
-    dbpath = Rembus.top_router(bro.router).dbpath
     close(sub)
     close(othersub)
     close(pub)
-    close(bro)
 
-    sleep(2)
-    con = Rembus.dbconnect(broker="test_duck")
+    return bro
+end
+
+function run1()
+    bro = run_scenario()
+    close(bro)
+end
+
+function run2()
+    bro = run_scenario()
+    con = Rembus.top_router(bro.router).con
     df = DataFrame(DuckDB.execute(con, "select * from subscriber"))
     @test nrow(df) == 3
     df = DataFrame(DuckDB.execute(con, "select * from exposer"))
     @test nrow(df) == 2
     df = DataFrame(DuckDB.execute(con, "select * from mark"))
-
-    Rembus.closedb(con)
-
     @test nrow(df) == 3
+
+    close(bro)
 end
 
 
@@ -73,13 +80,14 @@ end
 try
     ENV["REMBUS_ARCHIVER_INTERVAL"] = 0.1
     ENV["DUCKLAKE_URL"] = "ducklake:/tmp/rembus/test_duck.ducklake"
+    mkpath("/tmp/rembus")
     @info "dburl:$(Rembus.dburl(broker="test_duck"))"
-    init_ducklake()
-    run()
+    init_ducklake(broker="test_duck")
+    run1()
 
-    #    # reload the configuration saved in the previous run
-    #    run()
-    #    sleep(1.5)
+    # reload the configuration saved in the previous run
+    run2()
+    sleep(1.5)
 catch e
     @test false
     @error "[duckdb] server error: $e"
