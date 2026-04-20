@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.os == 'ubuntu-latest' && 'x64' || 'aarch64' }}
@@ -106,7 +106,7 @@ jobs:
       - name: Extract stripped tag
         run: echo "IMAGE_TAG_STRIPPED=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
       - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
           version: '1.11'
       - name: Build the app image
@@ -142,7 +142,7 @@ jobs:
       statuses: write
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
       - uses: julia-actions/cache@v3
