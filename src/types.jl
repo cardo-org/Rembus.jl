@@ -362,7 +362,7 @@ struct ZRouter <: AbstractSocket
     )
 end
 
-Base.isopen(ws::WebSockets.WebSocket) = isopen(ws.io)
+Base.isopen(ws::WebSockets.WebSocket) = !(ws.readclosed || ws.writeclosed)
 
 Base.isopen(endpoint::AbstractSocket) = isopen(endpoint.sock)
 
@@ -575,7 +575,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     admins::Set{String}
     tcp_server::Sockets.TCPServer
     http_server::HTTP.Server
-    ws_server::Sockets.TCPServer
+    ws_server::HTTP.WebSockets.Server
     zmqsocket::ZMQ.Socket
     zmqcontext::ZMQ.Context
     process::Visor.Process

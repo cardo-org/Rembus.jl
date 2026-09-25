@@ -63,6 +63,19 @@ end
 # default ca certificate name
 const REMBUS_CA = "rembus-ca.crt"
 
+#=
+HTTP.jl >= 2.0 no longer picks up the HTTP_CA_BUNDLE environment variable
+automatically (NetworkOptions/MbedTLS based CA lookup is gone from the
+client). Build an HTTP.Client trusting the CA pointed to by HTTP_CA_BUNDLE
+(falling back to the system default when unset) so tests exercising the
+https:// listener still validate the self-signed test certificate.
+=#
+function https_client()
+    cacert = get(ENV, "HTTP_CA_BUNDLE", nothing)
+    tls_config = cacert === nothing ? HTTP.TLS.Config() : HTTP.TLS.Config(ca_file=cacert)
+    return HTTP.Client(transport=HTTP.Transport(tls_config=tls_config))
+end
+
 function proxy_task(self, router)
     for msg in self.inbox
         #@debug "[proxy] recv: $msg"
@@ -179,6 +192,11 @@ function execute(
     end
     @info "[$testname] start"
     try
+        # HTTP.jl >= 2.0 pools connections in a shared default client; drop any
+        # idle connection left over from a previous test that reused the same
+        # host:port, otherwise a stale/dead pooled connection can be handed
+        # back and fail with a broken pipe on write.
+        HTTP.close_idle_connections!()
         fn()
     catch e
         @error "[$testname] failed: $e"

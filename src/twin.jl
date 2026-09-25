@@ -266,13 +266,16 @@ function ws_connect(rb::Twin, isconnected::Condition)
             if !haskey(ENV, "HTTP_CA_BUNDLE")
                 ENV["HTTP_CA_BUNDLE"] = rembus_ca()
             end
-            @debug "cacert: $(ENV["HTTP_CA_BUNDLE"])"
+            cacert = ENV["HTTP_CA_BUNDLE"]
+            @debug "cacert: $cacert"
+            tls_config = HTTP.TLS.Config(ca_file=cacert)
+            client = HTTP.Client(transport=HTTP.Transport(tls_config=tls_config))
             HTTP.WebSockets.open(socket -> begin
                     rb.socket = WS(socket)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
-                end, url)
+                end, url; client=client)
         else # uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     ## Sockets.nagle(socket.io.io, false)
@@ -283,7 +286,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
-                end, url, idle_timeout=1, forcenew=true)
+                end, url)
         end
     catch e
         notify(isconnected, e, error=true)
@@ -323,29 +326,32 @@ function gethost(remote_ip)
     return rhost
 end
 
-function remote_host(socket::WS)
-    bio = socket.sock.io.io
-    remote_ip = if bio isa Sockets.TCPSocket
-        getpeername(bio)[1]
-    else
-        getpeername(bio.bio)[1]
-    end
-
-    return gethost(remote_ip)
+function socketaddr_ip(addr::HTTP.TCP.SocketAddrV4)
+    return Sockets.IPv4(addr.ip...)
 end
 
-function remote_host(socket::TCP)
-    remote_ip = getpeername(socket.sock)[1]
-    return gethost(remote_ip)
+function socketaddr_ip(addr::HTTP.TCP.SocketAddrV6)
+    b = addr.ip
+    groups = ntuple(i -> (UInt16(b[2i-1]) << 8) | UInt16(b[2i]), 8)
+    return Sockets.IPv6(groups...)
 end
 
-function remote_host(socket::TLS)
-    bio = socket.sock.bio
-    remote_ip = getpeername(bio)[1]
-    return gethost(remote_ip)
+function remote_ip(socket::WS)
+    conn = socket.sock.stream
+    addr = isa(conn, HTTP.TLS.Conn) ? HTTP.TLS.remote_addr(conn) : HTTP.TCP.remote_addr(conn)
+    return addr === nothing ? nothing : socketaddr_ip(addr)
 end
 
-remote_host(socket::ZDealer) = "unknown"
+remote_ip(socket::TCP) = getpeername(socket.sock)[1]
+
+remote_ip(socket::TLS) = getpeername(socket.sock.bio)[1]
+
+remote_ip(socket::ZDealer) = nothing
+
+function remote_host(socket)
+    ip = remote_ip(socket)
+    return ip === nothing ? "unknown" : gethost(ip)
+end
 
 
 """
@@ -480,7 +486,7 @@ function handle_connection(twin::Twin, failovers)
     try
         !do_connect(twin)
     catch e
-        @error "[$twin]: $(isa(e, HTTP.Exceptions.ConnectError) ? e.error.ex : e)"
+        @error "[$twin]: $(isa(e, HTTP.ConnectError) ? e.cause : e)"
         down_handler(twin)
     finally
     end
@@ -863,7 +869,7 @@ function attestation(router::Router, twin::Twin, msg, authenticate=true)
                 router.network,
                 nodes(
                     rid(twin),
-                    string(twin.socket.sock.io.peerip), msg.meta
+                    string(remote_ip(twin.socket)), msg.meta
                 )...
             )
         end
@@ -924,7 +930,7 @@ end
 sendto_origin(::Twin, ::FutureResponse) = false # COV_EXCL_LINE
 
 function sendto_origin(twin::Twin, ::WsPing)
-    if (isa(twin.socket, WS) && isopen(twin.socket.sock.io))
+    if (isa(twin.socket, WS) && isopen(twin.socket.sock))
         WebSockets.ping(twin.socket.sock)
     end
 
@@ -1374,23 +1380,20 @@ end
 
 function listener(proc, port, router::Router, sslconfig)
     IP = "0.0.0.0"
-    server = Sockets.listen(Sockets.InetAddr(parse(IPAddr, IP), port))
-    # router.ws_server = server
-    ws_server!(router, server)
     proto = (sslconfig === nothing) ? "ws" : "wss"
     @debug "$(proc.supervisor) listening at port $proto:$port"
 
     setphase(proc, :listen)
 
-    return HTTP.WebSockets.listen!(
+    server = HTTP.WebSockets.listen!(
         IP,
         port,
-        server=server,
-        sslconfig=sslconfig,
-        verbose=-1
+        tls_config=sslconfig
     ) do ws
         client_receiver(router, WS(ws))
     end
+    ws_server!(router, server)
+    return server
 end
 
 #=

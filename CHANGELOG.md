@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - msg_from: microsecond -> nanosecond
 
+- Updated to HTTP.jl 2.x (built on the new "Reseau" transport/TLS stack).
+  Notable adaptations required in Rembus and its test suite:
+  - TLS trust is no longer picked up automatically from the `HTTP_CA_BUNDLE`
+    environment variable; the CA bundle must now be configured explicitly
+    when building an `HTTP.Client`.
+  - `HTTP.Response.status` is now `Int64` (was `Int16`); code/tests comparing
+    it with `===` against an `Int16` value must use `==` or compare against a
+    plain `Int`.
+  - `HTTP.get`/`HTTP.request` no longer accept a positional request body
+    argument; use the keyword form instead.
+  - Client-side `HTTP.Response.body` remains a plain `Vector{UInt8}`, while
+    server-side request bodies inside a handler are an `HTTP.AbstractBody`
+    (`EmptyBody`/`BytesBody`); the two must be handled differently when
+    checking for emptiness or converting to `String`.
+  - Raw `HTTP.WebSockets.open` connection failures now raise
+    `Reseau.HostResolvers.OpError` (TCP connect failures) or
+    `HTTP.TLSHandshakeError` (TLS handshake/certificate failures) instead of
+    always wrapping in `HTTP.Exceptions.ConnectError`.
+
 ### Fixed
 
 ## [1.2.5] - 2026-03-17

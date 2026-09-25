@@ -42,6 +42,7 @@ end
 
 
 function run()
+    client = https_client()
     password = "aaa"
     init(admin, password)
 
@@ -52,41 +53,41 @@ function run()
 
     auth = basic_auth("user")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
-        "https://127.0.0.1:9000/private_topic/foo", ["Authorization" => auth]
+        "https://127.0.0.1:9000/private_topic/foo", ["Authorization" => auth]; client=client
     )
 
     auth = basic_auth("$admin:$password")
     response = HTTP.post(
         "https://127.0.0.1:9000/private_topic/foo",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
     @test response.status == 200
     @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/authorize/mycomponent/foo",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
     @test response.status == 200
     @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/unauthorize/mycomponent/foo",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
     @test response.status == 200
     @test body(response) === nothing
 
     response = HTTP.post(
         "https://127.0.0.1:9000/public_topic/foo",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
     @test response.status == 200
     @test body(response) === nothing
 
     response = HTTP.get(
         "https://127.0.0.1:9000/admin/broker_config",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
     @test response.status == 200
     @test body(response) == Dict(
@@ -96,13 +97,13 @@ function run()
 
     @test_throws HTTP.Exceptions.StatusError HTTP.get(
         "https://127.0.0.1:9000/admin/wrong_command",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
 
     auth = basic_auth("user")
     @test_throws HTTP.Exceptions.StatusError HTTP.get(
         "https://127.0.0.1:9000/admin/broker_config",
-        ["Authorization" => auth]
+        ["Authorization" => auth]; client=client
     )
 
     remove_keys(broker_name, admin)

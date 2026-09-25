@@ -44,6 +44,7 @@ function init(cid, password)
 end
 
 function run()
+    client = https_client()
     authenticated_component = "https_bar"
     password = "aaa"
     init(authenticated_component, password)
@@ -58,7 +59,7 @@ function run()
 
     auth = basic_auth("mycomponent")
     response = HTTP.post(
-        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
     @info "[test_http] POST response=$(body(response))"
     @test response.status == 200
@@ -67,48 +68,48 @@ function run()
     # send a password for a component not registered
     auth = basic_auth("mycomponent:mysecret")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
-        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
 
     # send the right password
     auth = basic_auth("$authenticated_component:$password")
     response = HTTP.post(
-        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
     @test response.status == 200
     @test body(response) === nothing
 
-    response = HTTP.get(
-        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
+    response = HTTP.request(
+        "GET", "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
     @test response.status == 200
     @test body(response) == x + y
 
-    response = HTTP.get(
-        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
+    response = HTTP.request(
+        "GET", "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
     @test response.status == 200
     @test body(response) == x + y
 
     # send an unknown service
-    @test_throws HTTP.Exceptions.StatusError HTTP.get(
-        "https://127.0.0.1:9000/unknown", ["Authorization" => auth], JSON3.write([x, y])
+    @test_throws HTTP.Exceptions.StatusError HTTP.request(
+        "GET", "https://127.0.0.1:9000/unknown", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
 
     # send the wrong password
     auth = basic_auth("$authenticated_component:wrong_pwd")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
-        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
 
-    @test_throws HTTP.Exceptions.StatusError HTTP.get(
-        "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y])
+    @test_throws HTTP.Exceptions.StatusError HTTP.request(
+        "GET", "https://127.0.0.1:9000/myservice", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
 
     # send only the component name for a registered component
     auth = basic_auth("$authenticated_component")
     @test_throws HTTP.Exceptions.StatusError HTTP.post(
-        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y])
+        "https://127.0.0.1:9000/mytopic", ["Authorization" => auth], JSON3.write([x, y]); client=client
     )
 
     remove_keys(broker_name, authenticated_component)

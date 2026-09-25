@@ -35,7 +35,7 @@ function Logging.shouldlog(
     group,
     id
 )
-    if _module === HTTP.Servers
+    if _module === HTTP
         level >= Logging.Warn
     elseif logger.level == "error"
         level >= Logging.Error

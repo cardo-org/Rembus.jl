@@ -180,15 +180,14 @@ function http_jsonrpc(router::Router, req::HTTP.Request)
         "id" => missing
     )
     sts = 200
-    if isempty(req.body)
+    content = String(req.body)
+    if isempty(content)
         retval["error"] = Dict(
             "code" => -32600,
             "message" => "invalid JSON: empty content"
         )
         return jsonrpc_response(sts, retval)
     end
-
-    content = String(req.body)
 
     if haskey(router.id_twin, cid)
         retval["error"] = Dict(
@@ -220,10 +219,11 @@ function http_publish(router::Router, req::HTTP.Request)
     try
         (cid, isauth) = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
-        if isempty(req.body)
+        body_str = String(req.body)
+        if isempty(body_str)
             content = []
         else
-            content = JSON3.read(req.body, Any)
+            content = JSON3.read(body_str, Any)
         end
         if haskey(router.id_twin, cid)
             error("component $cid not available for publish via http")
@@ -264,10 +264,11 @@ function http_rpc(router::Router, req::HTTP.Request)
     try
         (cid, isauth) = authenticate(router, req)
         topic = HTTP.getparams(req)["topic"]
-        if isempty(req.body)
+        body_str = String(req.body)
+        if isempty(body_str)
             content = []
         else
-            content = JSON3.read(req.body, Any)
+            content = JSON3.read(body_str, Any)
         end
         if haskey(router.id_twin, cid)
             error("component $cid not available for rpc via http")
@@ -315,14 +316,14 @@ function http_admin_command(
             if response.data !== nothing
                 return HTTP.Response(200, JSON3.write(response.data))
             else
-                return HTTP.Response(200, [])
+                return HTTP.Response(200, Pair{String,String}[])
             end
         else
-            return HTTP.Response(403, [])
+            return HTTP.Response(403, Pair{String,String}[])
         end
     catch e
         @error "http::admin: $e"
-        return HTTP.Response(403, [])
+        return HTTP.Response(403, Pair{String,String}[])
     end
 end
 
@@ -374,14 +375,15 @@ end
 function _serve_http(td, router::Router, http_router, port, issecure)
     try
         router.listeners[:http].status = on
-        sslconfig = nothing
-        if issecure
-            sslconfig = secure_config(router)
-        end
+        host = "0.0.0.0"
 
-        router.http_server = HTTP.serve!(
-            http_router, ip"0.0.0.0", port, sslconfig=sslconfig
-        )
+        if issecure
+            sslconfig = http_tls_config(router)
+            listener = HTTP.TLS.listen("tcp", "$host:$port", sslconfig)
+            router.http_server = HTTP.serve!(http_router, listener)
+        else
+            router.http_server = HTTP.serve!(http_router, host, port)
+        end
         for msg in td.inbox
             if isshutdown(msg)
                 break

@@ -625,7 +625,7 @@ function serve_ws(td, router::Router, port, issecure=false)
     sslconfig = nothing
     try
         if issecure
-            sslconfig = secure_config(router)
+            sslconfig = http_tls_config(router)
         end
 
         listener(td, port, router, sslconfig)

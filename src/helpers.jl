@@ -178,6 +178,21 @@ function secure_config(router)
     return sslconfig
 end
 
+#=
+TLS configuration for the HTTP.jl-based listeners (ws and http), built on top
+of Reseau's TLS.Config (HTTP.jl >= 2.0), unlike the raw MbedTLS-based
+secure_config() used by the plain tls transport (see serve_tcp).
+=#
+function http_tls_config(router)
+    trust_store = keystore_dir()
+    @debug "[$router] keystore: $trust_store"
+
+    return HTTP.TLS.Config(
+        cert_file=joinpath(trust_store, "rembus.crt"),
+        key_file=joinpath(trust_store, "rembus.key")
+    )
+end
+
 function uptime(router)
     utime = time() - router.start_ts
     return "up for $(Int(floor(utime))) seconds"

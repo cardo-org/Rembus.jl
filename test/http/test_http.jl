@@ -43,7 +43,9 @@ function run()
     @info "[test_http] POST response=$(Rembus.body(response))"
     @test Rembus.body(response) === nothing
 
-    response = HTTP.get("http://localhost:9000/myservice", [], JSON3.write([x, y]))
+    response = HTTP.request(
+        "GET", "http://localhost:9000/myservice", [], JSON3.write([x, y])
+    )
     @info "[test_http] GET response=$(Rembus.body(response))"
     @test Rembus.body(response) == 3
 
@@ -57,19 +59,19 @@ function run()
 
     response = HTTP.post("http://localhost:9000/subscribe/foo/c1")
     @test Rembus.body(response) === nothing
-    @test response.status === Int16(200)
+    @test response.status == 200
 
     response = HTTP.post("http://localhost:9000/unsubscribe/foo/c1")
     @test Rembus.body(response) === nothing
-    @test response.status === Int16(200)
+    @test response.status == 200
 
     response = HTTP.post("http://localhost:9000/expose/foo/c1")
     @test Rembus.body(response) === nothing
-    @test response.status === Int16(200)
+    @test response.status == 200
 
     response = HTTP.post("http://localhost:9000/unexpose/foo/c1")
     @test Rembus.body(response) === nothing
-    @test response.status === Int16(200)
+    @test response.status == 200
 
     # It is not permitted to use a name of a connected component
     # with HTTP rest api

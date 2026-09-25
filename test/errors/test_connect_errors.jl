@@ -32,7 +32,10 @@ function connect_fail()
     try
         connect(node_url)
     catch e
-        @test isa(e, HTTP.Exceptions.ConnectError)
+        # HTTP.jl (>= 2.0) raises the underlying transport-level connect
+        # error (Reseau.HostResolvers.OpError) instead of wrapping it in
+        # HTTP.ConnectError for a raw WebSocket connection attempt.
+        @test nameof(typeof(e)) === :OpError
     end
 
     try
@@ -95,8 +98,11 @@ function invalid_cacert()
         connect("wss://$host:8338")
         @test false
     catch e
-        @test isa(e, HTTP.Exceptions.ConnectError)
-        @test isa(e.error, CapturedException)
+        # HTTP.jl (>= 2.0) raises HTTP.TLSHandshakeError (with a `cause`
+        # field, not `error`) for a certificate-verification failure,
+        # instead of HTTP.ConnectError wrapping a CapturedException.
+        @test isa(e, HTTP.TLSHandshakeError)
+        @test occursin("certificate signed by unknown authority", e.cause.message)
     end
 end
 

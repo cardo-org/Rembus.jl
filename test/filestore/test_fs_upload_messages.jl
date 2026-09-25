@@ -21,7 +21,16 @@ function run_sub1()
     inject(sub, ctx)
     subscribe(sub, mytopic, Rembus.LastReceived)
     reactive(sub)
-    sleep(2)
+
+    # Poll instead of a fixed sleep: delivery of the offline-queued messages
+    # is asynchronous and its timing may vary with system load.
+    max_wait = 10
+    wtime = 0.1
+    t = 0.0
+    while t < max_wait && ctx["count"] < 2
+        sleep(wtime)
+        t += wtime
+    end
     @test ctx["count"] == 2
 
     close(sub)
