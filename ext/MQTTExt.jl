@@ -47,7 +47,7 @@ end
 function Rembus.connect(rb::Rembus.Twin, ::Rembus.Adapter{:MQTT})
     @debug "[$rb] connecting to MQTT broker $(Rembus.cid(rb))"
     client = Client_v5(rb.uid.host, Int(rb.uid.port))
-    add_subscription(rb.router, rb, "*")
+    add_subscription(rb.router, rb, "**")
     rb.reactive = true
     rb.socket = MQTTSock(client)
     bind_topic(rb, client)

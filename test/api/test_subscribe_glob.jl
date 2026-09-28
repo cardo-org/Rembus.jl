@@ -39,20 +39,20 @@ function run(admin_component)
 
     subscribe_glob_sub_ = connect(subscribe_glob_sub)
     inject(subscribe_glob_sub_, ctx)
-    subscribe(subscribe_glob_sub_, "*", consume_all)
+    subscribe(subscribe_glob_sub_, "**", consume_all)
     reactive(subscribe_glob_sub_)
 
     user_subzmq = connect(subzmq)
-    subscribe(user_subzmq, "*", another_consume)
+    subscribe(user_subzmq, "**", another_consume)
     reactive(user_subzmq)
 
     another_sub = connect(sub_noshared)
-    subscribe(another_sub, "*", another_consume)
+    subscribe(another_sub, "**", another_consume)
     reactive(another_sub)
 
     admin_sub = connect(admin_component)
     inject(admin_sub, ctx)
-    subscribe(admin_sub, "*", admin_consume_all)
+    subscribe(admin_sub, "**", admin_consume_all)
     reactive(admin_sub)
 
     # define a private topic

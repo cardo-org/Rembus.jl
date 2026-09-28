@@ -148,9 +148,9 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
     end
     try
         if router.shared === missing
-            result = router.local_function["*"](msg.topic, getargs(payload)...)
+            result = router.local_function["**"](msg.topic, getargs(payload)...)
         else
-            result = router.local_function["*"](
+            result = router.local_function["**"](
                 msg.topic, getargs(payload)..., ctx=router.shared, node=twin
             )
         end
@@ -200,7 +200,7 @@ end
 function local_subscribers(router::Router, twin::Twin, msg::RembusMsg)
     if haskey(router.local_function, msg.topic)
         Threads.@spawn local_eval(router, twin, msg)
-    elseif haskey(router.local_function, "*")
+    elseif haskey(router.local_function, "**")
         Threads.@spawn glob_eval(router, twin, msg)
     end
     return nothing
@@ -311,11 +311,11 @@ Broadcast the `topic` data `msg` to all interested clients.
 =#
 function broadcast_msg(router::Router, msg::PubSubMsg)
     authtwins = Set{Twin}()
-    # The interest * (subscribe to all topics) is enabled
+    # The interest ** (subscribe to all topics) is enabled
     # only for pubsub messages and not for rpc methods.
     topic = msg.topic
     src_twin = msg.twin
-    twins = get(router.topic_interests, "*", Set{Twin}())
+    twins = get(router.topic_interests, "**", Set{Twin}())
     # Broadcast to twins that are admins and to twins that are authorized to
     # subscribe to topic.
     for twin in twins
