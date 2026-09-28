@@ -54,6 +54,17 @@ jobs:
           sudo systemctl enable mosquitto
           sudo systemctl start mosquitto
 
+      # macOS runners register the machine hostname with mDNS/DNS only,
+      # with no loopback entry in /etc/hosts. The test suite creates TLS
+      # keystores for `hostname` and connects to `tls://<hostname>:<port>`
+      # against a broker listening on 0.0.0.0, so on macOS the client
+      # resolves the hostname to a non-loopback (or IPv6) address where
+      # nothing is listening, causing ECONNREFUSED. Map hostname to
+      # 127.0.0.1 explicitly so it resolves to the broker's bound address.
+      - name: Map hostname to loopback on macOS
+        if: runner.os == 'macOS'
+        run: echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
+
       # Install Mosquitto on macOS
       - name: Install Mosquitto on macOS
         if: runner.os == 'macOS'
