@@ -143,6 +143,13 @@ function save_data_at_rest(router, ::FileStore)
     @debug "[broker] persisting messages on disk: $fn"
     lock(lock_msgfile)
     try
+        # The messages directory may have been removed (e.g. by
+        # broker_reset()) while the broker process kept running, so it
+        # has to be (re)created before persisting messages on disk.
+        mdir = messages_dir(router)
+        if !isdir(mdir)
+            mkpath(mdir)
+        end
         save_object(fn, router.msg_df)
     finally
         unlock(lock_msgfile)

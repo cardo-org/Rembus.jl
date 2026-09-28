@@ -157,24 +157,24 @@ else
     ENV["HTTP_CA_BUNDLE"] = joinpath(test_keystore, REMBUS_CA)
     try
         Base.run(`$script -k $test_keystore -n $hname`)
-        execute(connect_secure, broker_name, secure=true, tcp=8337, ws=8338)
+        execute(connect_secure, broker_name, secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
 
         delete!(ENV, "HTTP_CA_BUNDLE")
-        execute(no_cacert, "connect_errors_no_cacert", secure=true, tcp=8337, ws=8338)
+        execute(no_cacert, "connect_errors_no_cacert", secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
 
         # test rembus_ca() method
         target_dir = joinpath(Rembus.rembus_dir(), "ca")
         mkpath(target_dir)
         mv(joinpath(test_keystore, REMBUS_CA), joinpath(target_dir, REMBUS_CA), force=true)
-        execute(connect_secure, "connect_errors_default_ca", secure=true, tcp=8337, ws=8338)
+        execute(connect_secure, "connect_errors_default_ca", secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
 
         cid = "connect_errors_wrong_keys"
         generate_wrong_keys(cid)
-        execute(() -> wrong_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338)
+        execute(() -> wrong_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
 
         private_fn = Rembus.pkfile(cid)
         rm(private_fn)
-        execute(() -> missing_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338)
+        execute(() -> missing_keys(cid), broker_name, reset=false, secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
 
         # create a ca cert that does not signed the original certificate
         cacert = joinpath(target_dir, REMBUS_CA)
@@ -185,7 +185,7 @@ else
             -subj "/CN=Rembus/C=IT/L=Trento" \
             -keyout /dev/null -out $cacert`)
 
-        execute(invalid_cacert, "connect_errors_invalid_cacert", secure=true, tcp=8337, ws=8338)
+        execute(invalid_cacert, "connect_errors_invalid_cacert", secure=true, tcp=8337, ws=8338, check_listeners=[:ws, :tcp])
     finally
         delete!(ENV, "REMBUS_KEYSTORE")
         delete!(ENV, "HTTP_CA_BUNDLE")

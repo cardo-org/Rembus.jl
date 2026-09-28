@@ -81,7 +81,7 @@ end
 @info "[test_publish] start"
 try
     rb = broker(ws=8010, tcp=8011, zmq=8012, prometheus=7071, name="publish")
-    @test Rembus.islistening(rb, wait=10)
+    @test Rembus.islistening(rb, protocol=[:ws, :tcp, :zmq], wait=10)
     for pub_url in [
         "tcp://127.0.0.1:8011/publish_tcppub",
         "ws://127.0.0.1:8010/publish_pub",
@@ -111,7 +111,7 @@ try
         try
             Base.run(`$script -k $test_keystore -n $hname`)
             rb = broker(secure=true, ws=6010, tcp=6011, zmq=6012, name="publish")
-            @test Rembus.islistening(rb, wait=10)
+            @test Rembus.islistening(rb, protocol=[:ws, :tcp, :zmq], wait=10)
             for pub_url in [
                 "tls://$hname:6011/publish_pub",
                 "wss://$hname:6010/publish_pub"

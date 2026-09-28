@@ -788,7 +788,7 @@ function get_router(;
             if hasname(router)
                 msg_dir = messages_dir(router.id)
                 if !isdir(msg_dir)
-                    mkdir(msg_dir)
+                    mkpath(msg_dir)
                 end
             end
         end
