@@ -211,7 +211,7 @@ To register components the secret value associated to the tenant must be used.
 ```
 
 For single-tenant Rembus setups, the `tenants.json` file contains only one
-secret, assocoated to the global tenant `.`. This secret will be used for all
+secret, associated to the global tenant `.`. This secret will be used for all
 component registrations.
 
 ```json
