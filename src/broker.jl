@@ -138,7 +138,7 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
     return nothing
 end
 
-function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
+function glob_eval(router::Router, twin::Twin, msg::RembusMsg, pattern::AbstractString)
     result = nothing
     sts = STS_GENERIC_ERROR
     if isa(msg.data, Base.GenericIOBuffer)
@@ -148,9 +148,9 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
     end
     try
         if router.shared === missing
-            result = router.local_function["**"](msg.topic, getargs(payload)...)
+            result = router.local_function[pattern](msg.topic, getargs(payload)...)
         else
-            result = router.local_function["**"](
+            result = router.local_function[pattern](
                 msg.topic, getargs(payload)..., ctx=router.shared, node=twin
             )
         end
@@ -164,12 +164,14 @@ function glob_eval(router::Router, twin::Twin, msg::RembusMsg)
             try
                 if router.shared === missing
                     result = Base.invokelatest(
-                        router.local_function[msg.topic],
+                        router.local_function[pattern],
+                        msg.topic,
                         getargs(payload)...
                     )
                 else
                     result = Base.invokelatest(
-                        router.local_function[msg.topic],
+                        router.local_function[pattern],
+                        msg.topic,
                         getargs(payload)...,
                         ctx=router.shared,
                         node=twin
@@ -200,9 +202,16 @@ end
 function local_subscribers(router::Router, twin::Twin, msg::RembusMsg)
     if haskey(router.local_function, msg.topic)
         Threads.@spawn local_eval(router, twin, msg)
-    elseif haskey(router.local_function, "**")
-        Threads.@spawn glob_eval(router, twin, msg)
+        return nothing
     end
+
+    for pattern in keys(router.local_function)
+        if contains(pattern, "*") && occursin(build_space_re(pattern), msg.topic)
+            Threads.@spawn glob_eval(router, twin, msg, pattern)
+            break
+        end
+    end
+
     return nothing
 end
 
