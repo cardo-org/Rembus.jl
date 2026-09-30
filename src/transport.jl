@@ -418,7 +418,14 @@ function transport_send(twin::Twin, msg)
     return transport_send(twin.socket, msg)
 end
 
-message_send(twin, future::FutureResponse) = transport_send(twin, future.request)
+function message_send(twin, future::FutureResponse)
+    outcome = transport_send(twin, future.request)
+    if isa(future.request, PubSubMsg) && !isready(future.future)
+        # Wake up the publish()/put() caller waiting for the QOS1/QOS2 ack.
+        put!(future.future, outcome)
+    end
+    return outcome
+end
 
 function message_send(twin, msg)
     router = top_router(twin.router)

@@ -6,7 +6,9 @@ function testcase(puburl)
     ack_timeout!(1e-20)
     pub = connect(puburl)
     Rembus.info!()
-    publish(pub, "topic", (1, 2, 3), qos=Rembus.QOS1)
+    # With an unreasonably small ack_timeout, publish() now blocks until the
+    # ack wait gives up and throws because the ack could not be received.
+    @test_throws ErrorException publish(pub, "topic", (1, 2, 3), qos=Rembus.QOS1)
     close(pub)
     @info "$puburl closed"
     ack_timeout!(2)

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `publish`/`put` with `qos=Rembus.QOS1` or `qos=Rembus.QOS2` now block until
+  the ack is received (or the internal retries are exhausted), instead of
+  returning immediately. If the ack is not received, an error is thrown.
+  `qos=Rembus.QOS0` (the default) is unaffected and still returns immediately.
+
 - msg_from: microsecond -> nanosecond
 
 - Updated to HTTP.jl 2.x (built on the new "Reseau" transport/TLS stack).

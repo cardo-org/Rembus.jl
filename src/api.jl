@@ -552,7 +552,7 @@ publish(rb, "mytopic")
 function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0, slot=0)
     wait_open(twin) || failover_queue(twin) || error("connection down")
     msg = PubSubMsg(twin, topic, collect(data), qos, 0, slot)
-    return publish_msg(twin, msg)
+    return wait_publish_ack(publish_msg(twin, msg), msg)
 end
 
 """
@@ -585,7 +585,7 @@ This publishes the values 1 and 2 to the topic `myname/mytopic`.
 function put(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
     wait_open(twin) || failover_queue(twin) || error("connection down")
     msg = PubSubMsg(twin, twin.uid.id * "/" * topic, collect(data), qos)
-    return publish_msg(twin, msg)
+    return wait_publish_ack(publish_msg(twin, msg), msg)
 end
 
 
@@ -788,12 +788,41 @@ end
 function publish_msg(twin, msg)
     if isa(twin.socket, Float)
         put!(twin.router.process.inbox, msg)
+        return nothing
+    end
+
+    if failover_queue(twin)
+        r = top_router(twin.router)
+        push!(r.archiver.inbox, msg)
+    end
+
+    if (msg.flags & QOS1) > QOS0
+        # QOS1/QOS2: the caller of publish()/put() waits for the ack, so wrap
+        # the message in a FutureResponse that gets fulfilled once the
+        # twin's process has received the ack (or given up retrying).
+        req = FutureResponse(msg, Timer(0))
+        cast(twin.process, req)
+        return req
     else
-        if failover_queue(twin)
-            r = top_router(twin.router)
-            push!(r.archiver.inbox, msg)
-        end
         cast(twin.process, msg)
+        return nothing
+    end
+end
+
+#=
+    wait_publish_ack(result, msg)
+
+Block until the ack for a QOS1/QOS2 publish/put message is received, throwing
+an error if the ack was not received (e.g. after exhausting the retries).
+For QOS0 messages `result` is `nothing` and this is a no-op.
+=#
+function wait_publish_ack(result, msg)
+    if isa(result, FutureResponse)
+        outcome = fetch(result.future)
+        close(result.timer)
+        if !outcome
+            error("publish [$(msg.topic)]: ack not received")
+        end
     end
 
     return nothing

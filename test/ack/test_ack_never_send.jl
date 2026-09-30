@@ -37,8 +37,10 @@ function run(pub_url, sub_url)
     stngs.send_retries = 0
     stngs.ack_timeout = 0.5
 
-    publish(pub, "foo", "data1", qos=Rembus.QOS1)
-    publish(pub, "foo", "data2", qos=Rembus.QOS1)
+    # The AckMsg is never actually sent (see the transport_send override
+    # above), so publish() blocks until ack_timeout expires and throws.
+    @test_throws ErrorException publish(pub, "foo", "data1", qos=Rembus.QOS1)
+    @test_throws ErrorException publish(pub, "foo", "data2", qos=Rembus.QOS1)
 
     sleep(5)
     @debug "count: $ctx"

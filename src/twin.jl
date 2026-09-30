@@ -1454,6 +1454,12 @@ function twin_task(self, twin)
                         done = message_send(twin, msg)
                         retries += 1
                     end
+                    if isa(msg, FutureResponse) && isa(msg.request, PubSubMsg) &&
+                       !isready(msg.future)
+                        # Retries exhausted (or twin was never open): unblock
+                        # the publish()/put() caller waiting for the ack.
+                        put!(msg.future, done)
+                    end
                 end
             end
         end
