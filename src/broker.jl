@@ -208,7 +208,6 @@ function local_subscribers(router::Router, twin::Twin, msg::RembusMsg)
     for pattern in keys(router.local_function)
         if contains(pattern, "*") && occursin(build_space_re(pattern), msg.topic)
             Threads.@spawn glob_eval(router, twin, msg, pattern)
-            break
         end
     end
 
@@ -324,7 +323,10 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     # only for pubsub messages and not for rpc methods.
     topic = msg.topic
     src_twin = msg.twin
-    twins = get(router.topic_interests, "**", Set{Twin}())
+    twins = Set{Twin}()
+    for pattern in router.glob_topics
+        union!(twins, get(router.topic_interests, pattern, Set{Twin}()))
+    end
     # Broadcast to twins that are admins and to twins that are authorized to
     # subscribe to topic.
     for twin in twins
@@ -623,6 +625,7 @@ function cleanup(twin::Twin, router::Router)
         if isempty(router.topic_interests[topic])
             delete!(router.topic_interests, topic)
         end
+        unmark_glob_topic!(router, topic)
     end
 
     delete!(router.id_twin, rid(twin))

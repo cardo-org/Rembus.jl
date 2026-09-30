@@ -32,6 +32,47 @@ function build_space_re(topic)
 
 end
 
+# The regex generated for glob patterns that match every possible topic,
+# e.g. "**" or "/**/".
+const GLOB_STAR_PATTERN = "^(.*)\$"
+
+#=
+    is_glob_star(topic)
+
+Return `true` if `topic` is a wildcard pattern (`**`, `/**/`, ...) that
+matches every topic, as opposed to a per-segment wildcard pattern
+(e.g. `veneto/*/cencenighe/*`) used for hierarchical key-expression routing.
+=#
+is_glob_star(topic::AbstractString) = build_space_re(topic).pattern == GLOB_STAR_PATTERN
+
+#=
+    mark_glob_topic!(router, topic)
+
+Track `topic` in `router.glob_topics` when it is a "match everything" glob
+pattern, so that broadcasting to "**"/`/**/` subscribers does not need to
+evaluate glob patterns against each published topic.
+=#
+function mark_glob_topic!(router, topic::AbstractString)
+    if is_glob_star(topic)
+        push!(router.glob_topics, topic)
+    end
+
+    return nothing
+end
+
+#=
+    unmark_glob_topic!(router, topic)
+
+Remove `topic` from `router.glob_topics` once it has no more subscribers.
+=#
+function unmark_glob_topic!(router, topic::AbstractString)
+    if !haskey(router.topic_interests, topic)
+        delete!(router.glob_topics, topic)
+    end
+
+    return nothing
+end
+
 function setup_twin(router::KeySpaceRouter, twin::Twin)
     @debug "[ksrouter] topic_interests: $(router.downstream.topic_interests)"
     for topic in keys(router.downstream.topic_interests)

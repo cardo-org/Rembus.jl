@@ -685,6 +685,7 @@ function update_tables(router::Router, twin::Twin, exports)
                 router.topic_interests[topic] = OrderedSet{Twin}()
             end
             push!(router.topic_interests[topic], twin)
+            mark_glob_topic!(router, topic)
         end
     end
 

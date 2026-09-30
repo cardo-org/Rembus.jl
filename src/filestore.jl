@@ -236,6 +236,7 @@ function load_twin(router::Router, twin::Twin, ::FileStore)
             else
                 topic_interests[topic] = Set([twin])
             end
+            mark_glob_topic!(router, topic)
         end
     end
 

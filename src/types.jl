@@ -568,6 +568,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
     topic_impls::Dict{String,OrderedSet{T}} # topic => twins implementor
     last_invoked::Dict{String,Int} # topic => twin index last called
     topic_interests::Dict{String,Set{T}} # topic => twins subscribed to topic
+    glob_topics::Set{String} # subset of topic_interests keys matching every topic ("**", "/**/")
     id_twin::Dict{String,T} # id => twin
     local_function::Dict{String,Function}
     local_subscriber::Dict{String,Float64}
@@ -626,6 +627,7 @@ mutable struct Router{T<:AbstractTwin} <: AbstractRouter
             Dict(), # topic_impls
             Dict(), # last_invoked
             Dict(), # topic_interests
+            Set(), # glob_topics
             Dict(), # id_twin
             Dict(), # local_function
             Dict(), # local_subscriber

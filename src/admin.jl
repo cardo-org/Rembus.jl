@@ -199,6 +199,7 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                 else
                     router.topic_interests[topic] = Set([twin])
                 end
+                mark_glob_topic!(router, topic)
             end
 
             for topic in msg.data["exposers"]
@@ -222,6 +223,7 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                         else
                             router.topic_interests[msg.topic] = Set([twin])
                         end
+                        mark_glob_topic!(router, msg.topic)
                     end
                 end
             end
@@ -257,6 +259,7 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                                 if isempty(router.topic_interests[msg.topic])
                                     delete!(router.topic_interests, msg.topic)
                                 end
+                                unmark_glob_topic!(router, msg.topic)
                             else
                                 sts = STS_GENERIC_ERROR
                             end

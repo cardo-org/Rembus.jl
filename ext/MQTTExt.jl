@@ -34,6 +34,7 @@ function add_subscription(router, twin, topic)
         router.topic_interests[topic] = OrderedSet{Rembus.Twin}()
     end
     push!(router.topic_interests[topic], twin)
+    Rembus.mark_glob_topic!(router, topic)
 
 end
 

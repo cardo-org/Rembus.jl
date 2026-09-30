@@ -838,6 +838,7 @@ function load_twin(router, twin, ::DuckDB.DB)
             else
                 topic_interests[topic] = Set([twin])
             end
+            mark_glob_topic!(router, topic)
         end
 
         df = DataFrame(DuckDB.execute(
