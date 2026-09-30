@@ -2,6 +2,19 @@ include("../utils.jl")
 
 using Preferences
 
+# Pretend to send the ack but never actually deliver it, so publish() always
+# times out waiting for it. Without this, the broker's real ack races against
+# the (deliberately tiny) ack_timeout: on a loaded machine, or with the very
+# low latency zmq transport, the real ack can occasionally win the race and
+# arrive before the timer fires, making the @test_throws below flaky.
+function Rembus.transport_send(socket::Rembus.AbstractPlainSocket, msg::Rembus.AckMsg)
+    return true
+end
+
+function Rembus.transport_send(z::Rembus.ZRouter, msg::Rembus.AckMsg)
+    return true
+end
+
 function testcase(puburl)
     ack_timeout!(1e-20)
     pub = connect(puburl)
