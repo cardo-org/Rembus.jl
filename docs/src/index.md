@@ -69,6 +69,28 @@ Here, the `mynode` component connects to the broker at `myhost:8338` and also
 acts as a broker, accepting WebSocket connections on port `9000` and routing
 messages between its connected components.
 
+### Mesh Network
+
+Since a Broker can simultaneously be a Component, it is possible to chain
+multiple brokers together, each one connecting "upstream" to another broker
+while also accepting its own "downstream" connections. The result is a **mesh
+network**: a web of interconnected brokers that cooperate to route RPC
+requests and Pub/Sub messages across the whole topology, even when the
+individual broker-to-broker hops use different transport protocols
+(WebSocket, TCP, or ZeroMQ).
+
+When a node joins the mesh, it advertises the set of protocols and ports it
+listens on (for example `Dict("ws" => 9000, "tcp" => 8001)`). Peer brokers use
+this information to discover each other's endpoints and keep track of the
+network topology, so that components connected to any broker in the mesh can
+transparently reach components and services exposed on any other broker,
+without needing to know the full topology in advance.
+
+This enables architectures such as geographically distributed deployments,
+protocol gateways, or hierarchical broker trees, while retaining the
+fault-tolerance and automatic reconnection features described in
+[Fault-tolerance features](@ref).
+
 ## Component
 
 A Rembus Component is a process that embodies one or more of the communication

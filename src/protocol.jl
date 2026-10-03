@@ -21,6 +21,15 @@ end
 
 Base.show(io::IO, m::PingMsg) = show(io, "PING|$(m.id)|$(m.cid)")
 
+#=
+Message sent by a connecting node to declare its identity to the broker.
+
+`meta` is a `Dict{String,UInt16}` mapping each protocol name the node is
+listening on (e.g. "ws", "tcp", "zmq") to the corresponding listening port.
+It is used by the broker to discover the node's endpoints when building the
+mesh network topology, and is empty for nodes that are not eligible to
+become a broker.
+=#
 struct IdentityMsg <: RembusMsg
     id::Msgid
     cid::String
@@ -176,6 +185,15 @@ end
 
 Base.show(io::IO, m::Unregister) = show(io, "UNREG|$(m.id)")
 
+#=
+Message sent by a connecting node to prove its identity when authentication
+is required, carrying a signature (or hash) of the broker's challenge.
+
+`meta` is a `Dict{String,UInt16}` mapping each protocol name the node is
+listening on (e.g. "ws", "tcp", "zmq") to the corresponding listening port,
+used by the broker to discover the node's endpoints when building the mesh
+network topology.
+=#
 struct Attestation <: RembusMsg
     id::Msgid
     cid::String # client name
