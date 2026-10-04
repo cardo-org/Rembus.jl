@@ -98,20 +98,7 @@ direction). The combination means a command issued by any component
 eventually reaches every broker/component in the mesh exactly once, no
 matter the topology (tree, ring, or arbitrary graph).
 
-```mermaid
-sequenceDiagram
-    participant Sub as Subscriber (on C)
-    participant A as Broker A
-    participant B as Broker B
-    participant C as Broker C
-    Sub->>C: subscribe("temperature")
-    C->>C: topic_interests["temperature"] += Sub
-    C->>B: admin broadcast (rmark=[C.eid], touch=[Sub])
-    B->>B: topic_interests["temperature"] += (twin toward C)
-    B->>A: admin broadcast (rmark=[C.eid,B.eid], touch=[Sub,B])
-    A->>A: topic_interests["temperature"] += (twin toward B)
-    Note over A,C: A does not relay back to B, B does not relay back to C<br/>(already in "touch"); if the link closed a cycle, the<br/>router whose eid is in "rmark" simply stops.
-```
+![Sequence diagram showing a subscribe command flooding from broker C through broker B to broker A, with loop prevention via rmark/touch](images/mesh_routing_sequence.svg)
 
 After this propagation, every broker on the path from A to C has a
 `topic_interests["temperature"]` entry pointing towards the neighbor that is

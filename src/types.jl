@@ -334,15 +334,29 @@ struct ZDealer <: AbstractSocket
     context::ZMQ.Context
     out::Dict{Msgid,FutureResponse}
     direct::Dict{Msgid,FutureResponse}
+    # Signals the receiver task (see `zmq_receive`) that the socket is being
+    # closed, and holds a reference to that task so `close` can wait for it
+    # to actually terminate before tearing down the socket/context. Without
+    # this handshake, closing the socket while the receiver task is blocked
+    # in `ZMQ.recv` is a use-after-close race in libzmq (the task wakes up
+    # and re-reads socket options on an already-destroyed native socket),
+    # which can segfault.
+    closing::Base.RefValue{Bool}
+    task::Base.RefValue{Union{Nothing,Task}}
     function ZDealer()
         context = ZMQ.Context()
         sock = ZMQ.Socket(context, DEALER)
         sock.linger = 1
+        # Bound how long the receiver task can block in a single `recv`, so
+        # it can periodically notice that the socket is closing.
+        sock.rcvtimeo = 500
         return new(
             sock,
             context,
             Dict(), # out
             Dict(), # direct
+            Ref(false),
+            Ref{Union{Nothing,Task}}(nothing),
         )
     end
 end
@@ -373,6 +387,14 @@ Base.close(endpoint::AbstractPlainSocket) = close(endpoint.sock)
 
 function Base.close(endpoint::ZDealer)
     transport_send(endpoint, Close())
+    endpoint.closing[] = true
+    # Wait for the receiver task to notice the closing flag and return
+    # before destroying the socket/context, to avoid a concurrent
+    # recv/close race (see the `closing`/`task` fields of `ZDealer`).
+    task = endpoint.task[]
+    if task !== nothing
+        wait(task)
+    end
     close(endpoint.sock)
     close(endpoint.context)
 end

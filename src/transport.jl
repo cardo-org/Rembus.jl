@@ -187,6 +187,10 @@ function zmq_message(socket::ZMQ.Socket)::ZMQDealerPacket
             return ZMQDealerPacket(header, data)
 
         catch e
+            # Do not treat a receive timeout as a malformed packet: let it
+            # propagate so the caller (see `zmq_receive`) can notice a
+            # pending socket close.
+            isa(e, ZMQ.TimeoutError) && rethrow(e)
             @error "ZMQ dealer: wrong header $bval ($e)"
             if isempty(bval)
                 expect_empty = false

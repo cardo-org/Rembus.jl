@@ -183,6 +183,11 @@ function zmq_receive(twin::Twin)
                 # Assume that an EOFError is thrown only when a zmq socket
                 # is explicitly closed.
                 break
+            elseif isa(e, ZMQ.TimeoutError)
+                # Just a periodic poll timeout (see ZDealer's rcvtimeo):
+                # give `close` a chance to observe that this task is idle
+                # and stop looping once the socket is being closed.
+                twin.socket.closing[] && break
             else
                 @error "[$twin] zmq_receive $(typeof(e)): $e"
                 dumperror(twin, e)
@@ -199,7 +204,7 @@ function zmq_connect(rb)
     rb.socket = ZDealer()
     url = nodeurl(rb)
     ZMQ.connect(rb.socket.sock, url)
-    @async zmq_receive(rb)
+    rb.socket.task[] = @async zmq_receive(rb)
     return nothing
 end
 

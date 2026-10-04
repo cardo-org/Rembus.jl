@@ -1,6 +1,5 @@
 using Rembus
 using Documenter
-using DocumenterMermaid
 using Weave
 
 #const EXAMPLES_DIR = "examples"
