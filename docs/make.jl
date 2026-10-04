@@ -32,6 +32,7 @@ makedocs(;
         "HTTP Rest API" => "http_api.md",
         "JSON-RPC" => "json-rpc.md",
         "Client-Server" => "brokerless.md",
+        "Mesh Routing and Forwarding" => "mesh_routing.md",
         "Fault-tolerance features" => "fault_tolerance.md",
         "Security" => "security.md",
         "Configuration" => "configuration.md",

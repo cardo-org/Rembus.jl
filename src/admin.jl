@@ -1,7 +1,14 @@
-#=
+"""
     isadmin(router, twin, cmd)
-Check if twin client has admin privilege.
-=#
+
+Return `true` if `twin` is listed in `router.admins`, i.e. is allowed to
+execute the administration command `cmd`.
+
+Logs an `@error` and returns `false` otherwise. Used as a guard at the
+beginning of every privileged admin command handler (`private_topic`,
+`public_topic`, `authorize`, `unauthorize`, `SHUTDOWN_CMD`,
+`BROKER_CONFIG_CMD`, ...).
+"""
 function isadmin(router, twin, cmd)
     sts = twin.uid.id in router.admins
     if !sts
@@ -11,11 +18,18 @@ function isadmin(router, twin, cmd)
     return sts
 end
 
-#=
+"""
     isauthorized(router::Router, twin::Twin, topic::AbstractString)
 
-Return true if topic is public or client is authorized to bind to topic.
-=#
+Return `true` if `topic` is public (absent from `router.topic_auth`) or
+`twin` is explicitly listed in `router.topic_auth[topic]`.
+
+Every mesh hop re-evaluates this check independently with its own local
+`topic_auth` table, so a private topic stays protected regardless of how
+many brokers a `subscribe`/`expose`/publish/request message has to cross:
+there is no "trusted upstream" shortcut, each router enforces authorization
+on its own.
+"""
 function isauthorized(router::Router, twin::Twin, topic::AbstractString)
     # check if topic is private
     if haskey(router.topic_auth, topic)
@@ -29,11 +43,17 @@ function isauthorized(router::Router, twin::Twin, topic::AbstractString)
     return true
 end
 
-#=
+"""
     private_topic(router, twin, msg)
 
-Administration command to declare a private topic.
-=#
+Administration command handler for `PRIVATE_TOPIC_CMD`: declares
+`msg.topic` private by creating an (initially empty) entry in
+`router.topic_auth`. Requires `twin` to be an admin (see [`isadmin`](@ref)).
+
+This is a purely local-router operation: it is not flooded across the mesh
+by [`mark_and_broadcast`](@ref), so a topic must be declared private on each
+broker where it should be protected.
+"""
 function private_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PRIVATE_TOPIC_CMD)
@@ -48,11 +68,15 @@ function private_topic(router, twin, msg)
     return sts
 end
 
-#=
+"""
     public_topic(router, twin, msg)
 
-Administration command to reset a topic to public.
-=#
+Administration command handler for `PUBLIC_TOPIC_CMD`: resets
+`msg.topic` back to public by deleting its entry from `router.topic_auth`.
+Requires `twin` to be an admin (see [`isadmin`](@ref)).
+
+Like [`private_topic`](@ref), this is a local-router-only operation.
+"""
 function public_topic(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, PUBLIC_TOPIC_CMD)
@@ -65,16 +89,21 @@ function public_topic(router, twin, msg)
     return sts
 end
 
-#=
+"""
     authorize(router, twin, msg)
 
-Administration command to authorize a component:
+Administration command handler for `AUTHORIZE_CMD`: grants the
+component identified by `msg.data[CID]` access to `msg.topic`, whether to:
 
-- to publish
-- to subscribe to a private topic.
-- to make rpc requests to a remote method
-- to expose a method
-=#
+- publish or subscribe to a private topic;
+- make RPC requests to, or expose, a remote method.
+
+Requires `twin` to be an admin and `msg.data[CID]` to be a non-empty
+component id. The topic is implicitly declared private (an empty
+`router.topic_auth[msg.topic]` entry is created if missing) before the
+grant is recorded, same as [`private_topic`](@ref) this is local to the
+router handling the command.
+"""
 function authorize(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, AUTHORIZE_CMD) &&
@@ -93,11 +122,14 @@ function authorize(router, twin, msg)
     return sts
 end
 
-#=
+"""
     unauthorize(router, twin, msg)
 
-Administration command to unauthorize a component to publish/subscribe to a private topic.
-=#
+Administration command handler for `UNAUTHORIZE_CMD`: revokes the
+grant previously given with [`authorize`](@ref) for the component
+identified by `msg.data[CID]` on `msg.topic`. Requires `twin` to be an
+admin and `msg.data[CID]` to be a non-empty component id.
+"""
 function unauthorize(router, twin, msg)
     sts = STS_SUCCESS
     if isadmin(router, twin, UNAUTHORIZE_CMD) &&
@@ -115,6 +147,14 @@ function unauthorize(router, twin, msg)
     return sts
 end
 
+"""
+    shutdown_broker(router)
+
+Administration action for `SHUTDOWN_CMD`: shut down the broker's
+`Visor` supervisor tree, terminating the broker process. Invoked
+asynchronously by [`admin_command`](@ref) so the `STS_SUCCESS` response can
+still be sent back to the caller before the process goes down.
+"""
 function shutdown_broker(router)
     @debug "shutting down broker ..."
     try
@@ -124,6 +164,19 @@ function shutdown_broker(router)
     end
 end
 
+"""
+    color_admin(tw::Twin, msg)
+
+Send `msg` to the neighbor `tw`, after "coloring" it: append `rid(tw)` to
+`msg.data["touch"]` (creating the list if absent) just before transmitting.
+
+This is the mechanism that marks a link as already crossed by an admin
+command, so that `tw` (or whichever router/component re-broadcasts the
+message further) never bounces it back to a twin whose id is already in
+`touch`. See [`admin_broadcast`](@ref) and the
+[Mesh Routing and Forwarding](@ref) guide for the full flood/anti-loop
+scheme.
+"""
 function color_admin(tw::Twin, msg)
     @debug "[$tw] coloring admin message $(msg.data)"
     if !haskey(msg.data, "touch")
@@ -133,6 +186,27 @@ function color_admin(tw::Twin, msg)
     transport_send(tw, msg)
 end
 
+"""
+    admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
+
+Flood `msg` to every named, open, directly-connected neighbor of `router`
+(`router.id_twin`), except:
+
+- `twin` itself, the originator of the command;
+- any neighbor whose `rid` is already present in `msg.data["touch"]`
+  (already reached through another path — see [`color_admin`](@ref)).
+
+Each twin that is actually sent the message is marked via
+[`color_admin`](@ref) before transmission. This is the link-level half of
+the mesh flood; the router-level half (stopping re-processing once a
+router has already seen the command) is [`mark_and_broadcast`](@ref),
+which calls this function.
+
+Finally, if `twin` registered a future for `msg.id` (a direct, synchronous
+admin request), it is resolved here with `STS_SUCCESS`, so the originator
+gets its response immediately without waiting for the flood to finish
+propagating through the rest of the mesh.
+"""
 function admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
     @debug "[$(path(twin))] admin command broadcast: $msg"
     touched = haskey(msg.data, "touch") ? msg.data["touch"] : []
@@ -158,6 +232,26 @@ function admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
     return nothing
 end
 
+"""
+    mark_and_broadcast(router, twin, msg)
+
+Router-level loop guard around [`admin_broadcast`](@ref) for mesh-wide
+`subscribe`/`expose`/`unsubscribe`/`unexpose` propagation.
+
+Stamps `msg.data["rmark"]` with `router.eid`:
+
+- if `router.eid` is already present, this router has already processed
+  `msg` (the flood looped back to it through a cycle in the mesh graph);
+  the function returns `false` *without* re-broadcasting, so the caller
+  must not reapply the corresponding local table update either;
+- otherwise `router.eid` is appended, [`admin_broadcast`](@ref) is called
+  to flood `msg` to this router's neighbors, and `true` is returned so the
+  caller proceeds to update its local `topic_interests`/`topic_impls`.
+
+Together with the per-link `touch` marker used by [`admin_broadcast`](@ref),
+this guarantees a command reaches every router in the mesh exactly once,
+regardless of topology (tree, ring, or arbitrary graph).
+"""
 function mark_and_broadcast(router, twin, msg)
     if haskey(msg.data, "rmark")
         if router.eid in msg.data["rmark"]
@@ -173,15 +267,59 @@ function mark_and_broadcast(router, twin, msg)
     return true
 end
 
-#=
-A router that has more than one outstanding route: it could be a real broker
-or a pool component.
-=#
+"""
+    ismultipath(router)
+
+Return `true` if `router` should maintain mesh routing tables
+(`topic_interests`/`topic_impls`) at all, i.e. it could have more than one
+outstanding route: it is a real broker or a pool component, as opposed to a
+plain single-link component.
+
+Currently always returns `true`; kept as an explicit gate (and extension
+point) around every table update in [`admin_command`](@ref) and
+[`update_tables`](@ref) so the optimization for non-routing components can
+be reintroduced without touching call sites.
+"""
 function ismultipath(router)
     #return !isempty(router.listeners) || (length(router.id_twin) > 1)
     return true
 end
 
+"""
+    admin_command(router::Router, twin, msg::AdminReqMsg)
+
+Dispatch and execute an administration command received from `twin`,
+based on `msg.data[COMMAND]`. This is the single entry point for every
+mesh-routing state change as well as for broker administration (topic
+privacy, authorization, configuration, shutdown, logging level).
+
+Mesh-routing-relevant commands:
+
+- `SETUP_CMD`: bulk-register `twin`'s already-known `"subscribers"`
+  and `"exposers"` into `router.topic_interests`/`router.topic_impls` (see
+  [`update_tables`](@ref) for the symmetric client-side counterpart), then
+  reply with `EnableReactiveMsg`. Used to (re)synchronize a link's full
+  state in one shot, typically on reconnection
+  (see `twin_setup` / [`reconnect`](@ref)).
+- `SUBSCRIBE_CMD` / `EXPOSE_CMD` / `UNSUBSCRIBE_CMD` / `UNEXPOSE_CMD`:
+  after an [`isauthorized`](@ref) check, propagate the change mesh-wide via
+  [`mark_and_broadcast`](@ref) and, only if that router had not already
+  processed this command, apply the corresponding local update to
+  `router.topic_interests`/`router.topic_impls` (and `twin.msg_from` for
+  subscriptions).
+- `PRIVATE_TOPICS_CONFIG_CMD`, `PRIVATE_TOPIC_CMD` /
+  `PUBLIC_TOPIC_CMD`, `AUTHORIZE_CMD` /
+  `UNAUTHORIZE_CMD`: manage `router.topic_auth` (see
+  [`private_topic`](@ref), [`public_topic`](@ref), [`authorize`](@ref),
+  [`unauthorize`](@ref)).
+- `REACTIVE_CMD`, `BROKER_CONFIG_CMD`, `LOAD_CONFIG_CMD`,
+  `SAVE_CONFIG_CMD`, `SHUTDOWN_CMD`, `ENABLE_DEBUG_CMD`,
+  `DISABLE_DEBUG_CMD`: broker-local administration, gated by
+  [`isadmin`](@ref) where privileged.
+
+Returns a `ResMsg` carrying the resulting status and, for query-style
+commands, the requested data.
+"""
 function admin_command(router::Router, twin, msg::AdminReqMsg)
     if !isa(msg.data, Dict) || !haskey(msg.data, COMMAND)
         return ResMsg(twin, msg.id, STS_GENERIC_ERROR, nothing)
