@@ -1388,6 +1388,10 @@ function rpc_request(router::Router, msg, implementor_rule)
         if local_fn(router, twin, msg)
         elseif implementor_rule(twin.uid)
             find_implementor(router, msg)
+        else
+            # a server does not relay: the method is unknown
+            m = ResMsg(msg, STS_METHOD_NOT_FOUND, "$(msg.topic): method unknown")
+            put!(twin.process.inbox, m)
         end
     end
 

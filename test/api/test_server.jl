@@ -48,6 +48,14 @@ function run()
     sleep(1)
     @test OTHER_RECV[]
 
+    # an rpc that the server cannot resolve is not relayed to other clients
+    try
+        rpc(cli, "cli_service_unknown", val)
+        @test false
+    catch e
+        @test isa(e, Rembus.RpcMethodNotFound)
+    end
+
     # direct is not permitted when the component is a server
     try
         direct(cli, "server_client", "cli_service", val)

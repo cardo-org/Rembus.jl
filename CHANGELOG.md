@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   messages published by a connected client are no longer broadcast to the
   other clients.
 
+- A server replies `STS_METHOD_NOT_FOUND` to an RPC request that it cannot
+  resolve with its own methods (previously no response was sent).
+
 - Direct RPC (`direct`) is rejected with the error
   `direct not permitted in server mode` when the component is a server.
 
