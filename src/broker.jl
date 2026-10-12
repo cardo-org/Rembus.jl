@@ -467,7 +467,7 @@ function router_task(self, router::Router, implementor_rule)
             !isshutdown(msg) || break
             probe_add(msg, pktin)
             if isa(msg, PubSubMsg)
-                pubsub_msg(router, msg) || continue
+                pubsub_msg(router, msg, implementor_rule) || continue
             elseif isa(msg, RpcReqMsg)
                 rpc_request(router, msg, implementor_rule)
             elseif isa(msg, ResMsg)

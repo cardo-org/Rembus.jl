@@ -3,7 +3,7 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.6] - 2026-03-
+## [1.2.6] - Unreleased
 
 ### Added
 
@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     always wrapping in `HTTP.Exceptions.ConnectError`.
 
 ### Fixed
+
+- A server (`server_task`) now relays only the messages it publishes itself:
+  messages published by a connected client are no longer broadcast to the
+  other clients.
+
+- Direct RPC (`direct`) is rejected with the error
+  `direct not permitted in server mode` when the component is a server.
 
 ## [1.2.5] - 2026-03-17
 

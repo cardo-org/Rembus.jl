@@ -1164,7 +1164,7 @@ function command_permitted(router::Router, twin::Twin)
 end
 
 """
-    pubsub_msg(router::Router, msg)
+    pubsub_msg(router::Router, msg, relay_rule=always_true)
 
 Handle an inbound `PubSubMsg`: after the [`command_permitted`](@ref)/
 [`isauthorized`](@ref) checks, (QoS2 de-duplication aside) deliver it in
@@ -1180,10 +1180,13 @@ how far away they are in the mesh:
   walking the mesh towards the real subscribers. See the
   [Mesh Routing and Forwarding](@ref) guide.
 
+`broadcast_msg` is skipped unless `relay_rule(msg.twin.uid)` holds: a server
+(see `server_task`) relays only the messages it publishes itself.
+
 Returns `false` (without delivering) if the permission/authorization
 checks fail, `true` otherwise.
 """
-function pubsub_msg(router::Router, msg)
+function pubsub_msg(router::Router, msg, relay_rule=always_true)
     twin = msg.twin
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
@@ -1207,8 +1210,9 @@ function pubsub_msg(router::Router, msg)
         # Publish to interested twins.
         local_subscribers(router, msg.twin, msg)
         msg.counter = uts()
-        # Relay to subscribers of this broker.
-        broadcast_msg(router, msg)
+        # Relay to subscribers of this broker. A server relays only the
+        # messages published by itself.
+        relay_rule(twin.uid) && broadcast_msg(router, msg)
         if router.metrics !== nothing
             counter = Prometheus.labels(router.metrics.pub, (msg.topic,))
             Prometheus.inc(counter)
@@ -1359,6 +1363,10 @@ function rpc_request(router::Router, msg, implementor_rule)
     twin = msg.twin
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
+        put!(twin.process.inbox, m)
+    elseif msg.target !== nothing && implementor_rule !== always_true
+        # a server (not a broker) does not route direct rpc
+        m = ResMsg(msg, STS_GENERIC_ERROR, "direct not permitted in server mode")
         put!(twin.process.inbox, m)
     elseif msg.target !== nothing
         # it is a direct rpc
