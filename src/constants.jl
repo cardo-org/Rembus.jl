@@ -69,11 +69,9 @@ const BUILTINS_CMD = [
     "rid"
 ]
 const REACTIVE_CMD = "reactive"
-const RESET_ROUTER_CMD = "reset_router"
 const SHUTDOWN_CMD = "shutdown"
 const ENABLE_DEBUG_CMD = "enable_debug"
 const DISABLE_DEBUG_CMD = "disable_debug"
-const UPTIME_CMD = "uptime"
 const SUBSCRIBE_CMD = "subscribe"
 const UNSUBSCRIBE_CMD = "unsubscribe"
 const EXPOSE_CMD = "expose"
