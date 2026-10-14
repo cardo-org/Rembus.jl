@@ -490,6 +490,7 @@ function router_task(self, router::Router, implementor_rule)
                 elseif isconnected(router, twin_id)
                     if router.settings.overwrite_connection
                         # close the already connected node
+                        close_overwritten(router.id_twin[twin_id].socket)
                         close_twin(router.id_twin[twin_id])
                         auth_identity(router, msg)
                     else

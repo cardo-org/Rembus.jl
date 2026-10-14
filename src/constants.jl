@@ -25,6 +25,9 @@ const CONNECTION_ID = 0x12345678deadbeef
 
 const DEFAULT_WS_PORT::Int = 8338
 
+# WebSocket close status sent to a connection replaced by overwrite_connection.
+const WS_CLOSE_OVERWRITTEN::Int = 4000
+
 # Payload encodings for the rembus messages.
 const CBOR::UInt8 = UInt8(0x00)
 const JSON::UInt8 = UInt8(0x01)

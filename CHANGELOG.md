@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `upsert_<topic>` RPC service for topic in schema.
 
+- When `overwrite_connection` is enabled, the replaced connection is closed
+  with WebSocket close code 4000 (`"overwritten"`) and a component receiving
+  it does not try to reconnect, avoiding two instances evicting each other in
+  a loop.
+
 ### Changed
 
 - `publish`/`put` with `qos=Rembus.QOS1` or `qos=Rembus.QOS2` now block until

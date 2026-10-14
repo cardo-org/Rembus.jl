@@ -1142,8 +1142,19 @@ end
 close_is_ok(::Float) = true # COV_EXCL_LINE
 
 function close_is_ok(::WS, e)
-    HTTP.WebSockets.isok(e)
+    HTTP.WebSockets.isok(e) || is_overwritten(e)
 end
+
+# True if the peer closed the websocket because this connection was replaced
+# by a newer one with the same cid (see `overwrite_connection`).
+is_overwritten(e) =
+    isa(e, WebSockets.WebSocketError) && e.message.code == WS_CLOSE_OVERWRITTEN
+
+# Close the websocket of a connection that is being replaced by a newer one.
+close_overwritten(ws::WS) = HTTP.WebSockets.close(
+    ws.sock, HTTP.WebSockets.CloseFrameBody(WS_CLOSE_OVERWRITTEN, "overwritten")
+)
+close_overwritten(::AbstractSocket) = nothing
 
 function close_is_ok(::AbstractPlainSocket, e)
     !isa(e, WrongTcpPacket)

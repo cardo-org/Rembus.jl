@@ -42,6 +42,11 @@ function run()
     @test !isopen(rb1)
     @test isopen(rb2)
 
+    # the replaced component must not reconnect and evict the new one
+    sleep(2 * Rembus.settings(bro).reconnect_period + 1)
+    @test !isopen(rb1)
+    @test isopen(rb2)
+
 end
 
 

@@ -1025,6 +1025,13 @@ function attestation(router::Router, twin::Twin, msg, authenticate=true)
 end
 
 function receiver_exception(twin, e)
+    if is_overwritten(e)
+        # Replaced by a newer connection with the same cid: reconnecting would
+        # just evict that one in turn.
+        haskey(twin.handler, HR_CONN_DOWN) && @warn "[$twin] connection overwritten"
+        delete!(twin.handler, HR_CONN_DOWN)
+        twin.process.phase = :closing
+    end
     if haskey(twin.handler, HR_CONN_DOWN)
         twin.handler[HR_CONN_DOWN](twin)
     end
@@ -1156,7 +1163,7 @@ function command_permitted(router::Router, twin::Twin)
     end
 
     if !res
-        @debug "[$twin]: [$msg] not authorized"
+        @debug "[$twin]: not authorized"
         close(twin.socket)
     end
 
