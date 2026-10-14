@@ -433,6 +433,7 @@ end
 mutable struct Settings
     zmq_ping_interval::Float32
     ws_ping_interval::Float32
+    max_ws_frame::Int
     rembus_dir::String
     overwrite_connection::Bool
     stacktrace::Bool  # log stacktrace on error
@@ -457,6 +458,7 @@ mutable struct Settings
 
         ws_ping_interval = get(cfg, "ws_ping_interval",
             parse(Float32, get(ENV, "REMBUS_WS_PING_INTERVAL", "30")))
+        max_ws_frame = get(cfg, "max_ws_frame", MAX_WS_FRAME)
         rdir = get(cfg, "rembus_dir", get(ENV, "REMBUS_DIR", default_rembus_dir()))
 
         overwrite_connection = get(cfg, "overwrite_connection", false)
@@ -503,6 +505,7 @@ mutable struct Settings
         new(
             zmq_ping_interval,
             ws_ping_interval,
+            max_ws_frame,
             rdir,
             overwrite_connection,
             stacktrace,

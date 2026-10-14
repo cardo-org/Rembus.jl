@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it does not try to reconnect, avoiding two instances evicting each other in
   a loop.
 
+- `Settings.max_ws_frame` (config key `max_ws_frame`, default `MAX_WS_FRAME` =
+  60 MiB) sets the maximum WebSocket message size for both listeners and
+  clients; it was previously HTTP.jl's 16 MiB default.
+
 ### Changed
 
 - `publish`/`put` with `qos=Rembus.QOS1` or `qos=Rembus.QOS2` now block until

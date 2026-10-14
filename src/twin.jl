@@ -287,7 +287,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
-                end, url; client=client)
+                end, url; client=client, maxframesize=settings(rb).max_ws_frame)
         else # uri.scheme == "ws"
             HTTP.WebSockets.open(socket -> begin
                     ## Sockets.nagle(socket.io.io, false)
@@ -298,7 +298,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
-                end, url)
+                end, url; maxframesize=settings(rb).max_ws_frame)
         end
     catch e
         notify(isconnected, e, error=true)
@@ -1676,7 +1676,8 @@ function listener(proc, port, router::Router, sslconfig)
     server = HTTP.WebSockets.listen!(
         IP,
         port,
-        tls_config=sslconfig
+        tls_config=sslconfig,
+        maxframesize=router.settings.max_ws_frame
     ) do ws
         client_receiver(router, WS(ws))
     end

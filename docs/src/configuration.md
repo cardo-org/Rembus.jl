@@ -56,6 +56,7 @@ variable):
    `true`.
 - `zmq_ping_interval (REMBUS_ZMQ_PING_INTERVAL)`: ZMQ ping interval in seconds;
 - `ws_ping_interval (REMBUS_WS_PING_INTERVAL)`: WebSocket ping interval in seconds;
+- `max_ws_frame`: maximum size in bytes of a WebSocket message (default 60 MiB);
 
 ```json
 {

@@ -25,6 +25,9 @@ const CONNECTION_ID = 0x12345678deadbeef
 
 const DEFAULT_WS_PORT::Int = 8338
 
+# Default maximum size of a WebSocket message/frame (bytes).
+const MAX_WS_FRAME = 60 * 1024 * 1024
+
 # WebSocket close status sent to a connection replaced by overwrite_connection.
 const WS_CLOSE_OVERWRITTEN::Int = 4000
 
