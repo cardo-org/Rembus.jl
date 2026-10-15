@@ -72,9 +72,10 @@ function run()
     wait_for_message(ctx, "count"; timeout=5.0)
     @info "ctx: $ctx"
 
-    # When a component is not a mqtt component like mosca above
-    # the subscribers receive two pubsub messages.
-    @test ctx["count"] == 2
+    # The MQTT echo of a message published through the bridge is dropped:
+    # the subscribers receive a single pubsub message.
+    sleep(2)
+    @test ctx["count"] == 1
     @test ctx["msg"] == "hello from publisher"
 
     # a multiple args message is published as a JSON array and the

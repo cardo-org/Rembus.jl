@@ -39,6 +39,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "mqtt_publish" begin
             include("mqtt/test_mqtt_publish.jl")
         end
+        @time @safetestset "mqtt_duplicates" begin
+            include("mqtt/test_mqtt_duplicates.jl")
+        end
     end
     if !Base.Sys.iswindows() && (GROUP == "all" || GROUP == "keyspace")
         @time @safetestset "keyspace" begin

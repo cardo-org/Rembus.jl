@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- MQTT bridge: the echo of a message published by the bridge itself is
+  dropped, so subscribers receive a message published by a non-MQTT component
+  once instead of twice.
+
 - MQTT bridge now follows rembus.python. MQTT → Rembus: the payload must be
   JSON; an array becomes the list of message arguments, any other value a
   single argument, and a payload that is not valid JSON is logged and

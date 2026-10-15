@@ -13,11 +13,47 @@ struct MQTTSock <: Rembus.AbstractSocket
     sock::Mosquitto.Client_v5
     out::Dict{Rembus.Msgid,Rembus.FutureResponse}
     direct::Dict{Rembus.Msgid,Rembus.FutureResponse}
+    # Messages published by the bridge that the MQTT broker is expected to
+    # echo back: (topic, payload) => expiration times of the pending echoes.
+    echoes::Dict{Tuple{String,String},Vector{Float64}}
+    echoes_lock::ReentrantLock
     MQTTSock(sock) = new(
         sock,
         Dict(),
-        Dict()
+        Dict(),
+        Dict(),
+        ReentrantLock()
     )
+end
+
+# Time after which a published message is no more expected to be echoed back.
+const ECHO_TTL = 10.0
+
+function expect_echo!(socket::MQTTSock, topic, payload)
+    now = time()
+    lock(socket.echoes_lock) do
+        for (k, v) in socket.echoes
+            filter!(>(now), v)
+            isempty(v) && delete!(socket.echoes, k)
+        end
+        push!(get!(socket.echoes, (topic, payload), Float64[]), now + ECHO_TTL)
+    end
+end
+
+# Return true (and consume the pending echo) if the message is the echo of a
+# message published by the bridge: it was already delivered to the local
+# subscribers.
+function consume_echo!(socket::MQTTSock, topic, payload)
+    now = time()
+    lock(socket.echoes_lock) do
+        pending = get(socket.echoes, (topic, payload), nothing)
+        pending === nothing && return false
+        filter!(>(now), pending)
+        isempty(pending) && (delete!(socket.echoes, (topic, payload)); return false)
+        popfirst!(pending)
+        isempty(pending) && delete!(socket.echoes, (topic, payload))
+        return true
+    end
 end
 
 Base.isopen(client::MQTTSock) = client.sock.conn_status[] === true
@@ -77,10 +113,16 @@ function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
         # JSON array.
         content = length(data) == 1 ? data[1] : data
         props = Mosquitto.PropertyList("content-type", "application/json")
+        payload = JSON3.write(content)
+        # A message published through the MQTT twin itself has not been
+        # delivered locally: its echo is the only copy, do not drop it.
+        if msg.twin.socket !== socket
+            expect_echo!(socket, msg.topic, payload)
+        end
         Mosquitto.publish(
             socket.sock,
             msg.topic,
-            JSON3.write(content);
+            payload;
             properties=props
         )
     end
@@ -112,6 +154,13 @@ function mqtt_receiver(rb::Rembus.Twin)
         msg = take!(msg_channel) # Tuple{String, Vector{UInt8})
         payload = String(msg.payload)
         @debug "[$rb] topic: $(msg.topic) - msg: $payload"
+
+        # Skip the echo of a message published by this bridge, otherwise the
+        # local subscribers would receive it twice.
+        if consume_echo!(rb.socket, msg.topic, payload)
+            @debug "[$rb] topic: $(msg.topic): echo dropped"
+            continue
+        end
 
         # The payload must be JSON: an array becomes the list of message
         # arguments, any other value a single argument.
