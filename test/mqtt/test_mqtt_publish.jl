@@ -76,6 +76,10 @@ function run()
     wait_for_message(ctx, "count2"; timeout=5.0)
     @test ctx["args"] == ["buonanotte", 100]
 
+    # let the duplicated delivery of the previous message settle
+    # before resetting the counter.
+    sleep(1)
+
     # a JSON object from MQTT is a single argument
     ctx["count2"] = 0
     client = Mosquitto.Client_v5(host, port)
