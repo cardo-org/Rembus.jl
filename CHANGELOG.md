@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- MQTT bridge now follows rembus.python. MQTT → Rembus: the payload must be
+  JSON; an array becomes the list of message arguments, any other value a
+  single argument, and a payload that is not valid JSON is logged and
+  dropped (it was previously delivered as a raw string). Rembus → MQTT: the
+  payload is always JSON (a string argument is now quoted), several arguments
+  are published as a JSON array (they were ignored), no arguments are
+  published as a 0-length payload (they were not published), and the MQTT 5
+  content type is `application/json`.
+
 - `publish`/`put` with `qos=Rembus.QOS1` or `qos=Rembus.QOS2` now block until
   the ack is received (or the internal retries are exhausted), instead of
   returning immediately. If the ack is not received, an error is thrown.

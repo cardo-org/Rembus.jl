@@ -69,17 +69,20 @@ function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
         data = msg.data
     end
 
-    if length(data) == 1
-        content = data[1]
-        if !isa(content, String)
-            content = JSON3.write(content)
-        end
-        Mosquitto.publish(socket.sock, msg.topic, content)
-    elseif isempty(data)
-        ## Available in Mosquitto.jl > 0.3.0
-        # Mosquitto.publish(socket.sock, msg.topic, nothing)
+    if isempty(data)
+        # 0-length payload, no content type
+        Mosquitto.publish(socket.sock, msg.topic, UInt8[])
     else
-        @warn "MQTT: ignoring message with multiple data args"
+        # A single argument is published as is, multiple arguments as a
+        # JSON array.
+        content = length(data) == 1 ? data[1] : data
+        props = Mosquitto.PropertyList("content-type", "application/json")
+        Mosquitto.publish(
+            socket.sock,
+            msg.topic,
+            JSON3.write(content);
+            properties=props
+        )
     end
 
     return outcome
@@ -107,8 +110,18 @@ function mqtt_receiver(rb::Rembus.Twin)
 
     while true
         msg = take!(msg_channel) # Tuple{String, Vector{UInt8})
-        data = String(msg.payload)
-        @debug "[$rb] topic: $(msg.topic) - msg: $data"
+        payload = String(msg.payload)
+        @debug "[$rb] topic: $(msg.topic) - msg: $payload"
+
+        # The payload must be JSON: an array becomes the list of message
+        # arguments, any other value a single argument.
+        data = try
+            parsed = Rembus.lazy_to_julia(JSON3.read(payload))
+            parsed isa Vector ? parsed : [parsed]
+        catch e
+            @error "[$rb] MQTT topic $(msg.topic): invalid JSON payload: $e"
+            continue
+        end
 
         # Send MQTT message to router
         put!(rb.router.process.inbox, Rembus.PubSubMsg(
