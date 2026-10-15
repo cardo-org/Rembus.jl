@@ -321,7 +321,7 @@ function transport_connect(rb::Twin)
         wait(isconnected)
     elseif proto === :zmq
         zmq_connect(rb)
-    elseif proto === :mqtt
+    elseif proto === :mqtt || proto === :mqtts
         connect(rb, Adapter(:MQTT))
     end
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mqtts://` URL scheme for connecting to an MQTT broker over TLS. The CA is
+  taken from `HTTP_CA_BUNDLE` or `$REMBUS_DIR/ca`, and `rembus.crt` /
+  `rembus.key` from the keystore (`REMBUS_KEYSTORE`) are used as client
+  certificate when both are present.
+
 - `upsert_<topic>` RPC service for topic in schema.
 
 - When `overwrite_connection` is enabled, the replaced connection is closed

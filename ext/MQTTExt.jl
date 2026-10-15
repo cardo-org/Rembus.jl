@@ -7,6 +7,7 @@ using Rembus
 
 function __init__()
     push!(Rembus.Protocols, "mqtt")
+    push!(Rembus.Protocols, "mqtts")
 end
 
 struct MQTTSock <: Rembus.AbstractSocket
@@ -81,9 +82,31 @@ function bind_topic(rb::Rembus.Twin, client::Mosquitto.Client_v5)
     Mosquitto.subscribe(client, topic)
 end
 
+# Configure TLS using the Rembus CA (HTTP_CA_BUNDLE or REMBUS_DIR/ca) and, if
+# present, the certificate and key of the Rembus keystore as client credentials.
+function tls_setup(client::Mosquitto.Client_v5)
+    cafile = get(ENV, "HTTP_CA_BUNDLE") do
+        Rembus.rembus_ca()
+    end
+    keystore = Rembus.keystore_dir()
+    certfile = joinpath(keystore, "rembus.crt")
+    keyfile = joinpath(keystore, "rembus.key")
+    if isfile(certfile) && isfile(keyfile)
+        flag = Mosquitto.tls_set(client, cafile; certfile=certfile, keyfile=keyfile)
+    else
+        flag = Mosquitto.tls_set(client, cafile)
+    end
+    flag != Mosquitto.MosquittoCwrapper.MOSQ_ERR_SUCCESS &&
+        error("MQTT TLS setup failed (cafile=$cafile), error $flag")
+end
+
 function Rembus.connect(rb::Rembus.Twin, ::Rembus.Adapter{:MQTT})
     @debug "[$rb] connecting to MQTT broker $(Rembus.cid(rb))"
-    client = Client_v5(rb.uid.host, Int(rb.uid.port))
+    client = Client_v5()
+    if Rembus.protocol(rb) === :mqtts
+        tls_setup(client)
+    end
+    Mosquitto.connect(client, rb.uid.host, Int(rb.uid.port))
     add_subscription(rb.router, rb, "**")
     rb.reactive = true
     rb.socket = MQTTSock(client)
