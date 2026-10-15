@@ -21,6 +21,15 @@ function wait_for_message(ctx::Dict, key::String; timeout::Float64=5.0, interval
     error("Timeout: no message received for key '$key' within $timeout seconds")
 end
 
+function wait_for_value(ctx::Dict, key::String, expected; timeout::Float64=5.0, interval::Float64=0.1)
+    start = time()
+    while (time() - start) < timeout
+        get(ctx, key, nothing) == expected && return
+        sleep(interval)
+    end
+    return
+end
+
 function mytopic(msg; ctx, node)
     @info "[mytopic] got message: $msg"
     ctx["msg"] = msg
@@ -76,16 +85,14 @@ function run()
     wait_for_message(ctx, "count2"; timeout=5.0)
     @test ctx["args"] == ["buonanotte", 100]
 
-    # let the duplicated delivery of the previous message settle
-    # before resetting the counter.
-    sleep(1)
-
     # a JSON object from MQTT is a single argument
     ctx["count2"] = 0
     client = Mosquitto.Client_v5(host, port)
     Mosquitto.loop_start(client)
     Mosquitto.publish(client, "mytopic2", "{\"a\":1}")
-    wait_for_message(ctx, "count2"; timeout=5.0)
+    # late duplicates of the previous message may still arrive: wait for the
+    # expected value instead of the first message.
+    wait_for_value(ctx, "args", [Dict("a" => 1)]; timeout=10.0)
     @test ctx["args"] == [Dict("a" => 1)]
 
     # a not JSON payload is dropped
