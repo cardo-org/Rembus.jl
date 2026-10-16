@@ -24,23 +24,42 @@ function setup()
 end
 
 function run()
-    test_disconnection()
+    test_loopback()
     test_errors()
 end
 
-function test_disconnection()
+function remote_address()
+    ip = Rembus.Sockets.getipaddr()
+    return (ip.host >> 24) == 127 ? nothing : string(ip)
+end
+
+function test_loopback()
+    router = from("$broker_name.broker").args[1]
+
+    # Anonymous components connected from the loopback interface are permitted
+    # and are not disconnected after the challenge timeout.
     rb = connect()
-    sleep(4)
-    @test !isopen(rb)
+    sleep(router.settings.challenge_timeout + 0.1)
+    @test isopen(rb)
+    @test reactive(rb) === nothing
+    shutdown(rb)
+
+    # Anonymous components connected from other addresses are disconnected.
+    addr = remote_address()
+    if addr === nothing
+        @warn "no non-loopback address available: skipping remote test"
+    else
+        router.settings.request_timeout = 2
+        rb = component("ws://$addr:8338")
+        @test_throws RembusTimeout reactive(rb)
+        router.settings.request_timeout = 20
+        sleep(router.settings.challenge_timeout + 0.1)
+        @test !isopen(rb)
+    end
 end
 
 function test_errors()
     router = from("$broker_name.broker").args[1]
-    # Connect anonymously and try to send a command.
-    router.settings.request_timeout = 2
-
-    rb = connect()
-    @test_throws RembusTimeout reactive(rb)
     router.settings.request_timeout = 20
 
     rb = connect(node)
@@ -66,16 +85,6 @@ function test_errors()
 
     # A wrong secret throws a RembusError
     @test_throws RembusError connect(node)
-
-    # Anonymous connection is not permitted in authenticated mode.
-    rb = connect()
-    # after CHALLENGE_TIMEOUT seconds the connection is closed.
-    sleep(rb.router.settings.challenge_timeout + 0.1)
-    @test !isopen(rb)
-
-    rb = component("ws://:8338", failovers=["myfailover"])
-    sleep(rb.router.settings.challenge_timeout + 0.1)
-    @test !isopen(rb)
 
     # reset the default cid
     Rembus.localcid!("")

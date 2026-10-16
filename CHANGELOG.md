@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Authenticated mode: anonymous components connected from the loopback
+  interface (ws and tcp transports) are allowed to send commands and are not
+  subject to the challenge timeout. Anonymous components connected from other
+  addresses are still disconnected.
+
 - MQTT bridge: the echo of a message published by the bridge itself is
   dropped, so subscribers receive a message published by a non-MQTT component
   once instead of twice.
@@ -65,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     always wrapping in `HTTP.Exceptions.ConnectError`.
 
 ### Fixed
+
+- Authenticated mode: an anonymous component no longer waits for a challenge
+  it cannot answer when `connection_mode` is `authenticated`.
 
 - A server (`server_task`) now relays only the messages it publishes itself:
   messages published by a connected client are no longer broadcast to the

@@ -685,7 +685,7 @@ node's mesh routing tables with the peer's exports via
 function do_connect(twin::Twin)
     if !isopen(twin.socket)
         router = top_router(twin.router)
-        if router.settings.connection_mode === authenticated
+        if router.settings.connection_mode === authenticated && hasname(twin)
             transport_connect(twin)
             await_challenge(router, twin)
         else
@@ -1147,11 +1147,52 @@ isauthenticated(twin::Twin) = twin.isauth
 router_isauthenticated(router::Router) = router.mode === authenticated
 
 """
+    peer_isloopback(socket)
+
+Return `true` if `socket` is connected to a peer on the loopback interface.
+
+Fail closed: `false` is returned when the peer address is not available
+(for example TLS and ZeroMQ sockets) or cannot be determined.
+"""
+peer_isloopback(::AbstractSocket) = false
+
+# IPv4 127.0.0.0/8, IPv6 ::1 and IPv4-mapped IPv6 loopback ::ffff:127.0.0.0/8.
+isloopback_v4(host::UInt32) = (host >> 24) == 127
+isloopback_v6(host::UInt128) =
+    host == 1 || ((host >> 32) == 0xffff && isloopback_v4(UInt32(host & 0xffffffff)))
+
+function peer_isloopback(socket::TCP)
+    try
+        ip, _ = Sockets.getpeername(socket.sock)
+        return isa(ip, IPv4) ? isloopback_v4(ip.host) : isloopback_v6(ip.host)
+    catch
+        return false
+    end
+end
+
+function peer_isloopback(socket::WS)
+    try
+        # The transport connection is provided by HTTP's socket backend
+        # (plain TCP or TLS), each one exposing `remote_addr` in its module.
+        conn = socket.sock.stream
+        ip = parentmodule(typeof(conn)).remote_addr(conn).ip
+        if length(ip) == 4
+            return isloopback_v4(UInt32(ip[1]) << 24)
+        end
+        host = foldl((acc, b) -> (acc << 8) | UInt128(b), ip; init=UInt128(0))
+        return isloopback_v6(host)
+    catch
+        return false
+    end
+end
+
+"""
     command_permitted(router::Router, twin::Twin)
 
 Return `true` unless `router` requires authentication
 (`router_isauthenticated`) and `twin` has not authenticated
-(`isauthenticated`), in which case the socket is closed and `false` is
+(`isauthenticated`) and is not connected from the loopback interface
+(`peer_isloopback`), in which case the socket is closed and `false` is
 returned. Guards every inbound Pub/Sub ([`pubsub_msg`](@ref)), RPC
 ([`rpc_request`](@ref)) and admin ([`admin_msg`](@ref)) message before any
 mesh-routing logic (authorization, broadcast, forwarding) is applied.
@@ -1159,7 +1200,7 @@ mesh-routing logic (authorization, broadcast, forwarding) is applied.
 function command_permitted(router::Router, twin::Twin)
     res = true
     if router_isauthenticated(router)
-        res = isauthenticated(twin)
+        res = isauthenticated(twin) || peer_isloopback(twin.socket)
     end
 
     if !res
@@ -1636,9 +1677,12 @@ function challenge_if_auth(router::Router, twin::Twin)
         transport_send(twin, chl)
 
         # Setup a timer for disconnecting the node if it is not authenticated meantime.
-        t = Timer(router.settings.challenge_timeout) do t
-            if !isauthenticated(twin)
-                close_twin(twin)
+        # Anonymous nodes connected from the loopback interface are permitted.
+        if !peer_isloopback(twin.socket)
+            t = Timer(router.settings.challenge_timeout) do t
+                if !isauthenticated(twin)
+                    close_twin(twin)
+                end
             end
         end
     end
