@@ -465,7 +465,7 @@ function transport_send(socket::AbstractPlainSocket, msg::IdentityMsg)
             "jsonrpc" => "2.0",
             "id" => string(msg.id),
             "method" => "__identity__",
-            "params" => Dict("__type__" => TYPE_IDENTITY, "cid" => msg.cid, "meta" => msg.meta)
+            "params" => Dict("type" => TYPE_IDENTITY, "cid" => msg.cid, "meta" => msg.meta)
         ))
         ws_write(socket.sock, pkt)
     else
@@ -547,7 +547,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
                 "id" => string(msg.id),
                 "method" => msg.topic,
                 "params" => Dict(
-                    "__type__" => msg.flags,
+                    "type" => msg.flags,
                     "data" => message2data(msg.data)
                 )
             ))
@@ -562,7 +562,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
                 "id" => string(msg.id),
                 "method" => msg.topic,
                 "params" => Dict(
-                    "__type__" => msg.flags,
+                    "type" => msg.flags,
                     "data" => message2data(msg.data)
                 )
             ))
@@ -754,7 +754,7 @@ function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
             "jsonrpc" => "2.0",
             "id" => string(msg.id),
             restype => Dict(
-                "__type__" => TYPE_RESPONSE,
+                "type" => TYPE_RESPONSE,
                 "sts" => msg.status,
                 "data" => message2data(msg.data)
             )
@@ -780,7 +780,7 @@ function transport_send(socket::AbstractPlainSocket, msg::AdminReqMsg)
             "id" => string(msg.id),
             "method" => msg.topic,
             "params" => Dict(
-                "__type__" => TYPE_ADMIN,
+                "type" => TYPE_ADMIN,
                 "data" => message2data(msg.data)
             )
         ))
@@ -826,7 +826,7 @@ function transport_send(socket::AbstractPlainSocket, msg::AckMsg)
             "jsonrpc" => "2.0",
             "id" => string(msg.id),
             "result" => Dict(
-                "__type__" => TYPE_ACK,
+                "type" => TYPE_ACK,
             )
         ))
         ws_write(socket.sock, pkt)
@@ -856,7 +856,7 @@ function transport_send(socket::AbstractPlainSocket, msg::Ack2Msg)
             "jsonrpc" => "2.0",
             "id" => string(msg.id),
             "result" => Dict(
-                "__type__" => TYPE_ACK2,
+                "type" => TYPE_ACK2,
             )
         ))
         ws_write(socket.sock, pkt)
@@ -909,7 +909,7 @@ function transport_send(socket::AbstractPlainSocket, msg::Attestation)
             "id" => string(msg.id),
             "method" => msg.cid,
             "params" => Dict(
-                "__type__" => TYPE_ATTESTATION,
+                "type" => TYPE_ATTESTATION,
                 "signature" => base64encode(msg.signature),
                 "meta" => msg.meta
             )
@@ -944,7 +944,7 @@ function transport_send(socket::AbstractPlainSocket, msg::Register)
             "id" => string(msg.id),
             "method" => msg.cid,
             "params" => Dict(
-                "__type__" => TYPE_REGISTER,
+                "type" => TYPE_REGISTER,
                 "pin" => msg.pin,
                 "key_val" => base64encode(msg.pubkey),
                 "key_type" => msg.type
@@ -981,7 +981,7 @@ function transport_send(socket::AbstractPlainSocket, msg::Unregister)
             "id" => string(msg.id),
             "method" => "__unregister__",
             "params" => Dict(
-                "__type__" => TYPE_UNREGISTER,
+                "type" => TYPE_UNREGISTER,
             )
         ))
         ws_write(socket.sock, pkt)

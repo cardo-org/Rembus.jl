@@ -93,7 +93,7 @@ function jsonrpc_invalid_type(url::String; id)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
         "params" => Dict(
-            "__type__" => 9999
+            "type" => 9999
         ),
         "id" => id
     )
@@ -110,7 +110,7 @@ function jsonrpc_invalid_response(url::String; id)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
         "error" => Dict(
-            "__type__" => 9999
+            "type" => 9999
         ),
         "id" => id
     )
