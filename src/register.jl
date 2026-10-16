@@ -40,6 +40,7 @@ To register a component a single `pin` or a set of tenants must be configured
 in the `tenants.json` file.
 
 The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
+It is not sent on the wire: the Register message carries `SHA256(CBOR([pin, cid]))`.
 
 """
 function register(
@@ -65,7 +66,7 @@ function register(
             pubkey = ecdsa_private_key(cmp.id)
         end
 
-        msg = Register(twin, id(), cmp.id, pin, pubkey, scheme)
+        msg = Register(twin, id(), cmp.id, pin_proof(pin, cmp.id), pubkey, scheme)
         futresponse = send_msg(twin, msg)
         response = fetch(futresponse.future)
         if isa(response, Exception)
@@ -120,8 +121,19 @@ function isenabled(router, tenant_id::AbstractString)
     return haskey(router.owners, tenant_id)
 end
 
-function check_token(router, tenant, token::AbstractString)
-    if haskey(router.owners, tenant) && router.owners[tenant] == token
+#=
+    pin_proof(pin, cid)
+
+Return the value sent in the Register `pin` field: SHA256(CBOR([pin, cid])).
+The pin itself is never sent on the wire.
+=#
+function pin_proof(pin::AbstractString, cid::AbstractString)
+    return MbedTLS.digest(MD_SHA256, encode([String(pin), String(cid)]))
+end
+
+function check_token(router, tenant, cid::AbstractString, proof::Vector{UInt8})
+    if haskey(router.owners, tenant) &&
+       pin_proof(router.owners[tenant], cid) == proof
         @debug "tenant [$tenant]: token is valid"
         return true
     else
@@ -149,7 +161,7 @@ function register_node(router, msg)
 
     sts = STS_SUCCESS
     reason = nothing
-    token_match = check_token(router, tenant, msg.pin)
+    token_match = check_token(router, tenant, msg.cid, msg.pin)
     if token_match === false
         sts = STS_GENERIC_ERROR
         reason = "wrong tenant/pin"

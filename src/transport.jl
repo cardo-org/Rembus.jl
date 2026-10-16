@@ -131,6 +131,9 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         pin = decode_internal(io)
+        pin = isa(pin, Tag) ? pin.data : pin
+        # a non-bytes pin (legacy clients) never matches the expected proof
+        pin = isa(pin, Vector{UInt8}) ? pin : UInt8[]
         val = decode_internal(io)
         pubkey = isa(val, Tag) ? val.data : val
         type = decode_internal(io)
@@ -363,6 +366,7 @@ function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         pin = pkt.header[4]
+        pin = isa(pin, Vector{UInt8}) ? pin : UInt8[]
         type = pkt.header[5]
         pubkey::Vector{UInt8} = pkt.data
         return Register(twin, mid, cid, pin, pubkey, type)
@@ -945,7 +949,7 @@ function transport_send(socket::AbstractPlainSocket, msg::Register)
             "method" => msg.cid,
             "params" => Dict(
                 "type" => TYPE_REGISTER,
-                "pin" => msg.pin,
+                "pin" => base64encode(msg.pin),
                 "key_val" => base64encode(msg.pubkey),
                 "key_type" => msg.type
             )

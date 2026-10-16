@@ -1502,12 +1502,6 @@ function create_request(twin, msg_id::Msgid, request::AbstractString, params)
     return RpcReqMsg(twin, msg_id, topic, params, target)
 end
 
-# Message type key of JSON-RPC params/result objects. "__type__" is the legacy
-# key, still accepted for backward compatibility.
-function json_msg_type(d::AbstractDict, default)
-    return get(d, "type", get(d, "__type__", default))
-end
-
 """
     jsonrpc_request(pkt::Dict, msg_id, params) -> RembusMsg
 
@@ -1518,7 +1512,7 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
         # Default to RPC request
         return create_request(twin, msg_id, pkt["method"], params)
     elseif isa(params, Dict)
-        msg_type = json_msg_type(params, nothing)
+        msg_type = get(params, "type", nothing)
         if msg_type in (QOS1, QOS2)
             return PubSubMsg(
                 twin,
@@ -1559,7 +1553,7 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
                 twin,
                 msg_id,
                 pkt["method"],
-                params["pin"],
+                base64decode(params["pin"]),
                 pubkey,
                 UInt8(get(params, "key_type", SIG_RSA))
             )
@@ -1576,7 +1570,7 @@ end
 function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
     """Parse a JSON_RPC success response"""
 
-    msg_type = json_msg_type(result, missing)
+    msg_type = get(result, "type", missing)
     if ismissing(msg_type) || msg_type == TYPE_RESPONSE
         status = get(result, "sts", STS_SUCCESS)
         return ResMsg(twin, msg_id, status, get(result, "data", nothing))

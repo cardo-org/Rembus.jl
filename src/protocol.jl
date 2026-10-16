@@ -161,7 +161,7 @@ Base.show(io::IO, m::ResMsg) = show(io, "RES|$(m.id)|status:$(m.status)")
 struct Register <: RembusMsg
     id::Msgid
     cid::String # client name
-    pin::String
+    pin::Vector{UInt8} # SHA256(CBOR([pin, cid])), see pin_proof
     pubkey::Vector{UInt8}
     type::UInt8
     twin::Twin
@@ -169,7 +169,7 @@ struct Register <: RembusMsg
         twin::Twin,
         msgid::Msgid,
         cid::AbstractString,
-        pin::AbstractString,
+        pin::Vector{UInt8},
         pubkey::Vector{UInt8},
         type::UInt8) = new(msgid, cid, pin, pubkey, type, twin)
 end

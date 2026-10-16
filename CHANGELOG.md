@@ -3,7 +3,7 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.6] - Unreleased
+## [1.3.0] - Unreleased
 
 ### Added
 
@@ -47,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the ack is received (or the internal retries are exhausted), instead of
   returning immediately. If the ack is not received, an error is thrown.
   `qos=Rembus.QOS0` (the default) is unaffected and still returns immediately.
+
+- **Breaking (JSON encoding):** the message type key of JSON-RPC messages is
+  now `type` instead of `__type__`, as in rembus.python. The legacy
+  `__type__` key is no longer accepted: Rembus.jl peers of a previous version
+  cannot exchange JSON messages with this one. CBOR is unaffected.
+
+- **Breaking:** the `pin` field of the `Register` message is now
+  `SHA256(CBOR([pin, cid]))` (bytes in CBOR, base64 text in JSON) instead of
+  the plaintext pin, so the pin is no longer sent in clear. Peers of a
+  previous version cannot register with each other.
 
 - msg_from: microsecond -> nanosecond
 
