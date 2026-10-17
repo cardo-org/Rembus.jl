@@ -64,7 +64,12 @@ function from_cbor(twin, counter, packet)
     return nothing
 end
 
-function get_meta(io, plen, minsize=3)
+function get_meta(io, header::UInt8, minsize=3)
+    return meta_if_present(io, header & ~TYPE_BITS_MASK, minsize)
+end
+
+# Decode `meta` if the packet array has more than `minsize` elements.
+function meta_if_present(io, plen, minsize=3)
     if plen > minsize
         return decode_internal(io)
     else
@@ -107,7 +112,7 @@ function broker_parse(twin::Twin, pkt)
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        meta = get_meta(io, plen)
+        meta = meta_if_present(io, plen)
         return IdentityMsg(twin, bytes2id(id), cid, meta)
     elseif ptype == TYPE_PUB
         if flags > QOS0
@@ -166,7 +171,7 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
-        meta = get_meta(io, plen, 4)
+        meta = meta_if_present(io, plen, 4)
         return Attestation(twin, bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")
