@@ -403,12 +403,12 @@ end
 
 function id2bytes(id::Msgid)::Vector{UInt8}
     io = IOBuffer(maxsize=MSGID_SZ)
-    write(io, id)
+    write(io, htol(id))
     take!(io)
 end
 
 function bytes2id(buff::Vector{UInt8})
-    read(IOBuffer(buff), Msgid)
+    ltoh(read(IOBuffer(buff), Msgid))
 end
 
 function bytes2zid(buff::Vector{UInt8})

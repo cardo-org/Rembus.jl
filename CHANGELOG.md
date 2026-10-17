@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The 8-byte message id is serialized in explicit little-endian byte order
+  (previously the host's native order), matching rembus.python. The wire
+  format is unchanged on little-endian hosts.
+
 - Authenticated mode: anonymous components connected from the loopback
   interface (ws and tcp transports) are allowed to send commands and are not
   subject to the challenge timeout. Anonymous components connected from other
