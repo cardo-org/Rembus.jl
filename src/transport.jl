@@ -85,10 +85,15 @@ function broker_parse(twin::Twin, pkt)
         error("invalid rembus packet")
     end
     # the first byte is the packet type
-    type = read(io, UInt8)
-    if type === 0x18
-        type = read(io, UInt8)
+    # any CBOR unsigned integer width is accepted for the type
+    if (peekbyte(io) & TYPE_BITS_MASK) !== TYPE_0
+        error("invalid rembus packet type")
     end
+    type = decode_unsigned(io)
+    if type > 0xff
+        error("invalid rembus packet type")
+    end
+    type = UInt8(type)
     ptype = type & 0x0f
     flags = type & 0xf0
     if ptype == TYPE_IDENTITY

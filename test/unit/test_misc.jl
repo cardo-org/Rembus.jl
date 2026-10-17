@@ -216,3 +216,25 @@ end
     @test !isdir(mdir)
     shutdown()
 end
+
+@testitem "type_byte_integer_widths" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    id = UInt8[1, 2, 3, 4, 5, 6, 7, 8]
+    # Response with the type and status encoded in any CBOR integer width
+    for tb in (
+        UInt8[0x04],
+        UInt8[0x18, 0x04],
+        UInt8[0x19, 0x00, 0x04],
+        UInt8[0x1a, 0, 0, 0, 0x04],
+        UInt8[0x1b, 0, 0, 0, 0, 0, 0, 0, 0x04],
+    )
+        pkt = vcat(UInt8[0x84], tb, UInt8[0x48], id, UInt8[0x19, 0x00, 0x2a], UInt8[0xf6])
+        msg = Rembus.broker_parse(twin, pkt)
+        @test msg isa Rembus.ResMsg
+        @test msg.status == 0x2a
+    end
+    # type_byte out of the 0-255 range or not an unsigned integer
+    @test_throws ErrorException Rembus.broker_parse(twin, UInt8[0x82, 0x19, 0x01, 0x04, 0x00])
+    @test_throws ErrorException Rembus.broker_parse(twin, UInt8[0x82, 0x61, 0x41, 0x00])
+end

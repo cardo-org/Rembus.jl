@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Incoming CBOR packets: the type byte is accepted in any CBOR unsigned
+  integer width (not only the direct and `0x18` forms); a value above 255 or
+  a non-integer type is rejected as an invalid packet.
+
 - The 8-byte message id is serialized in explicit little-endian byte order
   (previously the host's native order), matching rembus.python. The wire
   format is unchanged on little-endian hosts.
