@@ -284,3 +284,27 @@ end
     @test pkt == vcat(UInt8[0x84, 0x04], id, UInt8[0x00, 0xf6])
     @test isnothing(decode(msg.data))
 end
+
+@testitem "register_invalid_fields" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    id = vcat(UInt8[0x48], UInt8[1, 2, 3, 4, 5, 6, 7, 8])
+    cidenc = UInt8[0x62, 0x63, 0x31]  # text "c1"
+    pin = vcat(UInt8[0x41], UInt8[7])
+    pubkey = vcat(UInt8[0x41], UInt8[8])
+
+    # a CBOR-tagged pubkey is not unwrapped
+    tagged = vcat(UInt8[0xc1], pubkey)
+    msg = Rembus.broker_parse(
+        twin, vcat(UInt8[0x86, 0x0a], id, cidenc, pin, tagged, UInt8[0x01])
+    )
+    @test msg isa Rembus.Register
+    @test isempty(msg.pubkey)
+
+    # a key type other than 1 or 2 is kept so that it can be rejected
+    msg = Rembus.broker_parse(
+        twin, vcat(UInt8[0x86, 0x0a], id, cidenc, pin, pubkey, UInt8[0x09])
+    )
+    @test msg.type == 9
+    @test msg.pubkey == UInt8[8]
+end

@@ -161,12 +161,13 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         pin = decode_internal(io)
-        pin = isa(pin, Tag) ? pin.data : pin
-        # a non-bytes pin (legacy clients) never matches the expected proof
+        # a non-bytes (or tagged) pin never matches the expected proof
         pin = isa(pin, Vector{UInt8}) ? pin : UInt8[]
         val = decode_internal(io)
-        pubkey = isa(val, Tag) ? val.data : val
+        # a non-bytes (or tagged) pubkey is rejected by register_node
+        pubkey = isa(val, Vector{UInt8}) ? val : UInt8[]
         type = decode_internal(io)
+        type = isa(type, Integer) ? Int(type) : -1
         return Register(twin, bytes2id(id), cid, pin, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))

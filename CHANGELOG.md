@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Register: a key `type` other than `SIG_RSA` or `SIG_ECDSA` and a `pubkey`
+  that is not a plain byte string (for example CBOR-tagged) are rejected with
+  an error response. A CBOR-tagged `pin` no longer gets unwrapped.
+
 - A Response packet without the `data` element (`[type, id, status]`) is
   accepted and handled as a Response with null data; when relayed it is
   emitted with a null `data` element.

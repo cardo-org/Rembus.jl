@@ -162,7 +162,13 @@ function register_node(router, msg)
     sts = STS_SUCCESS
     reason = nothing
     token_match = check_token(router, tenant, msg.cid, msg.pin)
-    if token_match === false
+    if msg.type != SIG_RSA && msg.type != SIG_ECDSA
+        sts = STS_GENERIC_ERROR
+        reason = "invalid key type $(msg.type)"
+    elseif isempty(msg.pubkey)
+        sts = STS_GENERIC_ERROR
+        reason = "invalid pubkey"
+    elseif token_match === false
         sts = STS_GENERIC_ERROR
         reason = "wrong tenant/pin"
     elseif isregistered(router, msg.cid)

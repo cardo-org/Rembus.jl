@@ -168,7 +168,7 @@ struct Register <: RembusMsg
     cid::String # client name
     pin::Vector{UInt8} # SHA256(CBOR([pin, cid])), see pin_proof
     pubkey::Vector{UInt8}
-    type::UInt8
+    type::Int
     twin::Twin
     Register(
         twin::Twin,
@@ -176,7 +176,7 @@ struct Register <: RembusMsg
         cid::AbstractString,
         pin::Vector{UInt8},
         pubkey::Vector{UInt8},
-        type::UInt8) = new(msgid, cid, pin, pubkey, type, twin)
+        type::Integer) = new(msgid, cid, pin, pubkey, type, twin)
 end
 
 Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)")
