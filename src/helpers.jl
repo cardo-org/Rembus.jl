@@ -323,9 +323,9 @@ function encode_message(msg::PubSubMsg)
         data = msg.data
     end
     if msg.flags > QOS0
-        encode_partial(io, [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, data])
+        encode_partial(io, with_extra([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, data], msg))
     else
-        encode_partial(io, [TYPE_PUB | msg.flags, msg.topic, data])
+        encode_partial(io, with_extra([TYPE_PUB | msg.flags, msg.topic, data], msg))
     end
     return take!(io)
 end

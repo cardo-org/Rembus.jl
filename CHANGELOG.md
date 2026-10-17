@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A broker forwards unknown trailing elements of Pub/Sub, RPC request and
+  Response packets as elements of the relayed packet (the array length is
+  preserved) instead of appending them as stray bytes after the array.
+
 - Incoming CBOR packets: the type byte is accepted in any CBOR unsigned
   integer width (not only the direct and `0x18` forms); a value above 255 or
   a non-integer type is rejected as an invalid packet.

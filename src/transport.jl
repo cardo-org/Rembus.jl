@@ -64,8 +64,7 @@ function from_cbor(twin, counter, packet)
     return nothing
 end
 
-function get_meta(io, header, minsize=3)
-    plen = header & ~TYPE_BITS_MASK
+function get_meta(io, plen, minsize=3)
     if plen > minsize
         return decode_internal(io)
     else
@@ -80,10 +79,19 @@ Get a Rembus message from a CBOR packet.
 =#
 function broker_parse(twin::Twin, pkt)
     io = IOBuffer(pkt)
-    header = read(io, UInt8)
-    if (header & TYPE_BITS_MASK) !== TYPE_4
+    if (peekbyte(io) & TYPE_BITS_MASK) !== TYPE_4
         error("invalid rembus packet")
     end
+    # number of elements of the packet array (indefinite length: unknown)
+    indefinite = (peekbyte(io) & ADDNTL_INFO_MASK) == ADDNTL_INFO_INDEF
+    if indefinite
+        skip(io, 1)
+        plen = typemax(Int)
+    else
+        plen = Int(decode_unsigned(io))
+    end
+    # unknown trailing elements are kept in the raw remainder of the packet
+    nextra(expected) = indefinite ? 0 : max(plen - expected, 0)
     # the first byte is the packet type
     # any CBOR unsigned integer width is accepted for the type
     if (peekbyte(io) & TYPE_BITS_MASK) !== TYPE_0
@@ -99,23 +107,29 @@ function broker_parse(twin::Twin, pkt)
     if ptype == TYPE_IDENTITY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
-        meta = get_meta(io, header)
+        meta = get_meta(io, plen)
         return IdentityMsg(twin, bytes2id(id), cid, meta)
     elseif ptype == TYPE_PUB
         if flags > QOS0
             id = decode_internal(io, Val(TYPE_2))
             topic = decode_internal(io, Val(TYPE_3))
-            return PubSubMsg(twin, topic, io, flags, bytes2id(id))
+            msg = PubSubMsg(twin, topic, io, flags, bytes2id(id))
+            msg.nextra = nextra(4)
+            return msg
         else
             # Do not decode dataframe, just pass through the broker.
             topic = decode_internal(io, Val(TYPE_3))
-            return PubSubMsg(twin, topic, io, flags)
+            msg = PubSubMsg(twin, topic, io, flags)
+            msg.nextra = nextra(3)
+            return msg
         end
     elseif ptype == TYPE_RPC
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
         target = decode_internal(io)
-        return RpcReqMsg(twin, bytes2id(id), topic, io, target, flags)
+        msg = RpcReqMsg(twin, bytes2id(id), topic, io, target, flags)
+        msg.nextra = nextra(5)
+        return msg
     elseif ptype == TYPE_ADMIN
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
@@ -125,7 +139,9 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         status = decode_internal(io, Val(TYPE_0))
         # Do not decode dataframe, just pass through the broker.
-        return ResMsg(twin, bytes2id(id), status, io, flags)
+        msg = ResMsg(twin, bytes2id(id), status, io, flags)
+        msg.nextra = nextra(4)
+        return msg
     elseif ptype == TYPE_ACK
         id = decode_internal(io, Val(TYPE_2))
         return AckMsg(twin, bytes2id(id))
@@ -150,7 +166,7 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         signature = decode_internal(io)
-        meta = get_meta(io, header, 4)
+        meta = get_meta(io, plen, 4)
         return Attestation(twin, bytes2id(id), cid, signature, meta)
     end
     error("unknown rembus packet type $ptype ($pkt)")
@@ -588,16 +604,16 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
         content = tagvalue_if_dataframe(msg.data)
         if (msg.flags & QOS2) > QOS0
             ack_cond = create_msg_timer(socket, msg)
-            pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
+            pkt = with_extra([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content], msg)
             transport_write(socket, pkt)
             outcome = fetch(ack_cond.future)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
         elseif (msg.flags & SLOT_FLAG) == SLOT_FLAG
-            pkt = [TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content]
+            pkt = with_extra([TYPE_PUB | msg.flags, id2bytes(msg.id), msg.topic, content], msg)
             transport_write(socket, pkt)
         else
-            pkt = [TYPE_PUB | msg.flags, msg.topic, content]
+            pkt = with_extra([TYPE_PUB | msg.flags, msg.topic, content], msg)
             transport_write(socket, pkt)
         end
     end
@@ -683,7 +699,7 @@ function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
             ]
         end
 
-        transport_write(socket, pkt)
+        transport_write(socket, with_extra(pkt, msg))
     end
 
     return true
@@ -771,12 +787,12 @@ function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
         ws_write(socket.sock, pkt)
     else
         content = tagvalue_if_dataframe(msg.data)
-        pkt = [
+        pkt = with_extra([
             TYPE_RESPONSE | msg.flags,
             id2bytes(msg.id),
             msg.status,
             message2data(content)
-        ]
+        ], msg)
         transport_write(socket, pkt)
     end
     return true
@@ -1169,6 +1185,23 @@ function close_is_ok(::AbstractPlainSocket, e)
     !isa(e, WrongTcpPacket)
 end
 
+# Marks the number of unknown trailing elements of a relayed packet. They are
+# already part of the raw payload (data) and are only counted in the array
+# header.
+struct ExtraElements
+    n::Int
+end
+
+with_extra(pkt::Vector, msg) = msg.nextra > 0 ? push!(pkt, ExtraElements(msg.nextra)) : pkt
+
+function write_array_header(io, n)
+    if n < 24
+        write(io, UInt8(0x80 | n))
+    else
+        write(io, 0x98, UInt8(n))
+    end
+end
+
 function encode_partial(data::Vector)
     io = IOBuffer()
     encode_partial(io, data)
@@ -1188,12 +1221,16 @@ function add_payload(io, payload)
 end
 
 function encode_partial(io, data::Vector)
+    nextra = 0
+    if !isempty(data) && isa(data[end], ExtraElements)
+        nextra = data[end].n
+    end
     type = data[1] & 0x0f
     if type == TYPE_PUB
         if (data[1] & 0x70) != 0x0
-            write(io, 0x84)
+            write_array_header(io, 4 + nextra)
         else
-            write(io, 0x83)
+            write_array_header(io, 3 + nextra)
         end
         encode(io, data[1]) # type
         if (data[1] & 0x70) != 0x0
@@ -1205,32 +1242,32 @@ function encode_partial(io, data::Vector)
             add_payload(io, data[3])
         end
     elseif type == TYPE_IDENTITY
-        write(io, 0x84)
+        write_array_header(io, 4 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # cid
         encode(io, data[4]) # meta
     elseif type == TYPE_RPC
-        write(io, 0x85)
+        write_array_header(io, 5 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # topic
         encode(io, data[4]) # target
         add_payload(io, data[5])
     elseif type == TYPE_ADMIN
-        write(io, 0x84)
+        write_array_header(io, 4 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # topic
         add_payload(io, data[4])
     elseif type == TYPE_RESPONSE
-        write(io, 0x84)
+        write_array_header(io, 4 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # status
         add_payload(io, data[4])
     elseif type == TYPE_REGISTER
-        write(io, 0x86)
+        write_array_header(io, 6 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # cid
@@ -1238,22 +1275,22 @@ function encode_partial(io, data::Vector)
         encode(io, data[5]) # pubkey
         encode(io, data[6]) # type
     elseif type == TYPE_UNREGISTER
-        write(io, 0x82)
+        write_array_header(io, 2 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
     elseif type == TYPE_ATTESTATION
-        write(io, 0x85)
+        write_array_header(io, 5 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
         encode(io, data[3]) # cid
         encode(io, data[4]) # signature
         encode(io, data[5]) # meta
     elseif type == TYPE_ACK
-        write(io, 0x82)
+        write_array_header(io, 2 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
     elseif type == TYPE_ACK2
-        write(io, 0x82)
+        write_array_header(io, 2 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id
     end

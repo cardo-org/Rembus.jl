@@ -238,3 +238,31 @@ end
     @test_throws ErrorException Rembus.broker_parse(twin, UInt8[0x82, 0x19, 0x01, 0x04, 0x00])
     @test_throws ErrorException Rembus.broker_parse(twin, UInt8[0x82, 0x61, 0x41, 0x00])
 end
+
+@testitem "relay_unknown_trailing_elements" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    id = vcat(UInt8[0x48], UInt8[1, 2, 3, 4, 5, 6, 7, 8])
+
+    # Response, RPC and Pub/Sub (QOS0 and QOS1) with unknown trailing elements
+    pkts = [
+        vcat(UInt8[0x85, 0x04], id, UInt8[0x00, 0x07, 0x01]),
+        vcat(UInt8[0x87, 0x02], id, UInt8[0x61, 0x74, 0xf6, 0x07, 0x01, 0x02]),
+        UInt8[0x84, 0x01, 0x61, 0x74, 0x07, 0x09],
+        vcat(UInt8[0x85, 0x11], id, UInt8[0x61, 0x74, 0x07, 0x09]),
+    ]
+    for pkt in pkts
+        msg = Rembus.broker_parse(twin, pkt)
+        @test msg.nextra > 0
+        if msg isa Rembus.ResMsg
+            out = [Rembus.TYPE_RESPONSE | msg.flags, Rembus.id2bytes(msg.id), msg.status, msg.data]
+        elseif msg isa Rembus.RpcReqMsg
+            out = [Rembus.TYPE_RPC | msg.flags, Rembus.id2bytes(msg.id), msg.topic, msg.target, msg.data]
+        elseif msg.flags > 0
+            out = [Rembus.TYPE_PUB | msg.flags, Rembus.id2bytes(msg.id), msg.topic, msg.data]
+        else
+            out = [Rembus.TYPE_PUB | msg.flags, msg.topic, msg.data]
+        end
+        @test Rembus.encode_partial(Rembus.with_extra(out, msg)) == pkt
+    end
+end

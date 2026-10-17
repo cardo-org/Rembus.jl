@@ -57,6 +57,9 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
     id::Msgid
     twin::Twin
     counter::Int
+    # Number of unknown trailing elements received after `data`; they are
+    # part of the raw `data` payload and are counted again when relaying.
+    nextra::Int
     function PubSubMsg(twin::Twin, topic, data=nothing, flags=0x0, mid=0, slot=0)
         if slot != 0
             flags |= SLOT_FLAG
@@ -65,7 +68,7 @@ mutable struct PubSubMsg{T} <: RembusTopicMsg
             mid = id()
         end
 
-        return new{typeof(data)}(topic, data, flags, mid, twin, 0)
+        return new{typeof(data)}(topic, data, flags, mid, twin, 0, 0)
     end
 end
 
@@ -78,9 +81,10 @@ mutable struct RpcReqMsg{T} <: RembusTopicMsg
     target::Union{Nothing,String}
     flags::UInt8
     twin::Twin
+    nextra::Int
 
     function RpcReqMsg(twin::Twin, topic::AbstractString, data, target=nothing, flags=0x0)
-        return new{typeof(data)}(id(), topic, data, target, flags, twin)
+        return new{typeof(data)}(id(), topic, data, target, flags, twin, 0)
     end
 
     function RpcReqMsg(
@@ -91,7 +95,7 @@ mutable struct RpcReqMsg{T} <: RembusTopicMsg
         target=nothing,
         flags=0x0
     )
-        return new{typeof(data)}(msgid, topic, data, target, flags, twin)
+        return new{typeof(data)}(msgid, topic, data, target, flags, twin, 0)
     end
 end
 
@@ -141,18 +145,19 @@ mutable struct ResMsg{T} <: RembusMsg
     data::T
     flags::UInt8
     twin::Twin
+    nextra::Int
     reqdata::Any
 
     ResMsg(
         twin::Twin, id::Msgid, status, data, flags=0x0
-    ) = new{typeof(data)}(id, status, data, flags, twin)
+    ) = new{typeof(data)}(id, status, data, flags, twin, 0)
 
     function ResMsg(req::RpcReqMsg, status::UInt8, data=nothing, flags=0x0)
-        return new{typeof(data)}(req.id, status, data, flags, req.twin)
+        return new{typeof(data)}(req.id, status, data, flags, req.twin, 0)
     end
 
     function ResMsg(req::AdminReqMsg, status::UInt8, data=nothing, flags=0x0)
-        return new{typeof(data)}(req.id, status, data, flags, req.twin)
+        return new{typeof(data)}(req.id, status, data, flags, req.twin, 0)
     end
 end
 
