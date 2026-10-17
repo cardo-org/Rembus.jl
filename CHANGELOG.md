@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A Response packet without the `data` element (`[type, id, status]`) is
+  accepted and handled as a Response with null data; when relayed it is
+  emitted with a null `data` element.
+
 - A broker forwards unknown trailing elements of Pub/Sub, RPC request and
   Response packets as elements of the relayed packet (the array length is
   preserved) instead of appending them as stray bytes after the array.

@@ -144,6 +144,10 @@ function broker_parse(twin::Twin, pkt)
         id = decode_internal(io, Val(TYPE_2))
         status = decode_internal(io, Val(TYPE_0))
         # Do not decode dataframe, just pass through the broker.
+        if plen < 4
+            # Response without the data element: same as a null data.
+            io = IOBuffer(encode(nothing))
+        end
         msg = ResMsg(twin, bytes2id(id), status, io, flags)
         msg.nextra = nextra(4)
         return msg

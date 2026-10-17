@@ -266,3 +266,21 @@ end
         @test Rembus.encode_partial(Rembus.with_extra(out, msg)) == pkt
     end
 end
+
+@testitem "response_without_data" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    id = vcat(UInt8[0x48], UInt8[1, 2, 3, 4, 5, 6, 7, 8])
+
+    # [TYPE_RESPONSE, id, status] is valid and equivalent to data = null
+    msg = Rembus.broker_parse(twin, vcat(UInt8[0x83, 0x04], id, UInt8[0x00]))
+    @test msg isa Rembus.ResMsg
+    @test msg.status == 0x00
+    @test msg.nextra == 0
+
+    # relayed as a 4-element response with null data
+    out = [Rembus.TYPE_RESPONSE, Rembus.id2bytes(msg.id), msg.status, msg.data]
+    pkt = Rembus.encode_partial(out)
+    @test pkt == vcat(UInt8[0x84, 0x04], id, UInt8[0x00, 0xf6])
+    @test isnothing(decode(msg.data))
+end
