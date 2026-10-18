@@ -1612,6 +1612,45 @@ function json_parse(twin::Twin, pkt::Dict)
     end
 end
 
+#=
+Id of a malformed JSON request that expects a Response, nothing otherwise
+(no id recoverable or no Response expected).
+=#
+function json_malformed_request_id(payload::AbstractString)
+    try
+        # allow_inf: recover the id also from NaN/Infinity packets.
+        pkt = JSON3.read(payload, Dict, allow_inf=true)
+        uid = get(pkt, "id", missing)
+        if ismissing(uid) || haskey(pkt, "result") || haskey(pkt, "error") ||
+           isnothing(get(pkt, "params", nothing))
+            return nothing
+        end
+        return isa(uid, String) ? parse(Msgid, uid) : Msgid(uid)
+    catch
+        return nothing
+    end
+end
+
+#=
+Parse a JSON text packet. A malformed packet is answered with a
+STS_GENERIC_ERROR response when it expects one, otherwise it is dropped. In
+both cases nothing is returned and the connection is kept open.
+=#
+function json_parse_or_reply(twin::Twin, payload::AbstractString)
+    try
+        return json_parse(twin, JSON3.read(payload, Dict))
+    catch e
+        @debug "[$twin] malformed JSON packet: $e"
+        id = json_malformed_request_id(payload)
+        if !isnothing(id)
+            transport_send(
+                twin, ResMsg(twin, id, STS_GENERIC_ERROR, "malformed JSON packet")
+            )
+        end
+        return nothing
+    end
+end
+
 function twin_event(twin, event::AbstractString; detail=missing)
     data = Dict("event" => event, "cid" => rid(twin))
 
@@ -1646,8 +1685,9 @@ function twin_receiver(twin::Twin)
 
             if isa(payload, String)
                 twin.enc = JSON
-                pkt = JSON3.read(payload, Dict)
-                msg::RembusMsg = json_parse(twin, pkt)
+                msg::Union{RembusMsg,Nothing} = json_parse_or_reply(twin, payload)
+                # Malformed packet: already answered or dropped.
+                isnothing(msg) && continue
             else
                 twin.enc = CBOR
                 msg = broker_parse(twin, payload)

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A malformed JSON text message (invalid JSON, including `NaN`/`Infinity`
+  tokens, or not a valid Rembus packet) no longer closes the connection: a
+  request with an id gets a `STS_GENERIC_ERROR` response, any other packet is
+  dropped.
+
 - Register: a key `type` other than `SIG_RSA` or `SIG_ECDSA` and a `pubkey`
   that is not a plain byte string (for example CBOR-tagged) are rejected with
   an error response. A CBOR-tagged `pin` no longer gets unwrapped.
