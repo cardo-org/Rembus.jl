@@ -497,7 +497,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::IdentityMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => "__identity__",
             "params" => Dict("type" => TYPE_IDENTITY, "cid" => msg.cid, "meta" => msg.meta)
@@ -578,9 +578,9 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
         if (msg.flags & QOS2) > QOS0
             ack_cond = create_msg_timer(socket, msg)
             pkt = JSON3.write(Dict(
-                "jsonrpc" => "2.0",
+                "rembus" => "1.0",
                 "id" => string(msg.id),
-                "method" => msg.topic,
+                "topic" => msg.topic,
                 "params" => Dict(
                     "type" => msg.flags,
                     "data" => message2data(msg.data)
@@ -592,21 +592,15 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
             close(ack_cond.timer)
             delete!(socket.out, msg.id)
         elseif (msg.flags & SLOT_FLAG) == SLOT_FLAG
+            error("slot publish is not supported with the JSON encoding")
+        else
             pkt = JSON3.write(Dict(
-                "jsonrpc" => "2.0",
-                "id" => string(msg.id),
-                "method" => msg.topic,
+                "rembus" => "1.0",
+                "topic" => msg.topic,
                 "params" => Dict(
                     "type" => msg.flags,
                     "data" => message2data(msg.data)
                 )
-            ))
-            ws_write(socket.sock, pkt)
-        else
-            pkt = JSON3.write(Dict(
-                "jsonrpc" => "2.0",
-                "method" => msg.topic,
-                "params" => message2data(msg.data)
             ))
             ws_write(socket.sock, pkt)
         end
@@ -683,7 +677,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.topic,
             "params" => message2data(msg.data)
@@ -786,7 +780,7 @@ function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
         end
 
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             restype => Dict(
                 "type" => TYPE_RESPONSE,
@@ -811,7 +805,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::AdminReqMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.topic,
             "params" => Dict(
@@ -858,7 +852,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::AckMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "result" => Dict(
                 "type" => TYPE_ACK,
@@ -888,7 +882,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::Ack2Msg)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "result" => Dict(
                 "type" => TYPE_ACK2,
@@ -940,7 +934,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::Attestation)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.cid,
             "params" => Dict(
@@ -975,7 +969,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::Register)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.cid,
             "params" => Dict(
@@ -1012,7 +1006,7 @@ end
 function transport_send(socket::AbstractPlainSocket, msg::Unregister)
     if msg.twin.enc == JSON && isa(socket, WS)
         pkt = JSON3.write(Dict(
-            "jsonrpc" => "2.0",
+            "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => "__unregister__",
             "params" => Dict(

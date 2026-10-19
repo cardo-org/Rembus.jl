@@ -1503,25 +1503,37 @@ function create_request(twin, msg_id::Msgid, request::AbstractString, params)
 end
 
 """
+    jsonrpc_pubsub(twin, pkt::Dict, msg_id, params) -> PubSubMsg
+
+Parse a PubSub message: the data is in `params.data` and `params.type`
+holds the QoS/slot flags (default QOS0).
+"""
+function jsonrpc_pubsub(twin, pkt::Dict, msg_id, params)
+    isa(params, Dict) || error("$(pkt): invalid JSON PubSub message")
+    flags = UInt8(get(params, "type", QOS0))
+    (flags & SLOT_FLAG) == SLOT_FLAG &&
+        error("$(pkt): slot publish is not supported with the JSON encoding")
+    data = get(params, "data", nothing)
+    if ismissing(msg_id)
+        return PubSubMsg(twin, pkt["topic"], data, flags)
+    end
+    return PubSubMsg(twin, pkt["topic"], data, flags, msg_id)
+end
+
+"""
     jsonrpc_request(pkt::Dict, msg_id, params) -> RembusMsg
 
 Parse a JSON-RPC request and return the appropriate RembusMsg subtype.
 """
 function jsonrpc_request(twin, pkt::Dict, msg_id, params)
-    if isa(params, Vector) || isnothing(params)
+    if haskey(pkt, "topic")
+        return jsonrpc_pubsub(twin, pkt, msg_id, params)
+    elseif isa(params, Vector) || isnothing(params)
         # Default to RPC request
         return create_request(twin, msg_id, pkt["method"], params)
     elseif isa(params, Dict)
         msg_type = get(params, "type", nothing)
-        if msg_type in (QOS1, QOS2)
-            return PubSubMsg(
-                twin,
-                pkt["method"],
-                get(params, "data", nothing),
-                msg_type,
-                msg_id,
-            )
-        elseif msg_type == TYPE_IDENTITY
+        if msg_type == TYPE_IDENTITY
             return IdentityMsg(
                 twin,
                 msg_id,
@@ -1588,7 +1600,7 @@ function json_parse(twin::Twin, pkt::Dict)
     uid = get(pkt, "id", missing)
     if ismissing(uid)
         # Assume a PubSub message.
-        return PubSubMsg(twin, pkt["method"], get(pkt, "params", nothing))
+        return jsonrpc_pubsub(twin, pkt, missing, get(pkt, "params", nothing))
     else
         if isa(uid, String)
             msg_id = parse(Msgid, uid)

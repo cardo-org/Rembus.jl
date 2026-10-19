@@ -130,13 +130,13 @@ subscribe(rb, mytopic)
 reactive(rb)
 ```
 
-You can publish a message to the topic mytopic with a JSON-RPC Notification:
+You can publish a message to the topic mytopic with a JSON-RPC Notification. Publish messages use the `topic` member instead of `method`:
 
 ```bash
 curl -X POST http://localhost:9000 -H "Content-Type: application/json" -d '{
   "jsonrpc": "2.0",
-  "method": "mytopic",
-  "params": ["hello world"]
+  "topic": "mytopic",
+  "params": {"data": "hello world"}
 }'
 ```
 

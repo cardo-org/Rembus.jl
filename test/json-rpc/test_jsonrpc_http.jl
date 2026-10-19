@@ -126,10 +126,10 @@ end
 function jsonrpc_publish(url::String, method::String, params=nothing)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => method
+        "topic" => method
     )
     if params !== nothing
-        request_obj["params"] = params
+        request_obj["params"] = Dict("data" => params)
     end
 
     response = HTTP.post(
@@ -173,7 +173,8 @@ function jsonrpc_batch_mixed(url::String, method::String, params; id)
         ),
         Dict{String,Any}(
             "jsonrpc" => "2.0",
-            "method" => "foo"
+            "topic" => "foo",
+            "params" => Dict("data" => nothing)
         )]
 
     response = HTTP.post(
@@ -189,11 +190,13 @@ function jsonrpc_batch_notify(url::String)
     request_obj = [
         Dict{String,Any}(
             "jsonrpc" => "2.0",
-            "method" => "foo"
+            "topic" => "foo",
+            "params" => Dict("data" => nothing)
         ),
         Dict{String,Any}(
             "jsonrpc" => "2.0",
-            "method" => "bar"
+            "topic" => "bar",
+            "params" => Dict("data" => nothing)
         )]
 
     response = HTTP.post(
