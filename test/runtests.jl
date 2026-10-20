@@ -306,6 +306,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "reconnect" begin
             include("ws/test_reconnect.jl")
         end
+        @time @safetestset "malformed" begin
+            include("ws/test_malformed.jl")
+        end
     end
     if GROUP == "all" || GROUP == "http"
         @time @safetestset "http_authenticated" begin

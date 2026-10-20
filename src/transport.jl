@@ -1185,6 +1185,16 @@ close_overwritten(ws::WS) = HTTP.WebSockets.close(
 )
 close_overwritten(::AbstractSocket) = nothing
 
+# Close the websocket of a connection that sent a malformed message.
+function close_malformed(ws)
+    try
+        HTTP.WebSockets.close(
+            ws, HTTP.WebSockets.CloseFrameBody(WS_CLOSE_MALFORMED, "malformed message")
+        )
+    catch
+    end
+end
+
 function close_is_ok(::AbstractPlainSocket, e)
     !isa(e, WrongTcpPacket)
 end

@@ -1602,11 +1602,10 @@ function json_parse(twin::Twin, pkt::Dict)
         # Assume a PubSub message.
         return jsonrpc_pubsub(twin, pkt, missing, get(pkt, "params", nothing))
     else
-        if isa(uid, String)
-            msg_id = parse(Msgid, uid)
-        else
-            msg_id = Msgid(uid)
-        end
+        # Ids are decimal strings: a number is not accepted.
+        isa(uid, String) || error("$pkt:JSON-RPC id must be a string")
+        msg_id = parse(Msgid, uid)
+        msg_id == 0 && error("$pkt:JSON-RPC id 0 is not valid")
 
         result = get(pkt, "result", nothing)
         if !isnothing(result)
@@ -1625,40 +1624,23 @@ function json_parse(twin::Twin, pkt::Dict)
 end
 
 #=
-Id of a malformed JSON request that expects a Response, nothing otherwise
-(no id recoverable or no Response expected).
+Parse a received packet. An empty, truncated or undecodable message closes the
+connection with WS_CLOSE_MALFORMED: no Response is sent and the message is not
+ignored. Return nothing in that case.
 =#
-function json_malformed_request_id(payload::AbstractString)
+function parse_or_close(twin::Twin, ws, payload)
     try
-        # allow_inf: recover the id also from NaN/Infinity packets.
-        pkt = JSON3.read(payload, Dict, allow_inf=true)
-        uid = get(pkt, "id", missing)
-        if ismissing(uid) || haskey(pkt, "result") || haskey(pkt, "error") ||
-           isnothing(get(pkt, "params", nothing))
-            return nothing
+        isempty(payload) && error("empty message")
+        if isa(payload, String)
+            twin.enc = JSON
+            return json_parse(twin, JSON3.read(payload, Dict))
+        else
+            twin.enc = CBOR
+            return broker_parse(twin, payload)
         end
-        return isa(uid, String) ? parse(Msgid, uid) : Msgid(uid)
-    catch
-        return nothing
-    end
-end
-
-#=
-Parse a JSON text packet. A malformed packet is answered with a
-STS_GENERIC_ERROR response when it expects one, otherwise it is dropped. In
-both cases nothing is returned and the connection is kept open.
-=#
-function json_parse_or_reply(twin::Twin, payload::AbstractString)
-    try
-        return json_parse(twin, JSON3.read(payload, Dict))
     catch e
-        @debug "[$twin] malformed JSON packet: $e"
-        id = json_malformed_request_id(payload)
-        if !isnothing(id)
-            transport_send(
-                twin, ResMsg(twin, id, STS_GENERIC_ERROR, "malformed JSON packet")
-            )
-        end
+        @warn "[$twin] malformed packet: $e"
+        close_malformed(ws)
         return nothing
     end
 end
@@ -1689,21 +1671,16 @@ function twin_receiver(twin::Twin)
         ws = twin.socket.sock
         while isopen(ws)
             payload = transport_read(ws)
-            if isempty(payload)
+            # An empty frame of an open websocket is a malformed message; for
+            # the other transports an empty read means the connection is closed.
+            if isempty(payload) && !(ws isa WebSockets.WebSocket && isopen(ws))
                 twin.socket = FLOAT
                 @debug "component [$twin]: connection closed"
                 break
             end
 
-            if isa(payload, String)
-                twin.enc = JSON
-                msg::Union{RembusMsg,Nothing} = json_parse_or_reply(twin, payload)
-                # Malformed packet: already answered or dropped.
-                isnothing(msg) && continue
-            else
-                twin.enc = CBOR
-                msg = broker_parse(twin, payload)
-            end
+            msg = parse_or_close(twin, ws, payload)
+            isnothing(msg) && break
 
             @debug "[$(path(twin))] twin_receiver << $msg"
             put!(twin.router.process.inbox, msg)

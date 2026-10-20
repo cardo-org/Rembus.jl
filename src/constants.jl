@@ -30,6 +30,8 @@ const MAX_WS_FRAME = 60 * 1024 * 1024
 
 # WebSocket close status sent to a connection replaced by overwrite_connection.
 const WS_CLOSE_OVERWRITTEN::Int = 4000
+# Close code sent on an empty, truncated or undecodable message.
+const WS_CLOSE_MALFORMED::Int = 1008
 
 # Payload encodings for the rembus messages.
 const CBOR::UInt8 = UInt8(0x00)
