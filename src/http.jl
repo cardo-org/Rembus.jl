@@ -121,12 +121,12 @@ function http_jsonrpc_parse(router::Router, twin::Twin, payload::String)
     pkt = lazy_to_julia(JSON3.read(payload))
 
     if pkt isa Dict
-        msg = json_parse(twin, pkt)
+        msg = json_parse(twin, pkt; strict_id=false)
         retval = http_jsonrpc_eval(router, twin, msg)
     elseif pkt isa Vector
         retval = []
         for obj in Vector(pkt)
-            msg = json_parse(twin, obj)
+            msg = json_parse(twin, obj; strict_id=false)
             result = http_jsonrpc_eval(router, twin, msg)
             if result !== nothing
                 push!(retval, result)

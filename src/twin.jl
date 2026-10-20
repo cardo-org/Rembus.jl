@@ -1595,17 +1595,25 @@ function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
     error("$pkt:invalid JSON-RPC response")
 end
 
-function json_parse(twin::Twin, pkt::Dict)
+# `strict_id`: ids must be non-zero decimal strings (Rembus WebSocket encoding).
+# The HTTP JSON-RPC endpoint is not part of the protocol and keeps the
+# JSON-RPC 2.0 ids (numbers, zero).
+function json_parse(twin::Twin, pkt::Dict; strict_id::Bool=true)
     @debug "[$twin] json_parse: $pkt"
     uid = get(pkt, "id", missing)
     if ismissing(uid)
         # Assume a PubSub message.
         return jsonrpc_pubsub(twin, pkt, missing, get(pkt, "params", nothing))
     else
-        # Ids are decimal strings: a number is not accepted.
-        isa(uid, String) || error("$pkt:JSON-RPC id must be a string")
-        msg_id = parse(Msgid, uid)
-        msg_id == 0 && error("$pkt:JSON-RPC id 0 is not valid")
+        if strict_id
+            isa(uid, String) || error("$pkt:JSON-RPC id must be a string")
+            msg_id = parse(Msgid, uid)
+            msg_id == 0 && error("$pkt:JSON-RPC id 0 is not valid")
+        elseif isa(uid, String)
+            msg_id = parse(Msgid, uid)
+        else
+            msg_id = Msgid(uid)
+        end
 
         result = get(pkt, "result", nothing)
         if !isnothing(result)
