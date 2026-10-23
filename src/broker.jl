@@ -327,12 +327,10 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     for pattern in router.glob_topics
         union!(twins, get(router.topic_interests, pattern, Set{Twin}()))
     end
-    # Broadcast to twins that are admins and to twins that are authorized to
-    # subscribe to topic.
+    # Broadcast only to twins that are authorized to subscribe to topic:
+    # admins get no bypass of private-topic authorization.
     for twin in twins
-        if rid(twin) in router.admins
-            push!(authtwins, twin)
-        elseif haskey(router.topic_auth, topic)
+        if haskey(router.topic_auth, topic)
             if haskey(router.topic_auth[topic], rid(twin))
                 # It is a private topic, check if twin is authorized.
                 push!(authtwins, twin)
