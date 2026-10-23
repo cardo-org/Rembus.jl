@@ -69,7 +69,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          # Prevent the package postinst from starting the service with the
+          # default config (it may fail and abort the install).
+          printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d > /dev/null
+          sudo chmod +x /usr/sbin/policy-rc.d
           sudo apt-get install -y mosquitto mosquitto-clients
+          sudo rm -f /usr/sbin/policy-rc.d
           # Declaring a listener disables the implicit default one, so
           # both the plain and the TLS listeners are declared.
           sudo tee /etc/mosquitto/conf.d/ci.conf > /dev/null <<EOF
@@ -82,8 +87,11 @@ jobs:
           certfile /tmp/mqtts/server.crt
           keyfile /tmp/mqtts/server.key
           EOF
-          sudo systemctl enable mosquitto
-          sudo systemctl restart mosquitto
+          sudo systemctl restart mosquitto || {
+            sudo systemctl status mosquitto --no-pager || true
+            sudo journalctl -xeu mosquitto --no-pager | tail -50
+            exit 1
+          }
 
       # macOS runners have no explicit HostName set, so gethostname()
       # falls back to "<id>.local". Names ending in ".local" are resolved
