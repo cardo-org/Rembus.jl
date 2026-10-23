@@ -79,7 +79,8 @@ function run(admin_component)
     end
     close(subscribe_glob_sub_)
 
-    @test ctx.admin_count == 5
+    # the admin is not authorized on my_private_topic, so it gets 4 of 5 messages
+    @test ctx.admin_count == 4
 
     # 5 connection_up, 5 pub/sub message, 3 or 4 connection_down
     # The two ZMQ components does not generate connection down events,

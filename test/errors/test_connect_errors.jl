@@ -34,8 +34,8 @@ function connect_fail()
     catch e
         # HTTP.jl (>= 2.0) raises the underlying transport-level connect
         # error (Reseau.HostResolvers.OpError) instead of wrapping it in
-        # HTTP.ConnectError for a raw WebSocket connection attempt.
-        @test nameof(typeof(e)) === :OpError
+        # HTTP.ConnectError (HTTP.jl 1.x) for a raw WebSocket connection attempt.
+        @test nameof(typeof(e)) in (:OpError, :ConnectError)
     end
 
     try
