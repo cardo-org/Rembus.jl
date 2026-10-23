@@ -77,19 +77,25 @@ jobs:
           sudo rm -f /usr/sbin/policy-rc.d
           # Declaring a listener disables the implicit default one, so
           # both the plain and the TLS listeners are declared.
+          # systemd may hide /tmp from the service: use a private cert dir
+          sudo mkdir -p /etc/mosquitto/certs
+          sudo cp /tmp/mqtts/ca.crt /tmp/mqtts/server.crt /tmp/mqtts/server.key /etc/mosquitto/certs/
+          sudo chown -R mosquitto:mosquitto /etc/mosquitto/certs
+          sudo chmod 640 /etc/mosquitto/certs/server.key
           sudo tee /etc/mosquitto/conf.d/ci.conf > /dev/null <<EOF
           listener 1883 127.0.0.1
           allow_anonymous true
 
           listener ${MQTTS_PORT} 127.0.0.1
           allow_anonymous true
-          cafile /tmp/mqtts/ca.crt
-          certfile /tmp/mqtts/server.crt
-          keyfile /tmp/mqtts/server.key
+          cafile /etc/mosquitto/certs/ca.crt
+          certfile /etc/mosquitto/certs/server.crt
+          keyfile /etc/mosquitto/certs/server.key
           EOF
           sudo systemctl restart mosquitto || {
             sudo systemctl status mosquitto --no-pager || true
             sudo journalctl -xeu mosquitto --no-pager | tail -50
+            sudo cat /var/log/mosquitto/mosquitto.log || true
             exit 1
           }
 
