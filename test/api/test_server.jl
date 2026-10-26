@@ -66,6 +66,15 @@ function run()
         @test e.reason == "direct not permitted in server mode"
     end
 
+    # direct aimed at the server itself is resolved with its own methods
+    @test direct(cli, "server", "srv_service", val) == val + 2
+    try
+        direct(cli, "server", "cli_service_unknown", val)
+        @test false
+    catch e
+        @test isa(e, Rembus.RpcMethodNotFound)
+    end
+
 end
 
 @info "[server] start"

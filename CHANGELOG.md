@@ -110,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Server: a direct RPC whose target is the server itself, and a direct RPC
+  coming from a broker peer, are no longer rejected with `"direct not
+  permitted in server mode"`. The former is resolved with the server's own
+  methods; direct RPCs from ordinary components to other targets are still
+  rejected. This aligns with rembus.python.
+
 - Authenticated mode: an anonymous component no longer waits for a challenge
   it cannot answer when `connection_mode` is `authenticated`.
 

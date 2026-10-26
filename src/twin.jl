@@ -1409,14 +1409,18 @@ twins' inboxes).
 """
 function rpc_request(router::Router, msg, implementor_rule)
     twin = msg.twin
+    is_server = implementor_rule !== always_true
+    # A server resolves a direct rpc aimed at itself as an untargeted one.
+    is_direct = msg.target !== nothing && !(is_server && msg.target == rid(router))
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
         put!(twin.process.inbox, m)
-    elseif msg.target !== nothing && implementor_rule !== always_true
-        # a server (not a broker) does not route direct rpc
+    elseif is_direct && is_server && !implementor_rule(twin.uid)
+        # a server (not a broker) does not route direct rpc requested by
+        # components
         m = ResMsg(msg, STS_GENERIC_ERROR, "direct not permitted in server mode")
         put!(twin.process.inbox, m)
-    elseif msg.target !== nothing
+    elseif is_direct
         # it is a direct rpc
         if haskey(router.id_twin, msg.target)
             target_twin = router.id_twin[msg.target]
