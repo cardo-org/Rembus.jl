@@ -25,6 +25,11 @@ const GROUP = get(ENV, "GROUP", "all")
             include("twin/test_socket_send.jl")
         end
     end
+    if GROUP == "all" || GROUP == "twin"
+        @time @safetestset "identity_cid" begin
+            include("twin/test_identity_cid.jl")
+        end
+    end
     if GROUP == "all" || GROUP == "offline"
         @time @safetestset "pubsub_offline" begin
             include("offline/test_pubsub_offline.jl")

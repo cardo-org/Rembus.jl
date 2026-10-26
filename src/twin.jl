@@ -759,7 +759,7 @@ The connecting node declare its identity to the broker and authenticate if promp
     authenticate(router::Router, twin::Twin)
 
 Client side of the connection handshake: declare this node's identity to
-the peer by sending an `IdentityMsg` (carrying `cid(twin)` and the local
+the peer by sending an `IdentityMsg` (carrying the bare component id `twin.uid.id` and the local
 listener ports) and, if challenged, reply with the signed attestation (see
 `attestate`).
 
@@ -780,7 +780,7 @@ function authenticate(router::Router, twin::Twin)
     end
 
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
-    msg = IdentityMsg(twin, cid(twin), meta)
+    msg = IdentityMsg(twin, twin.uid.id, meta)
     response = twin_request(twin, msg, router.settings.request_timeout)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)

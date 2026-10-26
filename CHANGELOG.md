@@ -110,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The `Identity` message carries the bare component id as `cid` instead of
+  the full `protocol://host:port/id` URL, as the Rembus protocol specifies.
+  Peers that take `cid` literally (rembus.python) previously named the twin
+  after the URL and mis-derived its tenant domain. Rembus.jl brokers still
+  accept both forms.
+
 - Server: a direct RPC whose target is the server itself, and a direct RPC
   coming from a broker peer, are no longer rejected with `"direct not
   permitted in server mode"`. The former is resolved with the server's own
