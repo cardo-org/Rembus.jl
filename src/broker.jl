@@ -482,6 +482,10 @@ function router_task(self, router::Router, implementor_rule)
                     @debug "[$twin] challenge active"
                     # Await Attestation
                     @async await_attestation(router, twin, twin.socket, msg)
+                elseif hasname(twin)
+                    # The connection is already identified.
+                    response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "already identified")
+                    transport_send(twin, response)
                 elseif isempty(msg.cid)
                     response = ResMsg(twin, msg.id, STS_GENERIC_ERROR, "empty cid")
                     transport_send(twin, response)
@@ -531,7 +535,13 @@ function router_task(self, router::Router, implementor_rule)
             elseif isa(msg, Unregister)
                 unregister_node(router, msg)
             elseif isa(msg, Attestation)
-                if !hasname(msg.twin)
+                if hasname(msg.twin)
+                    # The connection is already identified.
+                    transport_send(
+                        msg.twin,
+                        ResMsg(msg.twin, msg.id, STS_GENERIC_ERROR, "already identified")
+                    )
+                else
                     attestation(router, msg.twin, msg)
                 end
             elseif isa(msg, Close)

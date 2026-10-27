@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** an `Identity` or `Attestation` received on an already identified connection is rejected with status 10 ("already identified") and the identity is kept.
 
 - **Breaking:** a message with a single argument that is a list is published
   to MQTT wrapped in an array (`[[1, 2]]`), so that it is not mistaken for a
