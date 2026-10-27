@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** an empty MQTT payload is delivered as a message without
+  arguments instead of being dropped, so a zero-argument message now
+  round-trips through the MQTT bridge.
+
 - **Breaking:** the encoding of a WebSocket connection is fixed by its first
   message (binary = CBOR, text = JSON). A later message of the other type
   closes the connection with code 1003 (`WS_CLOSE_UNSUPPORTED`). Previously

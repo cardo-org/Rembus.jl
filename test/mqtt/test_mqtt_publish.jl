@@ -41,11 +41,15 @@ function mytopic2(args...; ctx, node)
     ctx["count2"] += 1
 end
 
+function myempty(; ctx, node)
+    ctx["empty"] += 1
+end
+
 function run()
     host = get(ENV, "MQTT_HOST", "127.0.0.1")
     port = parse(Int, get(ENV, "MQTT_PORT", "1883"))
 
-    ctx = Dict{String,Any}("count" => 0, "count2" => 0)
+    ctx = Dict{String,Any}("count" => 0, "count2" => 0, "empty" => 0)
 
     broker = component("mqtt://$host:$port/mosca", ws=8338)
 
@@ -101,6 +105,14 @@ function run()
     Mosquitto.publish(client, "mytopic2", "not json")
     sleep(1)
     @test ctx["count2"] == 0
+
+    # an empty payload is a message without arguments
+    Rembus.subscribe(rb, myempty)
+    sleep(1)
+    Mosquitto.publish(client, "myempty", UInt8[])
+    wait_for_message(ctx, "empty"; timeout=5.0)
+    @test ctx["empty"] == 1
+
     Mosquitto.disconnect(client)
     Mosquitto.loop_stop(client)
 

@@ -187,9 +187,14 @@ function mqtt_receiver(rb::Rembus.Twin)
 
         # The payload must be JSON: an array becomes the list of message
         # arguments, any other value a single argument.
+        # An empty payload is a message without arguments.
         data = try
-            parsed = Rembus.lazy_to_julia(JSON3.read(payload))
-            parsed isa Vector ? parsed : [parsed]
+            if isempty(payload)
+                []
+            else
+                parsed = Rembus.lazy_to_julia(JSON3.read(payload))
+                parsed isa Vector ? parsed : [parsed]
+            end
         catch e
             @error "[$rb] MQTT topic $(msg.topic): invalid JSON payload: $e"
             continue

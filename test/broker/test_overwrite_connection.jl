@@ -35,7 +35,10 @@ function run()
     Rembus.settings(bro).overwrite_connection = true
     Rembus.islistening(bro, protocol=[:ws], wait=10)
 
-    rb1 = connect(name)
+    rb1 = component(name)
+    # the reconnect handler is registered, so only the 4000 close code
+    # prevents the reconnection
+    @test haskey(rb1.handler, Rembus.HR_CONN_DOWN)
     #sleep(1)
     rb2 = component(name, name="another_supervisor")
     sleep(1)
