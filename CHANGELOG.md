@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** a message with a single argument that is a list is published
+  to MQTT wrapped in an array (`[[1, 2]]`), so that it is not mistaken for a
+  list of arguments. An MQTT payload `[[1, 2]]` is received as a single list
+  argument.
+
 - **Breaking:** an empty MQTT payload is delivered as a message without
   arguments instead of being dropped, so a zero-argument message now
   round-trips through the MQTT bridge.

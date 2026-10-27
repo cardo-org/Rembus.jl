@@ -41,6 +41,10 @@ function mytopic2(args...; ctx, node)
     ctx["count2"] += 1
 end
 
+function mylist(x; ctx, node)
+    ctx["list"] = x
+end
+
 function myempty(; ctx, node)
     ctx["empty"] += 1
 end
@@ -105,6 +109,13 @@ function run()
     Mosquitto.publish(client, "mytopic2", "not json")
     sleep(1)
     @test ctx["count2"] == 0
+
+    # a wrapped JSON array is a single list argument
+    Rembus.subscribe(rb, mylist)
+    sleep(1)
+    Mosquitto.publish(client, "mylist", "[[1,2]]")
+    wait_for_value(ctx, "list", [1, 2]; timeout=5.0)
+    @test ctx["list"] == [1, 2]
 
     # an empty payload is a message without arguments
     Rembus.subscribe(rb, myempty)

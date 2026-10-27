@@ -133,8 +133,15 @@ function Rembus.transport_send(socket::MQTTSock, msg::Rembus.PubSubMsg)
         Mosquitto.publish(socket.sock, msg.topic, UInt8[])
     else
         # A single argument is published as is, multiple arguments as a
-        # JSON array.
-        content = length(data) == 1 ? data[1] : data
+        # JSON array. A single array argument is wrapped in an array to be
+        # distinguished from a list of arguments.
+        content = if length(data) > 1
+            data
+        elseif data[1] isa AbstractVector
+            [data[1]]
+        else
+            data[1]
+        end
         props = Mosquitto.PropertyList("content-type", "application/json")
         payload = JSON3.write(content)
         # A message published through the MQTT twin itself has not been
