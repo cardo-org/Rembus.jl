@@ -1195,6 +1195,15 @@ function close_malformed(ws)
     end
 end
 
+function close_unsupported(ws)
+    try
+        HTTP.WebSockets.close(
+            ws, HTTP.WebSockets.CloseFrameBody(WS_CLOSE_UNSUPPORTED, "encoding mismatch")
+        )
+    catch
+    end
+end
+
 function close_is_ok(::AbstractPlainSocket, e)
     !isa(e, WrongTcpPacket)
 end

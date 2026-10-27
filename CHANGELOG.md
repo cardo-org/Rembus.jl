@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the encoding of a WebSocket connection is fixed by its first
+  message (binary = CBOR, text = JSON). A later message of the other type
+  closes the connection with code 1003 (`WS_CLOSE_UNSUPPORTED`). Previously
+  the encoding was switched on every received message.
+
 - **Breaking:** a JSON message whose `id` is a number is no longer accepted:
   ids are decimal strings. The id `"0"` is not valid either. Such a message is undecodable (close
   code 1008).

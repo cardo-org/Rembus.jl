@@ -32,6 +32,9 @@ const MAX_WS_FRAME = 60 * 1024 * 1024
 const WS_CLOSE_OVERWRITTEN::Int = 4000
 # Close code sent on an empty, truncated or undecodable message.
 const WS_CLOSE_MALFORMED::Int = 1008
+# Close code sent when the message type (text/binary) differs from the encoding
+# fixed by the first message of the connection.
+const WS_CLOSE_UNSUPPORTED::Int = 1003
 
 # Payload encodings for the rembus messages.
 const CBOR::UInt8 = UInt8(0x00)

@@ -1681,6 +1681,7 @@ function twin_receiver(twin::Twin)
     @debug "[$twin] client is connected"
     try
         ws = twin.socket.sock
+        conn_enc = nothing # encoding fixed by the first message of the connection
         while isopen(ws)
             payload = transport_read(ws)
             # An empty frame of an open websocket is a malformed message; for
@@ -1688,6 +1689,15 @@ function twin_receiver(twin::Twin)
             if isempty(payload) && !(ws isa WebSockets.WebSocket && isopen(ws))
                 twin.socket = FLOAT
                 @debug "component [$twin]: connection closed"
+                break
+            end
+
+            enc = isa(payload, String) ? JSON : CBOR
+            if isnothing(conn_enc)
+                conn_enc = enc
+            elseif enc != conn_enc
+                @warn "[$twin] encoding changed on connection"
+                close_unsupported(ws)
                 break
             end
 
