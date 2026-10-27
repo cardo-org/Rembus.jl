@@ -10,11 +10,15 @@ function dup_topic(msg; ctx, node)
     push!(ctx["msgs"], msg)
 end
 
+function empty_topic(; ctx, node)
+    ctx["empty"] += 1
+end
+
 function run()
     host = get(ENV, "MQTT_HOST", "127.0.0.1")
     port = parse(Int, get(ENV, "MQTT_PORT", "1883"))
 
-    ctx = Dict{String,Any}("msgs" => Any[])
+    ctx = Dict{String,Any}("msgs" => Any[], "empty" => 0)
 
     broker = component("mqtt://$host:$port/mosca_dup", ws=8338)
     @test Rembus.islistening(broker, wait=10)
@@ -22,6 +26,7 @@ function run()
     sub = component("mqtt_dup_subscriber")
     inject(sub, ctx)
     Rembus.subscribe(sub, dup_topic)
+    Rembus.subscribe(sub, empty_topic)
     reactive(sub)
 
     # let the MQTT subscription settle
@@ -39,6 +44,11 @@ function run()
 
     @test length(ctx["msgs"]) == 1
     @test ctx["msgs"][1] == "hello"
+
+    # a message without arguments is echoed too (empty payload)
+    Rembus.publish(pub, "empty_topic")
+    sleep(3)
+    @test ctx["empty"] == 1
 
     # a message published by an external MQTT client is not an echo
     client = Mosquitto.Client_v5(host, port)
