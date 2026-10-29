@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- An RPC request packet with fewer than 5 elements (missing `data`) is a
+  malformed packet: the connection is closed with code 1008.
+
 - **Breaking:** byte strings (`Vector{UInt8}`), at any depth, are encoded in
   JSON messages as base64 text (RFC 4648 §4, padded) instead of an array of
   integers.
