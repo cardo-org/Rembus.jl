@@ -1494,13 +1494,10 @@ function challenge(router::Router, twin::Twin, msgid)
     return ResMsg(twin, msgid, STS_CHALLENGE, challenge_val)
 end
 
-function create_request(twin, msg_id::Msgid, request::AbstractString, params)
-    if contains(request, '/')
-        target = request[1:(findlast(==('/'), request)-1)]
-        topic = request[(findlast(==('/'), request)+1):end]
-    else
-        target = nothing
-        topic = request
+function create_request(twin, msg_id::Msgid, topic::AbstractString, params, pkt::Dict)
+    target = get(pkt, "target", nothing)
+    if !(isnothing(target) || isa(target, AbstractString))
+        error("$(pkt): invalid JSON-RPC request target")
     end
 
     return RpcReqMsg(twin, msg_id, topic, params, target)
@@ -1534,7 +1531,7 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
         return jsonrpc_pubsub(twin, pkt, msg_id, params)
     elseif isa(params, Vector) || isnothing(params)
         # Default to RPC request
-        return create_request(twin, msg_id, pkt["method"], params)
+        return create_request(twin, msg_id, pkt["method"], params, pkt)
     elseif isa(params, Dict)
         msg_type = get(params, "type", nothing)
         if msg_type == TYPE_IDENTITY
@@ -1576,7 +1573,7 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
         elseif msg_type == TYPE_UNREGISTER
             return Unregister(twin, msg_id)
         else
-            return create_request(twin, msg_id, pkt["method"], params)
+            return create_request(twin, msg_id, pkt["method"], params, pkt)
         end
     else
         error("$(pkt): invalid JSON-RPC request")

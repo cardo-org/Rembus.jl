@@ -35,7 +35,8 @@ Send a wrong JSON-RPC request.
 function jsonrpc_wrong_request(url::String, params=nothing)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => "$node_name/wrong_method",
+        "method" => "wrong_method",
+        "target" => node_name,
         "id" => 999
     )
     request_obj["params"] = "unexpected_string_instead_of_array"
@@ -52,7 +53,8 @@ end
 function jsonrpc_request(url::String, method::String, params=nothing; id)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => "$node_name/$method",
+        "method" => method,
+        "target" => node_name,
         "id" => id
     )
     if params !== nothing
@@ -71,7 +73,8 @@ function jsonrpc_connect_named(url::String, cid::String)
     auth = Base64.base64encode(cid)
     request_obj = Dict{String,Any}(
         "jsonrpc" => "2.0",
-        "method" => "$node_name/uptime",
+        "method" => "uptime",
+        "target" => node_name,
         "id" => 999
     )
 

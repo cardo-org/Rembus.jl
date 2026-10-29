@@ -688,13 +688,14 @@ end
 
 function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
-        pkt = JSON3.write(Dict(
+        req = Dict{String,Any}(
             "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.topic,
             "params" => json_data(message2data(msg.data))
-        ))
-        ws_write(socket.sock, pkt)
+        )
+        isnothing(msg.target) || (req["target"] = msg.target)
+        ws_write(socket.sock, JSON3.write(req))
     else
         content = tagvalue_if_dataframe(msg.data)
         if msg.target === nothing

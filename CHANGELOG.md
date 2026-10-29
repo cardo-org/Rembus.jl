@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** a direct RPC over JSON carries the target in an optional
+  top-level `target` member of the request. The `"<target>/<topic>"` form of
+  `method` is no longer split: `method` is always the topic.
+
 - An RPC request packet with fewer than 5 elements (missing `data`) is a
   malformed packet: the connection is closed with code 1008.
 
