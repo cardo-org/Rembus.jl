@@ -527,6 +527,16 @@ end
 
 message2data(data) = data
 
+# Return data to be sent via a JSON message: byte strings (Vector{UInt8}),
+# at any depth, are encoded as base64 text (RFC 4648 §4, padded).
+json_data(data) = data
+json_data(data::Vector{UInt8}) = base64encode(data)
+json_data(data::AbstractDict) = Dict(k => json_data(v) for (k, v) in data)
+function json_data(data::AbstractVector)
+    eltype(data) <: Union{Number,Bool,Char,AbstractString} && return data
+    return [json_data(v) for v in data]
+end
+
 # Return data to be sent via ws or tcp from ZMQ.
 function message2data(data::ZMQ.Message)
     # Allocate instead of consuming message.
@@ -583,7 +593,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
                 "topic" => msg.topic,
                 "params" => Dict(
                     "type" => msg.flags,
-                    "data" => message2data(msg.data)
+                    "data" => json_data(message2data(msg.data))
                 )
             ))
             ws_write(socket.sock, pkt)
@@ -599,7 +609,7 @@ function transport_send(socket::AbstractPlainSocket, msg::PubSubMsg)
                 "topic" => msg.topic,
                 "params" => Dict(
                     "type" => msg.flags,
-                    "data" => message2data(msg.data)
+                    "data" => json_data(message2data(msg.data))
                 )
             ))
             ws_write(socket.sock, pkt)
@@ -680,7 +690,7 @@ function transport_send(socket::AbstractPlainSocket, msg::RpcReqMsg)
             "rembus" => "1.0",
             "id" => string(msg.id),
             "method" => msg.topic,
-            "params" => message2data(msg.data)
+            "params" => json_data(message2data(msg.data))
         ))
         ws_write(socket.sock, pkt)
     else
@@ -785,7 +795,7 @@ function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
             restype => Dict(
                 "type" => TYPE_RESPONSE,
                 "sts" => msg.status,
-                "data" => message2data(msg.data)
+                "data" => json_data(message2data(msg.data))
             )
         ))
         ws_write(socket.sock, pkt)
@@ -810,7 +820,7 @@ function transport_send(socket::AbstractPlainSocket, msg::AdminReqMsg)
             "method" => msg.topic,
             "params" => Dict(
                 "type" => TYPE_ADMIN,
-                "data" => message2data(msg.data)
+                "data" => json_data(message2data(msg.data))
             )
         ))
         ws_write(socket.sock, pkt)

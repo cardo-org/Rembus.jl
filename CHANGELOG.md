@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** byte strings (`Vector{UInt8}`), at any depth, are encoded in
+  JSON messages as base64 text (RFC 4648 §4, padded) instead of an array of
+  integers.
+
 - **Breaking:** an `Identity` or `Attestation` received on an already identified connection is rejected with status 10 ("already identified") and the identity is kept.
 
 - **Breaking:** a message with a single argument that is a list is published
