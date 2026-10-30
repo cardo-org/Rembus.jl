@@ -1573,13 +1573,20 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
     end
 end
 
-function jsonprc_response(twin, pkt, msg_id, result)::RembusMsg
-    """Parse a JSON_RPC success response"""
+function jsonprc_response(twin, pkt, msg_id, result, member="result")::RembusMsg
+    """Parse a JSON_RPC response (`member` is "result" or "error")"""
 
     msg_type = get(result, "type", missing)
     if ismissing(msg_type) || msg_type == TYPE_RESPONSE
-        status = get(result, "sts", STS_SUCCESS)
-        return ResMsg(twin, msg_id, status, get(result, "data", nothing))
+        # `sts` is mandatory and the member must match it: `result` if and
+        # only if the status is success or challenge.
+        status = get(result, "sts", missing)
+        (isa(status, Integer) && !isa(status, Bool)) ||
+            error("$pkt:JSON-RPC response without valid sts")
+        is_result = status == STS_SUCCESS || status == STS_CHALLENGE
+        is_result == (member == "result") ||
+            error("$pkt:JSON-RPC $member member does not match sts $status")
+        return ResMsg(twin, msg_id, UInt8(status), get(result, "data", nothing))
     elseif msg_type == TYPE_ACK
         return AckMsg(twin, msg_id)
     elseif msg_type == TYPE_ACK2
@@ -1616,7 +1623,7 @@ function json_parse(twin::Twin, pkt::Dict; strict_id::Bool=true)
 
         err = get(pkt, "error", nothing)
         if !isnothing(err)
-            return jsonprc_response(twin, pkt, msg_id, err)
+            return jsonprc_response(twin, pkt, msg_id, err, "error")
         end
 
         # Request-Response message.

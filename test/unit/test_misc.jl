@@ -285,6 +285,27 @@ end
     @test isnothing(decode(msg.data))
 end
 
+@testitem "json_response_sts" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    parse(pkt) = Rembus.json_parse(twin, pkt)
+
+    # `sts` is mandatory and the member must match the status
+    @test_throws ErrorException parse(Dict("id" => "1", "result" => Dict("data" => 3)))
+    @test_throws ErrorException parse(Dict("id" => "1", "error" => Dict("data" => "x")))
+    @test_throws ErrorException parse(Dict("id" => "1", "error" => Dict("sts" => 0)))
+    @test_throws ErrorException parse(Dict("id" => "1", "result" => Dict("sts" => 10)))
+    @test_throws ErrorException parse(Dict("id" => "1", "result" => Dict("sts" => "0")))
+
+    # `type` may be absent
+    msg = parse(Dict("id" => "1", "result" => Dict("sts" => 0, "data" => 3)))
+    @test msg.status == Rembus.STS_SUCCESS && msg.data == 3
+    msg = parse(Dict("id" => "1", "error" => Dict("type" => 4, "sts" => 42)))
+    @test msg.status == Rembus.STS_METHOD_NOT_FOUND
+    msg = parse(Dict("id" => "1", "result" => Dict("sts" => 11, "data" => "c")))
+    @test msg.status == Rembus.STS_CHALLENGE
+end
+
 @testitem "register_invalid_fields" begin
     router = Rembus.Router{Rembus.Twin}("test_router")
     twin = Rembus.Twin(Rembus.RbURL("component1"), router)

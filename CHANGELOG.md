@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** a JSON Response without an integer `sts`, or whose member
+  does not match the status (`result` iff `sts` is 0 or 11), is a malformed
+  message (previously a missing `sts` was read as success).
+
 - **Breaking:** a direct RPC `target` is matched by exact component id only;
   the `"<group>@"` prefix fallback is removed.
 
