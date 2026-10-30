@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** a CBOR packet whose `id` is not a byte string of exactly 8
+  bytes, or is all zeros, is malformed (previously accepted).
 - **Breaking:** a JSON Response without an integer `sts`, or whose member
   does not match the status (`result` iff `sts` is 0 or 11), is a malformed
   message (previously a missing `sts` was read as success).

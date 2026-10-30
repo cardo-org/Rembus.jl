@@ -440,8 +440,13 @@ function id2bytes(id::Msgid)::Vector{UInt8}
     take!(io)
 end
 
-function bytes2id(buff::Vector{UInt8})
-    ltoh(read(IOBuffer(buff), Msgid))
+function bytes2id(buff)
+    if !isa(buff, Vector{UInt8}) || length(buff) != sizeof(Msgid)
+        error("invalid id: must be a byte string of $(sizeof(Msgid)) bytes")
+    end
+    mid = ltoh(read(IOBuffer(buff), Msgid))
+    mid == 0 && error("invalid id: 0")
+    return mid
 end
 
 function bytes2zid(buff::Vector{UInt8})
