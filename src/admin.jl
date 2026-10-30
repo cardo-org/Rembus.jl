@@ -420,17 +420,12 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
             callback_and(Symbol(UNEXPOSE_HANDLER), router, twin, msg) do
                 if ismultipath(router)
                     if mark_and_broadcast(router, twin, msg)
-                        if haskey(router.topic_impls, msg.topic)
-                            if twin in router.topic_impls[msg.topic]
-                                delete!(router.topic_impls[msg.topic], twin)
-                                if isempty(router.topic_impls[msg.topic])
-                                    delete!(router.topic_impls, msg.topic)
-                                end
-                            else
-                                sts = STS_GENERIC_ERROR
+                        if haskey(router.topic_impls, msg.topic) &&
+                           twin in router.topic_impls[msg.topic]
+                            delete!(router.topic_impls[msg.topic], twin)
+                            if isempty(router.topic_impls[msg.topic])
+                                delete!(router.topic_impls, msg.topic)
                             end
-                        else
-                            sts = STS_GENERIC_ERROR
                         end
                     end
                 end

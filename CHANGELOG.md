@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** `unexpose` is idempotent: it is answered with status 0 when
+  the topic has no implementor or the sender is not one (previously status
+  10).
 - **Breaking:** a CBOR packet whose `id` is not a byte string of exactly 8
   bytes, or is all zeros, is malformed (previously accepted).
 - **Breaking:** a JSON Response without an integer `sts`, or whose member
