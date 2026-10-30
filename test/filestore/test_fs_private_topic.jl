@@ -102,13 +102,13 @@ function run(authorized_component)
 
     # unknow topic
     @test_throws RembusError unsubscribe(consumer, "unknown_topic")
-    @test_throws RembusError unexpose(consumer, "unknown_topic")
+    @test unexpose(consumer, "unknown_topic") === nothing
 
     # component not authorized to topic
     @test_throws RembusError unexpose(consumer, another_priv_topic)
 
     # topic not exposed by component
-    @test_throws RembusError unexpose(consumer, another_service)
+    @test unexpose(consumer, another_service) === nothing
     @test_throws RembusError unsubscribe(consumer, another_topic)
 
     for cmd in [

@@ -34,7 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message (previously a missing `sts` was read as success).
 
 - **Breaking:** a direct RPC `target` is matched by exact component id only;
-  the `"<group>@"` prefix fallback is removed.
+  the `"<group>@"` prefix fallback is removed. A pool component resolves a
+  direct RPC targeting the name by which its pool broker knows it as a call
+  to itself.
 
 - **Breaking:** a direct RPC over JSON carries the target in an optional
   top-level `target` member of the request. The `"<target>/<topic>"` form of

@@ -85,9 +85,16 @@ function attestate(router::Router, twin::Twin, response)
     end
 
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
+    challenge = response_data(response)
+    # over JSON the challenge byte string is base64 text
+    challenge_bytes = if twin.enc == JSON && isa(challenge, AbstractString)
+        base64decode(challenge)
+    else
+        Vector{UInt8}(challenge)
+    end
     try
         ctx = MbedTLS.parse_keyfile(file)
-        plain = encode([Vector{UInt8}(response_data(response)), cid])
+        plain = encode([challenge_bytes, cid])
         hash = MbedTLS.digest(MD_SHA256, plain)
         signature = sign(ctx, MD_SHA256, hash, MersenneTwister(0))
         return Attestation(twin, cid, signature, meta)
@@ -95,7 +102,7 @@ function attestate(router::Router, twin::Twin, response)
         if isa(e, MbedTLS.MbedException)
             # try with a plain secret
             secret = readline(file)
-            plain = encode([Vector{UInt8}(response_data(response)), secret])
+            plain = encode([challenge_bytes, secret])
             hash = MbedTLS.digest(MD_SHA256, plain)
             return Attestation(twin, cid, hash, meta)
         end
@@ -1407,8 +1414,14 @@ twins' inboxes).
 function rpc_request(router::Router, msg, implementor_rule)
     twin = msg.twin
     is_server = implementor_rule !== always_true
-    # A server resolves a direct rpc aimed at itself as an untargeted one.
-    is_direct = msg.target !== nothing && !(is_server && msg.target == rid(router))
+    # A direct rpc aimed at the component itself is resolved as an untargeted
+    # one. The target is the router's own id or, for a pool component, the name
+    # by which the pool broker that relayed the request knows it.
+    is_self = msg.target !== nothing && (
+        (is_server && msg.target == rid(router)) ||
+        (get(twin.uid.props, "pool", false) === true && msg.target == twin.uid.id)
+    )
+    is_direct = msg.target !== nothing && !is_self
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
         put!(twin.process.inbox, m)
