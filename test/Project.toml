@@ -1,0 +1,6 @@
+[deps]
+Mosquitto = "db317de6-444b-4dfa-9d0e-fbf3d8dd78ea"
+Rembus = "aa126574-2ec3-42c9-8bf5-7f62001d6bce"
+
+[sources]
+Rembus = {path = ".."}

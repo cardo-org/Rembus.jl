@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** a direct RPC `target` is matched by exact component id only;
+  the `"<group>@"` prefix fallback is removed.
+
 - **Breaking:** a direct RPC over JSON carries the target in an optional
   top-level `target` member of the request. The `"<target>/<topic>"` form of
   `method` is no longer split: `method` is always the topic.

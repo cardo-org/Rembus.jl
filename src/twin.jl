@@ -1389,11 +1389,8 @@ Handle an inbound `RpcReqMsg`, after the [`command_permitted`](@ref)/
 [`isauthorized`](@ref) checks:
 
 - **Direct RPC** (`msg.target !== nothing`, i.e. the caller named a
-  specific component or group): resolve `msg.target` against
-  `router.id_twin` — either an exact id match, or a `"<group>@..."`
-  pooled-member match (in which case `select_twin` applies the
-  router's load-balancing policy among the matching members) — and
-  delegate delivery to [`manage_target`](@ref). `STS_TARGET_NOT_FOUND` is
+  specific component): resolve `msg.target` against `router.id_twin`
+  by exact id match and delegate delivery to [`manage_target`](@ref). `STS_TARGET_NOT_FOUND` is
   replied if no matching twin is connected here.
 - **Routable RPC** (`msg.target === nothing`): try the router's own
   `local_fn` first; otherwise, if `implementor_rule(twin.uid)` allows it
@@ -1424,10 +1421,6 @@ function rpc_request(router::Router, msg, implementor_rule)
         # it is a direct rpc
         if haskey(router.id_twin, msg.target)
             target_twin = router.id_twin[msg.target]
-            manage_target(router, twin, target_twin, msg)
-        elseif any(id -> startswith(id, msg.target * "@"), keys(router.id_twin))
-            targets = filter(p -> startswith(p.first, msg.target * "@"), router.id_twin)
-            target_twin = select_twin(router, domain(twin), msg.topic, values(targets))
             manage_target(router, twin, target_twin, msg)
         else
             # target twin is unavailable
