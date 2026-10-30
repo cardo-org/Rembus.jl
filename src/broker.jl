@@ -583,12 +583,13 @@ function find_implementor(router::Router, msg)
         implementors = router.topic_impls[topic]
         num_impls = length(implementors)
 
-        # remove the requestor from the list of implementors
-        filter!(t -> t != msg.twin, implementors)
-        target = select_twin(router, domain(twin), topic, implementors)
+        # exclude the requestor from the candidates without altering the
+        # router table
+        candidates = filter(t -> t != msg.twin, implementors)
+        target = select_twin(router, domain(twin), topic, candidates)
         @debug "[broker] exposer for $topic: [$target]"
         if target === nothing
-            if num_impls != length(implementors)
+            if num_impls != length(candidates)
                 resmsg = ResMsg(
                     msg,
                     STS_METHOD_LOOPBACK,

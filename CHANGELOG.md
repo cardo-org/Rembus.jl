@@ -152,6 +152,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A loopback RPC (the requestor is an implementor of the method) no longer
+  removes the requestor from the method implementors of the router: the
+  requestor is excluded from the candidates of that request only.
 - The `Identity` message carries the bare component id as `cid` instead of
   the full `protocol://host:port/id` URL, as the Rembus protocol specifies.
   Peers that take `cid` literally (rembus.python) previously named the twin
