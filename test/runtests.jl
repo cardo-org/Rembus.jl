@@ -239,6 +239,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "loopback_exposure" begin
             include("api/test_loopback_exposure.jl")
         end
+        @time @safetestset "response_always" begin
+            include("api/test_response_always.jl")
+        end
         @time @safetestset "macros" begin
             include("api/test_macros.jl")
         end

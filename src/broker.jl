@@ -129,7 +129,8 @@ function local_eval(router::Router, twin::Twin, msg::RembusMsg)
         @error "[$(msg.topic)] local eval: $result"
     end
 
-    if !haskey(router.local_subscriber, msg.topic)
+    # a Pub/Sub message delivered to a local callback has no Response
+    if isa(msg, RpcReqMsg)
         resmsg = ResMsg(msg, sts, result)
         @debug "[broker] response: $resmsg ($(resmsg.data))"
         respond(router, resmsg, twin)

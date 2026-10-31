@@ -792,7 +792,22 @@ function transport_send(z::ZDealer, msg::ResMsg)
     return true
 end
 
+# A successful Response whose value cannot be encoded is answered with
+# a method execution error instead of being dropped.
 function transport_send(socket::AbstractPlainSocket, msg::ResMsg)
+    try
+        return send_response(socket, msg)
+    catch e
+        if isconnectionerror(socket, e) || msg.status != STS_SUCCESS
+            rethrow()
+        end
+        @error "[$(msg.twin)] response encoding failed: $e"
+        errmsg = ResMsg(msg.twin, msg.id, STS_METHOD_EXCEPTION, "$e")
+        return send_response(socket, errmsg)
+    end
+end
+
+function send_response(socket::AbstractPlainSocket, msg::ResMsg)
     if msg.twin.enc == JSON && isa(socket, WS)
 
         if msg.status == STS_SUCCESS || msg.status == STS_CHALLENGE
