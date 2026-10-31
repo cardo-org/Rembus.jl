@@ -26,8 +26,8 @@ function run()
                     """{"rembus":"1.0","id":"1","method":"m","params":[],"target":5}""")
         @test malformed_close_code(payload) == Rembus.WS_CLOSE_MALFORMED
     end
-    # an RPC request without the data element is malformed
-    @test malformed_close_code(rpc_packet(4)) == Rembus.WS_CLOSE_MALFORMED
+    # an RPC request without the target element is malformed
+    @test malformed_close_code(rpc_packet(3)) == Rembus.WS_CLOSE_MALFORMED
 end
 
 execute(run, "malformed", ws=8339)

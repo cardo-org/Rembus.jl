@@ -34,6 +34,9 @@ function remote_address()
 end
 
 function test_loopback()
+    # Never route the test connections through an HTTP proxy configured in the
+    # environment (must be set before HTTP creates its default client).
+    ENV["NO_PROXY"] = "*"
     router = from("$broker_name.broker").args[1]
 
     # Anonymous components connected from the loopback interface are permitted

@@ -129,11 +129,15 @@ function broker_parse(twin::Twin, pkt)
             return msg
         end
     elseif ptype == TYPE_RPC
-        # type, id, topic, target and data are mandatory
-        !indefinite && plen < 5 && error("invalid rpc packet: $plen elements")
+        # type, id, topic and target are mandatory; a missing data element
+        # is the same as a null data
+        !indefinite && plen < 4 && error("invalid rpc packet: $plen elements")
         id = decode_internal(io, Val(TYPE_2))
         topic = decode_internal(io, Val(TYPE_3))
         target = decode_internal(io)
+        if !indefinite && plen < 5
+            io = IOBuffer(encode(nothing))
+        end
         msg = RpcReqMsg(twin, bytes2id(id), topic, io, target, flags)
         msg.nextra = nextra(5)
         return msg

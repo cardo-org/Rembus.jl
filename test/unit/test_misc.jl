@@ -282,7 +282,26 @@ end
     out = [Rembus.TYPE_RESPONSE, Rembus.id2bytes(msg.id), msg.status, msg.data]
     pkt = Rembus.encode_partial(out)
     @test pkt == vcat(UInt8[0x84, 0x04], id, UInt8[0x00, 0xf6])
+end
+
+@testitem "request_without_data" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL("component1"), router)
+    id = vcat(UInt8[0x48], UInt8[1, 2, 3, 4, 5, 6, 7, 8])
+    topic = UInt8[0x61, 0x6d] # "m"
+
+    # [TYPE_RPC, id, topic, target] is valid and equivalent to data = null
+    pkt = vcat(UInt8[0x84, 0x02], id, topic, UInt8[0xf6])
+    msg = Rembus.broker_parse(twin, pkt)
+    @test msg isa Rembus.RpcReqMsg
+    @test msg.topic == "m"
+    @test isnothing(msg.target)
+    @test msg.nextra == 0
     @test isnothing(decode(msg.data))
+
+    # a request without the target element is malformed
+    @test_throws ErrorException Rembus.broker_parse(
+        twin, vcat(UInt8[0x83, 0x02], id, topic))
 end
 
 @testitem "json_response_sts" begin

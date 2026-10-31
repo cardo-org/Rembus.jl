@@ -42,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   top-level `target` member of the request. The `"<target>/<topic>"` form of
   `method` is no longer split: `method` is always the topic.
 
-- An RPC request packet with fewer than 5 elements (missing `data`) is a
+- An RPC request packet without the `data` element (4 elements) is accepted
+  and treated as `data = null`; a packet with fewer than 4 elements is a
   malformed packet: the connection is closed with code 1008.
 
 - **Breaking:** byte strings (`Vector{UInt8}`), at any depth, are encoded in
