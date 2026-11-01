@@ -350,12 +350,17 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
             return EnableReactiveMsg(msg.id, true)
         end
     elseif cmd == SUBSCRIBE_CMD
+        msg_from = get(msg.data, MSG_FROM, Now)
+        if isempty(msg.topic) || (startswith(msg.topic, "__") && endswith(msg.topic, "__"))
+            return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid topic")
+        elseif !isa(msg_from, Real) || isa(msg_from, Bool) || isnan(msg_from) || msg_from < 0
+            return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid msg_from")
+        end
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(SUBSCRIBE_HANDLER), router, twin, msg) do
                 if ismultipath(router)
                     if mark_and_broadcast(router, twin, msg)
-                        msg_from = get(msg.data, MSG_FROM, Now)
-                        twin.msg_from[msg.topic] = msg_from
+                        twin.msg_from[msg.topic] = Float64(msg_from)
                         if haskey(router.topic_interests, msg.topic)
                             push!(router.topic_interests[msg.topic], twin)
                         else
