@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `*` is rejected with status 10 when the keyspace extension is not enabled,
   and `*` in an RPC or expose topic is rejected with status 10.
 
+- **Breaking:** wildcard (keyspace) delivery applies the same rules as
+  exact-topic delivery, evaluated against the original topic: the publisher
+  is not echoed, non-reactive components, other domains and components not
+  authorized for the topic receive nothing, and the original QoS is kept.
+  Authorization of exact-topic subscribers is now also enforced at delivery
+  time, and a publish with an empty, reserved or `*` topic is dropped without
+  ack.
+
 - **Breaking:** an RPC request with an empty or reserved (`__…__`) topic is
   answered with status 10 (`"invalid topic"`).
 

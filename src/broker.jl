@@ -342,7 +342,11 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
         end
     end
 
-    union!(authtwins, get(router.topic_interests, topic, Set{Twin}()))
+    # Authorization is evaluated at delivery time: a subscriber that lost
+    # access to a private topic stops receiving its messages.
+    for twin in get(router.topic_interests, topic, Set{Twin}())
+        isauthorized(router, twin, topic) && push!(authtwins, twin)
+    end
     for tw in authtwins
         # Do not publish back to the receiver channel and to unreactive components.
         if tw !== src_twin && tw.reactive && domain(tw) == domain(src_twin)

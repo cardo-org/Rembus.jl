@@ -152,15 +152,26 @@ function publish_interceptor(ksrouter, msg)
     component = msg.twin
     @debug "[$component]: pub: $msg ($(msg.data))"
     topic = msg.topic
+    # An invalid publish is dropped by the core router: never match it.
+    invalid_publish_topic(top_router(ksrouter), topic) && return nothing
 
     for (space_re, space_twins) in ksrouter.spaces
         # The match-everything pattern is served by the core broker.
         space_re.pattern == GLOB_STAR_PATTERN && continue
         if occursin(space_re, topic)
+            core = top_router(ksrouter)
             for st in space_twins
-                @debug "[ksrouter] sending $msg to $(st.twin)"
-                if isopen(st.twin)
-                    publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
+                tw = st.twin
+                # Same delivery conditions of an exact-topic subscription,
+                # evaluated against the original topic.
+                deliverable = isopen(tw) && tw !== component && tw.reactive &&
+                              domain(tw) == domain(component) &&
+                              isauthorized(core, tw, topic)
+                if deliverable
+                    @debug "[ksrouter] sending $msg to $tw"
+                    data = Any[topic; Rembus.msgdata(msg.data)...]
+                    out = PubSubMsg(tw, st.space, data, msg.flags & QOS2)
+                    publish_msg(tw, out)
                 end
             end
         end

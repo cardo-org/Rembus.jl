@@ -1218,6 +1218,14 @@ function command_permitted(router::Router, twin::Twin)
     return res
 end
 
+# A wildcard topic is accepted only as the pattern of a local subscription: it
+# is the form in which a broker delivers a wildcard match.
+function invalid_publish_topic(router::Router, topic::AbstractString)
+    return isempty(topic) ||
+           (startswith(topic, "__") && endswith(topic, "__")) ||
+           (contains(topic, "*") && !haskey(router.local_function, topic))
+end
+
 """
     pubsub_msg(router::Router, msg, relay_rule=always_true)
 
@@ -1243,7 +1251,13 @@ checks fail, `true` otherwise.
 """
 function pubsub_msg(router::Router, msg, relay_rule=always_true)
     twin = msg.twin
-    if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
+    if !command_permitted(router, twin)
+        return false
+    elseif invalid_publish_topic(router, msg.topic)
+        # No ack: the message is dropped.
+        @warn "[$twin] dropping publish with invalid topic: $(msg.topic)"
+        return false
+    elseif !isauthorized(router, twin, msg.topic)
         @warn "[$twin] is not authorized to publish on $(msg.topic)"
         return false
     else
