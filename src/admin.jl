@@ -392,27 +392,23 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
             data = "unauthorized"
         end
     elseif cmd == UNSUBSCRIBE_CMD
+        if isempty(msg.topic) || (startswith(msg.topic, "__") && endswith(msg.topic, "__"))
+            return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid topic")
+        end
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(UNSUBSCRIBE_HANDLER), router, twin, msg) do
                 if ismultipath(router)
                     if mark_and_broadcast(router, twin, msg)
-                        if haskey(router.topic_interests, msg.topic)
-                            if twin in router.topic_interests[msg.topic]
-                                delete!(router.topic_interests[msg.topic], twin)
-                                if isempty(router.topic_interests[msg.topic])
-                                    delete!(router.topic_interests, msg.topic)
-                                end
-                                unmark_glob_topic!(router, msg.topic)
-                            else
-                                sts = STS_GENERIC_ERROR
+                        if haskey(router.topic_interests, msg.topic) &&
+                           twin in router.topic_interests[msg.topic]
+                            delete!(router.topic_interests[msg.topic], twin)
+                            if isempty(router.topic_interests[msg.topic])
+                                delete!(router.topic_interests, msg.topic)
                             end
-                            # remove from twin configuration
-                            if haskey(twin.msg_from, msg.topic)
-                                delete!(twin.msg_from, msg.topic)
-                            end
-                        else
-                            sts = STS_GENERIC_ERROR
+                            unmark_glob_topic!(router, msg.topic)
                         end
+                        # remove from twin configuration
+                        delete!(twin.msg_from, msg.topic)
                     end
                 end
             end

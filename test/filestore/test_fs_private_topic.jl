@@ -100,8 +100,8 @@ function run(authorized_component)
     publish(producer, priv_topic, "some_data")
     sleep(1)
 
-    # unknow topic
-    @test_throws RembusError unsubscribe(consumer, "unknown_topic")
+    # unsubscribe is idempotent
+    unsubscribe(consumer, "unknown_topic")
     @test unexpose(consumer, "unknown_topic") === nothing
 
     # component not authorized to topic
@@ -109,7 +109,7 @@ function run(authorized_component)
 
     # topic not exposed by component
     @test unexpose(consumer, another_service) === nothing
-    @test_throws RembusError unsubscribe(consumer, another_topic)
+    unsubscribe(consumer, another_topic)
 
     for cmd in [
         Rembus.BROKER_CONFIG_CMD,

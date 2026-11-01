@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** an RPC request with an empty or reserved (`__…__`) topic is
   answered with status 10 (`"invalid topic"`).
 
+- **Breaking:** `unsubscribe` of a topic the component is not subscribed to
+  is no longer an error (status 0 instead of 10); an `unsubscribe` with an
+  empty or reserved (`__…__`) topic is rejected with status 10
+  (`"invalid topic"`).
+
 - **Breaking:** a `subscribe` command with an empty or reserved (`__…__`)
   topic, or with a negative, NaN or non-numeric `msg_from`, is rejected with
   status 10 (`"invalid topic"` / `"invalid msg_from"`).
