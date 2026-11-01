@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** an RPC request with an empty or reserved (`__…__`) topic is
+  answered with status 10 (`"invalid topic"`).
+
 - **Breaking:** a `subscribe` command with an empty or reserved (`__…__`)
   topic, or with a negative, NaN or non-numeric `msg_from`, is rejected with
   status 10 (`"invalid topic"` / `"invalid msg_from"`).
