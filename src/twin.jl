@@ -1422,7 +1422,8 @@ function rpc_request(router::Router, msg, implementor_rule)
         (get(twin.uid.props, "pool", false) === true && msg.target == twin.uid.id)
     )
     is_direct = msg.target !== nothing && !is_self
-    if isempty(msg.topic) || (startswith(msg.topic, "__") && endswith(msg.topic, "__"))
+    if isempty(msg.topic) || contains(msg.topic, "*") ||
+       (startswith(msg.topic, "__") && endswith(msg.topic, "__"))
         put!(twin.process.inbox, ResMsg(msg, STS_GENERIC_ERROR, "invalid topic"))
     elseif !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
         # unauthorized requests are indistinguishable from unknown methods

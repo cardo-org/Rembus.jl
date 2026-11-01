@@ -353,6 +353,9 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
         msg_from = get(msg.data, MSG_FROM, Now)
         if isempty(msg.topic) || (startswith(msg.topic, "__") && endswith(msg.topic, "__"))
             return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid topic")
+        elseif contains(msg.topic, "*") &&
+               (!has_keyspace(router) || !valid_pattern(msg.topic))
+            return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid topic")
         elseif !isa(msg_from, Real) || isa(msg_from, Bool) || isnan(msg_from) || msg_from < 0
             return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid msg_from")
         end
@@ -375,6 +378,9 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
             data = "unauthorized"
         end
     elseif cmd == EXPOSE_CMD
+        if contains(msg.topic, "*")
+            return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid topic")
+        end
         if isauthorized(router, twin, msg.topic)
             callback_and(Symbol(EXPOSE_HANDLER), router, twin, msg) do
                 if ismultipath(router)

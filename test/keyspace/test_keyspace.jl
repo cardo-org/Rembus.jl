@@ -29,7 +29,7 @@ function run()
     put(pub, "temperature", temperature)
     put(pub, "wind", wind)
 
-    # verbatim chunk is not matched by * regexp
+    # verbatim chunk is not special for the * wildcard
     publish(pub, "veneto/@agordo/cencenighe/temperature", temperature)
 
     sleep(1)
@@ -44,7 +44,8 @@ function run()
     @test ctx[node_name*"/temperature"] == temperature
     @test ctx[node_name*"/wind"] == wind
 
-    @test !haskey(ctx, "veneto/@agordo/cencenighe/temperature")
+    # the verbatim chunk rule is not part of the protocol: @agordo matches *
+    @test ctx["veneto/@agordo/cencenighe/temperature"] == temperature
 end
 
 @info "[hierarchy] start"

@@ -28,6 +28,8 @@ function another_consume(topic, x, y)
 end
 
 function run(admin_component)
+    # wildcard subscriptions need the keyspace extension
+    Rembus.add_plugin(Visor.from("$broker_name.broker").args[1], Rembus.KeySpaceRouter())
     ctx = TestCtx()
     subscribe_glob_sub = "subscribe_glob_sub"
     subzmq = "zmq://:8336/subscribe_glob_subzmq"

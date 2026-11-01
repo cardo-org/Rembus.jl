@@ -26,21 +26,58 @@ mutable struct KeySpaceRouter <: Rembus.AbstractRouter
     end
 end
 
-function build_space_re(topic)
-    str = replace(topic, "/**/" => "(.*)", "**" => "(.*)", "*" => "([^/]+)")
-    return Regex("^$str\$")
+#=
+    has_keyspace(router)
 
+Return `true` if a `KeySpaceRouter` (the wildcard extension) is part of the
+router chain.
+=#
+function has_keyspace(router)
+    r = bottom_router(router)
+    while !isnothing(r)
+        isa(r, KeySpaceRouter) && return true
+        r = r.downstream
+    end
+    return false
 end
 
-# The regex generated for glob patterns that match every possible topic,
-# e.g. "**" or "/**/".
-const GLOB_STAR_PATTERN = "^(.*)\$"
+#=
+    valid_pattern(topic)
+
+Return `true` if `topic` is a valid wildcard pattern: `*` and `**` are valid
+only as a whole `/`-separated segment.
+=#
+function valid_pattern(topic::AbstractString)
+    return all(split(topic, "/")) do seg
+        !contains(seg, "*") || seg == "*" || seg == "**"
+    end
+end
+
+# Escape the regex metacharacters of a literal pattern segment.
+escape_literal(seg) = replace(seg, r"[\\.^$|?+()\[\]{}]" => s"\\\0")
+
+#=
+    build_space_re(topic)
+
+Regular expression of a wildcard pattern: `*` matches one non-empty segment,
+`**` matches any (possibly empty) character sequence, every other character
+matches itself.
+=#
+function build_space_re(topic)
+    segments = map(split(topic, "/")) do seg
+        seg == "**" ? ".*" : seg == "*" ? "[^/]+" : escape_literal(seg)
+    end
+    return Regex("^" * join(segments, "/") * "\$")
+end
+
+# The regex generated for the pattern that matches every possible topic.
+const GLOB_STAR_PATTERN = "^.*\$"
 
 #=
     is_glob_star(topic)
 
-Return `true` if `topic` is a wildcard pattern (`**`, `/**/`, ...) that
-matches every topic, as opposed to a per-segment wildcard pattern
+Return `true` if `topic` is the wildcard pattern `**` that matches every
+topic, as opposed to a per-segment wildcard pattern
 (e.g. `veneto/*/cencenighe/*`) used for hierarchical key-expression routing.
 =#
 is_glob_star(topic::AbstractString) = build_space_re(topic).pattern == GLOB_STAR_PATTERN
@@ -88,7 +125,7 @@ end
 function subscribe_handler(ksrouter, component, topic)
     @debug "[$component][subscribe] ksrouter:$ksrouter, topic:$topic"
 
-    if contains(topic, "*")
+    if contains(topic, "*") && valid_pattern(topic)
         retopic = build_space_re(topic)
         if haskey(ksrouter.spaces, retopic)
             push!(ksrouter.spaces[retopic], SpaceTwin(topic, component))
@@ -116,27 +153,14 @@ function publish_interceptor(ksrouter, msg)
     @debug "[$component]: pub: $msg ($(msg.data))"
     topic = msg.topic
 
-    if (contains(topic, "/"))
-        for space_re in keys(ksrouter.spaces)
-            m = match(space_re, topic)
-            if m !== nothing
-                unsealed = true
-                for capture in m.captures
-                    if contains(capture, "@")
-                        # the regex topic chunck matched a verbatim chunck
-                        # topic does not match the regex
-                        unsealed = false
-                        break
-                    end
-                end
-
-                if unsealed
-                    for st in ksrouter.spaces[space_re]
-                        @debug "[ksrouter] sending $msg to $(st.twin)"
-                        if isopen(st.twin)
-                            publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
-                        end
-                    end
+    for (space_re, space_twins) in ksrouter.spaces
+        # The match-everything pattern is served by the core broker.
+        space_re.pattern == GLOB_STAR_PATTERN && continue
+        if occursin(space_re, topic)
+            for st in space_twins
+                @debug "[ksrouter] sending $msg to $(st.twin)"
+                if isopen(st.twin)
+                    publish(st.twin, st.space, topic, Rembus.msgdata(msg.data)...)
                 end
             end
         end
