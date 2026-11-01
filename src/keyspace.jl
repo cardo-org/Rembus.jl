@@ -162,6 +162,8 @@ function publish_interceptor(ksrouter, msg)
             core = top_router(ksrouter)
             for st in space_twins
                 tw = st.twin
+                # An exact-topic subscription wins: one message per publish.
+                tw in get(core.topic_interests, topic, ()) && continue
                 # Same delivery conditions of an exact-topic subscription,
                 # evaluated against the original topic.
                 deliverable = isopen(tw) && tw !== component && tw.reactive &&

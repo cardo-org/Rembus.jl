@@ -324,21 +324,19 @@ function broadcast_msg(router::Router, msg::PubSubMsg)
     # only for pubsub messages and not for rpc methods.
     topic = msg.topic
     src_twin = msg.twin
-    twins = Set{Twin}()
+    # Match-all subscribers get the pattern form: topic = the subscribed
+    # pattern, data = [original topic, original data...]. Authorization is
+    # evaluated against the original topic (admins get no bypass).
+    exact = get(router.topic_interests, topic, Set{Twin}())
     for pattern in router.glob_topics
-        union!(twins, get(router.topic_interests, pattern, Set{Twin}()))
-    end
-    # Broadcast only to twins that are authorized to subscribe to topic:
-    # admins get no bypass of private-topic authorization.
-    for twin in twins
-        if haskey(router.topic_auth, topic)
-            if haskey(router.topic_auth[topic], rid(twin))
-                # It is a private topic, check if twin is authorized.
-                push!(authtwins, twin)
+        for tw in get(router.topic_interests, pattern, Set{Twin}())
+            # An exact-topic subscription wins: one message per publish.
+            tw in exact && continue
+            if isopen(tw) && tw !== src_twin && tw.reactive &&
+               domain(tw) == domain(src_twin) && isauthorized(router, tw, topic)
+                data = Any[topic; msgdata(msg.data)...]
+                publish_msg(tw, PubSubMsg(tw, pattern, data, msg.flags & QOS2))
             end
-        else
-            # It is a public topic, all twins may be broadcasted.
-            push!(authtwins, twin)
         end
     end
 

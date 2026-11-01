@@ -87,6 +87,8 @@ function msgdata(io::IOBuffer)
     return payload
 end
 
+msgdata(m::ZMQ.Message) = decode(Vector{UInt8}(m))
+
 msgdata(v) = v # COV_EXCL_LINE
 
 function string_to_enum(connection_mode)

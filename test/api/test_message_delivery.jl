@@ -55,6 +55,18 @@ function run(admin_name)
     @test counters[:pub].n == 0
     @test counters[:auth].n == 2
 
+    # Exact and wildcard (pattern and match-all) subscriptions of the same
+    # twin yield a single message per publish.
+    subscribe(auth, "dup/x", consume)
+    subscribe(auth, "dup/*", glob_consume)
+    subscribe(auth, "**", glob_consume)
+    before = counters[:auth].n
+    publish(pub, "dup/x", 1)
+    @test wait_for(() -> counters[:auth].n > before)
+    sleep(0.5)
+    @test counters[:auth].n == before + 1
+    unsubscribe(auth, "**")
+
     # Authorization is evaluated at delivery time for exact topics.
     exact = Counter()
     exact_sub = connect("msgdel_exact")

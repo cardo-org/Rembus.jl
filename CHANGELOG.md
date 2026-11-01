@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time, and a publish with an empty, reserved or `*` topic is dropped without
   ack.
 
+- **Breaking:** match-all (`**`) subscribers are served by the core broker in
+  the same pattern form as other wildcard subscriptions (topic = pattern,
+  `data = [original_topic, ...]`) and subject to the same delivery rules
+  (reactive, domain, authorization on the original topic, no echo, QoS).
+
 - **Breaking:** an RPC request with an empty or reserved (`__…__`) topic is
   answered with status 10 (`"invalid topic"`).
 
