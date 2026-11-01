@@ -131,13 +131,8 @@ function run(authorized_component)
     unsubscribe(unauth_consumer, priv_topic)
 
     # producer is not authorized
-    try
-        rpc(producer, "private_service", 1)
-    catch e
-        @debug "[RPC] expected error: $e" _group = :test
-        @test isa(e, Rembus.RembusError)
-        @test e.code === Rembus.STS_GENERIC_ERROR
-    end
+    private_topic(rb, priv_service)
+    @test_throws Rembus.RpcMethodNotFound rpc(producer, priv_service, 1)
 
     publish(producer, another_priv_topic, "some_data")
 

@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients; it was previously HTTP.jl's 16 MiB default.
 
 ### Changed
+- **Breaking:** an RPC request from a requestor not authorized for the topic
+  is answered with status 42 (methodImplementorNotFound, `data` = topic)
+  instead of status 10 `"unauthorized"`, so the existence of a private topic
+  is not revealed.
 - **Breaking:** `unexpose` is idempotent: it is answered with status 0 when
   the topic has no implementor or the sender is not one (previously status
   10).

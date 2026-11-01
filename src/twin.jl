@@ -1423,7 +1423,8 @@ function rpc_request(router::Router, msg, implementor_rule)
     )
     is_direct = msg.target !== nothing && !is_self
     if !command_permitted(router, twin) || !isauthorized(router, twin, msg.topic)
-        m = ResMsg(msg, STS_GENERIC_ERROR, "unauthorized")
+        # unauthorized requests are indistinguishable from unknown methods
+        m = ResMsg(msg, STS_METHOD_NOT_FOUND, msg.topic)
         put!(twin.process.inbox, m)
     elseif is_direct && is_server && !implementor_rule(twin.uid)
         # a server (not a broker) does not route direct rpc requested by
