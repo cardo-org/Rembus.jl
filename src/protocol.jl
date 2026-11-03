@@ -236,13 +236,10 @@ function tsid(slot::UInt32)
     Msgid((uuid4().value & 0xffffffff00000000) | slot)
 end
 
-function response_timeout(twin, msg::RembusMsg)
-    if haskey(twin.socket.direct, msg.id)
-        condition = twin.socket.direct[msg.id].future
-        if !isready(condition)
-            put!(condition, RembusTimeout(msg))
-        end
-        delete!(twin.socket.direct, msg.id)
+function response_timeout(direct, msg::RembusMsg)
+    req = pop!(direct, msg.id, nothing)
+    if req !== nothing && !isready(req.future)
+        put!(req.future, RembusTimeout(msg))
     end
 
     return nothing
@@ -250,7 +247,9 @@ end
 
 function twin_future_request(twin::Twin, msg::RembusMsg, timeout)
     mid::Msgid = msg.id
-    timer = Timer((tim) -> response_timeout(twin, msg), timeout)
+    # Bind to the current socket's table: twin.socket may be replaced later.
+    direct = twin.socket.direct
+    timer = Timer((tim) -> response_timeout(direct, msg), timeout)
     resp_cond = FutureResponse(msg, timer)
     twin.socket.direct[mid] = resp_cond
     transport_send(twin, msg)

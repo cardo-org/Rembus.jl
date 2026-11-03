@@ -768,10 +768,13 @@ end
 function send_msg(twin, msg, timeout=Inf)
     router = top_router(twin.router)
     t = (timeout === Inf) ? router.settings.request_timeout : timeout
+    # Bind the timer to the pending-request table of the socket in use now:
+    # twin.socket may be replaced by a reconnection before the timer fires.
+    direct = twin.socket.direct
     timer = Timer(t) do tmr
-        if haskey(twin.socket.direct, msg.id)
-            put!(twin.socket.direct[msg.id].future, RembusTimeout("$msg timeout"))
-            delete!(twin.socket.direct, msg.id)
+        req = pop!(direct, msg.id, nothing)
+        if req !== nothing && !isready(req.future)
+            put!(req.future, RembusTimeout("$msg timeout"))
         end
     end
 
