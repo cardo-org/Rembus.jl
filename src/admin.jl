@@ -331,7 +331,18 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
     if cmd == SETUP_CMD
         # register the route only if it is a broker
         if ismultipath(router)
+            # optional replay windows of the subscriptions (default Now)
+            windows = get(msg.data, MSG_FROM, Dict())
+            if !isa(windows, AbstractDict) || !all(
+                v -> isa(v, Real) && !isa(v, Bool) && !isnan(v) && v >= 0,
+                Base.values(windows)
+            )
+                return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid msg_from")
+            end
+            replay_window = Float64(Now)
             for topic in msg.data["subscribers"]
+                twin.msg_from[topic] = Float64(get(windows, topic, Now))
+                replay_window = max(replay_window, twin.msg_from[topic])
                 if haskey(router.topic_interests, topic)
                     push!(router.topic_interests[topic], twin)
                 else
@@ -347,7 +358,7 @@ function admin_command(router::Router, twin, msg::AdminReqMsg)
                     router.topic_impls[topic] = Set([twin])
                 end
             end
-            return EnableReactiveMsg(msg.id, true)
+            return EnableReactiveMsg(msg.id, replay_window)
         end
     elseif cmd == SUBSCRIBE_CMD
         msg_from = get(msg.data, MSG_FROM, Now)

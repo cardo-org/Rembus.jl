@@ -283,11 +283,14 @@ function router_configuration(router)
 end
 
 function twin_configuration(router, twin)
-    cfg = Dict("exposers" => [], "subscribers" => [])
+    cfg = Dict("exposers" => [], "subscribers" => [], "msg_from" => Dict{String,Float64}())
     for topic in keys(router.local_function)
         isbuiltin(topic) && continue
         if haskey(router.local_subscriber, topic)
             push!(cfg["subscribers"], topic)
+            # replay window of the subscription, used to replay the messages
+            # published while the component was disconnected
+            cfg["msg_from"][topic] = router.local_subscriber[topic]
         else
             push!(cfg["exposers"], topic)
         end
