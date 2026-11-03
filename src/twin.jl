@@ -826,9 +826,37 @@ neighbor-lookup table (`id_twin`, used by [`admin_broadcast`](@ref) and
 direct-RPC target resolution) reflects the component's definitive name as
 soon as it authenticates.
 """
+#=
+    inherit_requests!(twin, previous)
+
+Move the RPC requests still waiting for a response on the `previous` twin of the
+same component to `twin`, so a response sent by the component after reconnecting
+is routed back to the original caller. Each request gets a timer that expires it
+from the new pending-request table.
+=#
+function inherit_requests!(twin::Twin, previous::Twin)
+    router = top_router(twin.router)
+    out = twin.socket.out
+    for (id, req) in collect(previous.socket.out)
+        isa(req.request, RpcReqMsg) || continue
+        close(req.timer)
+        delete!(previous.socket.out, id)
+        remaining = router.settings.request_timeout - (time() - req.sending_ts)
+        tmr = Timer(max(remaining, 0)) do _t
+            delete!(out, id)
+        end
+        out[id] = FutureResponse(req.request, tmr)
+    end
+    return nothing
+end
+
 function setidentity(router::Router, twin::Twin, msg; isauth=false)
     delete!(router.id_twin, rid(twin))
     twin.uid = RbURL(msg.cid)
+    previous = get(router.id_twin, rid(twin), nothing)
+    if previous !== nothing && previous !== twin
+        inherit_requests!(twin, previous)
+    end
     router.id_twin[rid(twin)] = twin
     setname(twin.process, rid(twin))
     twin.isauth = isauth
