@@ -511,6 +511,29 @@ function unreactive(twin::Twin)
     return send_msg(twin, msg) |> fetch
 end
 
+#=
+    wait_reconnect(twin, qos)
+
+Return `true` if the twin is (or becomes) open. A QOS1/QOS2 publish, which promises
+at-least-once delivery, tolerates a link that has just dropped: wait for the
+reconnection for the time granted to the ack retries. QOS0 and a component that
+was closed on purpose fail immediately.
+=#
+function wait_reconnect(twin::Twin, qos)
+    (qos & QOS2) == QOS0 && return false
+    router = top_router(twin.router)
+    deadline = time() + router.settings.ack_timeout * (router.settings.send_retries + 1)
+    while time() < deadline
+        if !isdefined(twin, :process) || istaskdone(twin.process.task) ||
+           twin.process.phase === :closing
+            return false
+        end
+        isopen(twin) && return true
+        sleep(0.1)
+    end
+    return isopen(twin)
+end
+
 """
     publish(rb, topic::AbstractString, data...; qos=Rembus.QOS0)
 
@@ -550,7 +573,8 @@ publish(rb, "mytopic")
 ```
 """
 function publish(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0, slot=0)
-    wait_open(twin) || failover_queue(twin) || error("connection down")
+    wait_open(twin) || failover_queue(twin) || wait_reconnect(twin, qos) ||
+        error("connection down")
     msg = PubSubMsg(twin, topic, collect(data), qos, 0, slot)
     return wait_publish_ack(publish_msg(twin, msg), msg)
 end
@@ -583,7 +607,8 @@ put(rb, "mytopic", 1, 2)
 This publishes the values 1 and 2 to the topic `myname/mytopic`.
 """
 function put(twin::Twin, topic::AbstractString, data...; qos=Rembus.QOS0)
-    wait_open(twin) || failover_queue(twin) || error("connection down")
+    wait_open(twin) || failover_queue(twin) || wait_reconnect(twin, qos) ||
+        error("connection down")
     msg = PubSubMsg(twin, twin.uid.id * "/" * topic, collect(data), qos)
     return wait_publish_ack(publish_msg(twin, msg), msg)
 end
