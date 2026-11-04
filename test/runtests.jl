@@ -256,6 +256,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "wrong_message" begin
             include("errors/test_wrong_message.jl")
         end
+        @time @safetestset "rpc_link_drop" begin
+            include("errors/test_rpc_link_drop.jl")
+        end
         @time @safetestset "dealer_zmq" begin
             include("errors/test_dealer_zmq.jl")
         end
