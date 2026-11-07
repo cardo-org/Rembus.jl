@@ -850,6 +850,14 @@ function inherit_requests!(twin::Twin, previous::Twin)
     return nothing
 end
 
+"""
+    setidentity(router, twin, msg; isauth=false)
+
+Bind the identity (`msg.cid`) announced by a connecting component to `twin`,
+replacing any previous binding of the twin in the router.
+
+If `isauth` is `true` the identity has already been authenticated.
+"""
 function setidentity(router::Router, twin::Twin, msg; isauth=false)
     delete!(router.id_twin, rid(twin))
     twin.uid = RbURL(msg.cid)
