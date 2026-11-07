@@ -69,6 +69,7 @@ export
     reactive,
     unreactive,
     register,
+    rekey,
     unregister,
     rid,
     @component,

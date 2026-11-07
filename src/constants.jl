@@ -114,6 +114,7 @@ const TYPE_ADMIN::UInt8 = 3
 const TYPE_RESPONSE::UInt8 = 4
 const TYPE_ACK::UInt8 = 5
 const TYPE_ACK2::UInt8 = 6
+const TYPE_REKEY::UInt8 = 7
 const TYPE_UNREGISTER::UInt8 = 9
 const TYPE_REGISTER::UInt8 = 10
 const TYPE_ATTESTATION::UInt8 = 11

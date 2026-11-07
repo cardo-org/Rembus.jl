@@ -181,6 +181,25 @@ end
 
 Base.show(io::IO, m::Register) = show(io, "REG|$(m.id)|$(m.cid)")
 
+# Replace the public key of an authenticated component. Same fields as Register.
+struct Rekey <: RembusMsg
+    id::Msgid
+    cid::String # client name, must match the authenticated cid
+    pin::Vector{UInt8} # SHA256(CBOR([pin, cid])), see pin_proof
+    pubkey::Vector{UInt8}
+    type::Int
+    twin::Twin
+    Rekey(
+        twin::Twin,
+        msgid::Msgid,
+        cid::AbstractString,
+        pin::Vector{UInt8},
+        pubkey::Vector{UInt8},
+        type::Integer) = new(msgid, cid, pin, pubkey, type, twin)
+end
+
+Base.show(io::IO, m::Rekey) = show(io, "REKEY|$(m.id)|$(m.cid)")
+
 struct Unregister <: RembusMsg
     id::Msgid
     twin::Twin

@@ -115,8 +115,8 @@ and secret materials.
 ├── admins.json
 ├── bar.acks
 ├── keys
-│   ├── bar.rsa.pem
-│   └── foo.ecdsa.pem
+│   ├── bar
+│   └── foo
 ├── messages
     ├── 1345
     ├── 345456

@@ -17,7 +17,7 @@ try
     init(pin)
     url = Rembus.RbURL(node_url)
     private_key = joinpath(Rembus.rembus_dir(), url.id, ".secret")
-    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(url.id).rsa.pem")
+    public_key = joinpath(Rembus.broker_dir(broker_name), "keys", "$(url.id)")
 
     @info "deleting $private_key"
     rm(private_key, force=true)

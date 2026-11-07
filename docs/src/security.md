@@ -110,3 +110,22 @@ register(component_name, pin; scheme=SIG_RSA)
    can be:
   * `SIG_RSA` - RSA digital signatures
   * `SIG_ECDSA` - Elliptic Curve Digital Signature Algorithm
+
+
+## Key Rotation
+
+An authenticated component can replace its key pair with
+[`Rembus.rekey`](@ref). The component authenticates with its current key and
+sends a `Rekey` packet (type `0x07`) with the same fields and tenant pin proof
+used by `register`:
+
+```julia
+rekey(component_name, pin; scheme=SIG_RSA)
+```
+
+The broker replaces the public key atomically. On any failure (wrong pin,
+invalid public key, `cid` different from the authenticated one, unregistered
+component) the old key is kept and the response status is a generic error.
+After a successful rekey the old key can no longer be used to authenticate.
+Rekey is supported over the binary (CBOR/ZeroMQ) transports; the JSON-RPC
+encoding is not supported.

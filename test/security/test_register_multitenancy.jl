@@ -60,7 +60,7 @@ function run(url)
     # public key was provisioned
     fname = Rembus.pubkey_file(broker_name, cmp.id)
     @info "[register_multitenancy#6]"
-    @test basename(fname) === "$(cmp.id).rsa.pem"
+    @test basename(fname) === "$(cmp.id)"
 end
 
 function decommission(url)

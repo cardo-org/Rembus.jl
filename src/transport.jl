@@ -163,7 +163,7 @@ function broker_parse(twin::Twin, pkt)
     elseif ptype == TYPE_ACK2
         id = decode_internal(io, Val(TYPE_2))
         return Ack2Msg(twin, bytes2id(id))
-    elseif ptype == TYPE_REGISTER
+    elseif ptype == TYPE_REGISTER || ptype == TYPE_REKEY
         id = decode_internal(io, Val(TYPE_2))
         cid = decode_internal(io)
         pin = decode_internal(io)
@@ -174,6 +174,9 @@ function broker_parse(twin::Twin, pkt)
         pubkey = isa(val, Vector{UInt8}) ? val : UInt8[]
         type = decode_internal(io)
         type = isa(type, Integer) ? Int(type) : -1
+        if ptype == TYPE_REKEY
+            return Rekey(twin, bytes2id(id), cid, pin, pubkey, type)
+        end
         return Register(twin, bytes2id(id), cid, pin, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         id = decode_internal(io, Val(TYPE_2))
@@ -399,13 +402,16 @@ function zmq_parse(twin::Twin, pkt::ZMQAbstractPacket, isbroker=true)
     elseif ptype == TYPE_ACK2
         mid = bytes2id(pkt.header[2])
         return Ack2Msg(twin, mid)
-    elseif ptype == TYPE_REGISTER
+    elseif ptype == TYPE_REGISTER || ptype == TYPE_REKEY
         mid = bytes2id(pkt.header[2])
         cid = pkt.header[3]
         pin = pkt.header[4]
         pin = isa(pin, Vector{UInt8}) ? pin : UInt8[]
         type = pkt.header[5]
         pubkey::Vector{UInt8} = pkt.data
+        if ptype == TYPE_REKEY
+            return Rekey(twin, mid, cid, pin, pubkey, type)
+        end
         return Register(twin, mid, cid, pin, pubkey, type)
     elseif ptype == TYPE_UNREGISTER
         mid = bytes2id(pkt.header[2])
@@ -1025,6 +1031,12 @@ function transport_send(socket::AbstractPlainSocket, msg::Register)
     return true
 end
 
+function transport_send(socket::AbstractPlainSocket, msg::Rekey)
+    pkt = [TYPE_REKEY, id2bytes(msg.id), msg.cid, msg.pin, msg.pubkey, msg.type]
+    transport_write(socket, pkt)
+    return true
+end
+
 function transport_send(z::ZDealer, msg::Register)
     socket = z.sock
     lock(zmqsocketlock) do
@@ -1032,6 +1044,21 @@ function transport_send(z::ZDealer, msg::Register)
         send(
             socket,
             encode([TYPE_REGISTER, id2bytes(msg.id), msg.cid, msg.pin, msg.type]),
+            more=true
+        )
+        send(socket, msg.pubkey, more=true)
+        send(socket, MESSAGE_END, more=false)
+    end
+    return true
+end
+
+function transport_send(z::ZDealer, msg::Rekey)
+    socket = z.sock
+    lock(zmqsocketlock) do
+        send(socket, Message(), more=true)
+        send(
+            socket,
+            encode([TYPE_REKEY, id2bytes(msg.id), msg.cid, msg.pin, msg.type]),
             more=true
         )
         send(socket, msg.pubkey, more=true)
@@ -1326,7 +1353,7 @@ function encode_partial(io, data::Vector)
         encode(io, data[2]) # id
         encode(io, data[3]) # status
         add_payload(io, data[4])
-    elseif type == TYPE_REGISTER
+    elseif type == TYPE_REGISTER || type == TYPE_REKEY
         write_array_header(io, 6 + nextra)
         encode(io, data[1]) # type
         encode(io, data[2]) # id

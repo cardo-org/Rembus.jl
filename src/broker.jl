@@ -535,6 +535,8 @@ function router_task(self, router::Router, implementor_rule)
                     response = register_node(router, msg)
                     transport_send(twin, response)
                 end
+            elseif isa(msg, Rekey)
+                transport_send(msg.twin, rekey_node(router, msg))
             elseif isa(msg, Unregister)
                 unregister_node(router, msg)
             elseif isa(msg, Attestation)

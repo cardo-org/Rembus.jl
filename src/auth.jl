@@ -5,16 +5,19 @@ end
 keys_dir(r::Router) = joinpath(r.settings.rembus_dir, r.process.supervisor.id, "keys")
 keys_dir(name::AbstractString) = joinpath(rembus_dir(), name, "keys")
 
+# Legacy key file names encode the key type and format: <cid>.<type>.<format>.
+legacy_key_files(basename::AbstractString) = [
+    "$basename.$type.$format" for format in ["pem", "der"] for type in ["rsa", "ecdsa"]
+]
+
+# The canonical key file is named <cid> (no extension); legacy names are only
+# read as a fallback.
 function fullname(basename::AbstractString)
-    for format in ["pem", "der"]
-        for type in ["rsa", "ecdsa"]
-            fn = "$basename.$type.$format"
-            if isfile(fn)
-                return fn
-            end
-        end
+    isfile(basename) && return basename
+    for fn in legacy_key_files(basename)
+        isfile(fn) && return fn
     end
-    return isfile(basename) ? basename : nothing
+    return nothing
 end
 
 function key_base(router::Router, cid::AbstractString)
@@ -36,28 +39,32 @@ function key_file(broker_name::AbstractString, cid::AbstractString)
     return fullname(basename)
 end
 
-function save_pubkey(router, cid::AbstractString, pubkey, type)
-    name = key_base(router, cid)
-    format = "der"
-    # check if pubkey start with -----BEGIN chars
-    if pubkey[1:10] == UInt8[0x2d, 0x2d, 0x2d, 0x2d, 0x2d, 0x42, 0x45, 0x47, 0x49, 0x4e]
-        format = "pem"
-    end
-    if type == SIG_RSA
-        typestr = "rsa"
-    else
-        typestr = "ecdsa"
-    end
-    fn = "$name.$typestr.$format"
-    open(fn, "w") do io
+# Store the public key of `cid` in the canonical key file with a same-directory
+# temporary file and an atomic rename. Legacy key files are removed only after
+# the rename succeeded.
+function save_pubkey(router, cid::AbstractString, pubkey)
+    fn = key_base(router, cid)
+    mkpath(dirname(fn))
+    tmp, io = mktemp(dirname(fn))
+    try
         write(io, pubkey)
+        close(io)
+        mv(tmp, fn, force=true)
+    catch
+        close(io)
+        rm(tmp, force=true)
+        rethrow()
+    end
+    for legacy in legacy_key_files(fn)
+        rm(legacy, force=true)
     end
 end
 
 function remove_pubkey(router, cid::AbstractString)
-    fn = key_file(router, cid)
-    if fn !== nothing
-        rm(fn)
+    fn = key_base(router, cid)
+    rm(fn, force=true)
+    for legacy in legacy_key_files(fn)
+        rm(legacy, force=true)
     end
 end
 
