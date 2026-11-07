@@ -39,7 +39,9 @@ function run()
     @test read(public_key) == old_public
     close(twin)
 
-    rekey(url, pin, scheme=Rembus.SIG_ECDSA, enc=Rembus.JSON)
+    # ssh-keygen generated ECDSA keys are not usable on macOS (MbedTLS limitation)
+    new_scheme = Sys.isapple() ? Rembus.SIG_RSA : Rembus.SIG_ECDSA
+    rekey(url, pin, scheme=new_scheme, enc=Rembus.JSON)
     @test read(private_key) != old_private
     @test read(public_key) != old_public
 

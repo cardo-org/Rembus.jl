@@ -57,7 +57,9 @@ function rk(url)
     close(twin)
 
     # success with a different scheme
-    rekey(url, pin, scheme=Rembus.SIG_ECDSA)
+    # ssh-keygen generated ECDSA keys are not usable on macOS (MbedTLS limitation)
+    new_scheme = Sys.isapple() ? Rembus.SIG_RSA : Rembus.SIG_ECDSA
+    rekey(url, pin, scheme=new_scheme)
     @test read(private_key) != old_private
     @test read(key) != old_pubkey
     @test isempty(filter(f -> startswith(f, "jl_"), readdir(keys)))
