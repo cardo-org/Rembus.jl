@@ -227,9 +227,9 @@ function register_node(router, msg)
     if msg.type != SIG_RSA && msg.type != SIG_ECDSA
         sts = STS_GENERIC_ERROR
         reason = "invalid key type $(msg.type)"
-    elseif !valid_pubkey(msg.pubkey, msg.type)
+    elseif (perr = pubkey_error(msg.pubkey, msg.type)) !== nothing
         sts = STS_GENERIC_ERROR
-        reason = "invalid pubkey"
+        reason = "invalid pubkey: $perr"
     elseif token_match === false
         sts = STS_GENERIC_ERROR
         reason = "wrong tenant/pin"
@@ -273,18 +273,30 @@ Return true if `pubkey` (PEM or DER) parses as a public key of the declared
 `type`: RSA with at least 2048 bits or ECDSA on the P-256 curve.
 =#
 function valid_pubkey(pubkey::Vector{UInt8}, type::Integer)
-    isempty(pubkey) && return false
+    return pubkey_error(pubkey, type) === nothing
+end
+
+# Return nothing if `pubkey` is valid, otherwise the reason it is rejected.
+function pubkey_error(pubkey::Vector{UInt8}, type::Integer)
+    isempty(pubkey) && return "empty key"
     try
         ctx = parse_pubkey(pubkey)
         name = MbedTLS.get_name(ctx)
         if type == SIG_RSA
-            return name == "RSA" && MbedTLS.bitlength(ctx) >= 2048
+            name == "RSA" || return "key is $name, not RSA"
+            MbedTLS.bitlength(ctx) >= 2048 || return "RSA key shorter than 2048 bits"
         elseif type == SIG_ECDSA
-            return name == "EC" && ec_group_id(ctx) == ECP_DP_SECP256R1
+            name == "EC" || return "key is $name, not ECDSA"
+            is_p256(ctx) || return "ECDSA key is not on the P-256 curve"
+        else
+            return "unknown key type $type"
         end
-    catch
+        return nothing
+    catch e
+        line = split(String(copy(pubkey)), '\n', limit=2)[1]
+        return "cannot parse key (header \"$(line[1:min(end, 40)])\"): " *
+               first(sprint(showerror, e), 120)
     end
-    return false
 end
 
 # PEM input must be NUL terminated and counts the terminator; DER input must
@@ -303,16 +315,22 @@ function parse_pubkey(pubkey::Vector{UInt8})
     return ctx
 end
 
-# mbedtls_ecp_group_id of MBEDTLS_ECP_DP_SECP256R1 (P-256).
-const ECP_DP_SECP256R1 = Cint(3)
+# DER content of the prime256v1 (P-256) object identifier.
+const P256_OID = UInt8[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]
 
-# The curve is read from the parsed key, so it does not depend on how the
-# public key is encoded (named curve, PEM, DER). MbedTLS.jl does not expose it:
-# the context holds `pk_info` followed by `pk_ctx`, an `mbedtls_ecp_keypair`
-# whose first member is the group, whose first member is its id.
-function ec_group_id(ctx::MbedTLS.PKContext)
-    pk_ctx = unsafe_load(Ptr{Ptr{Cvoid}}(ctx.data + sizeof(Ptr{Cvoid})))
-    return unsafe_load(Ptr{Cint}(pk_ctx))
+# The curve is read from the parsed key, re-exported as a DER
+# SubjectPublicKeyInfo, so it does not depend on how the key was encoded.
+function is_p256(ctx::MbedTLS.PKContext)
+    buf = zeros(UInt8, 256)
+    GC.@preserve buf begin
+        n = ccall(
+            (:mbedtls_pk_write_pubkey_der, MbedTLS.libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t), ctx.data, pointer(buf), length(buf)
+        )
+    end
+    n > 0 || return false
+    der = buf[(end-n+1):end]
+    return findfirst(P256_OID, der) !== nothing
 end
 
 #=
@@ -334,8 +352,8 @@ function rekey_node(router, msg)
         reason = "tenant [$tenant] not enabled"
     elseif !check_token(router, tenant, msg.cid, msg.pin)
         reason = "wrong tenant/pin"
-    elseif !valid_pubkey(msg.pubkey, msg.type)
-        reason = "invalid pubkey"
+    elseif (perr = pubkey_error(msg.pubkey, msg.type)) !== nothing
+        reason = "invalid pubkey: $perr"
     elseif !isregistered(router, msg.cid)
         reason = "$(msg.cid) not registered"
     else
