@@ -1622,6 +1622,19 @@ function jsonrpc_request(twin, pkt::Dict, msg_id, params)
                 pubkey,
                 UInt8(get(params, "key_type", SIG_RSA))
             )
+        elseif msg_type == TYPE_REKEY
+            pubkey = get(params, "key_val", nothing)
+            if isa(pubkey, String)
+                pubkey = base64decode(pubkey)
+            end
+            return Rekey(
+                twin,
+                msg_id,
+                pkt["method"],
+                base64decode(params["pin"]),
+                pubkey,
+                UInt8(get(params, "key_type", SIG_RSA))
+            )
         elseif msg_type == TYPE_UNREGISTER
             return Unregister(twin, msg_id)
         else

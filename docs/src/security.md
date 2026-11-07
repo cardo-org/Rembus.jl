@@ -127,5 +127,7 @@ The broker replaces the public key atomically. On any failure (wrong pin,
 invalid public key, `cid` different from the authenticated one, unregistered
 component) the old key is kept and the response status is a generic error.
 After a successful rekey the old key can no longer be used to authenticate.
-Rekey is supported over the binary (CBOR/ZeroMQ) transports; the JSON-RPC
-encoding is not supported.
+Rekey is supported over the binary (CBOR/ZeroMQ) transports and over the
+JSON-RPC (WebSocket text) encoding, where it is mapped like `register` with the
+component name as `method` and `params`
+`{"type": 7, "pin": BASE64, "key_val": BASE64, "key_type": INT}`.

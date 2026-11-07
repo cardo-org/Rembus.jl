@@ -120,8 +120,7 @@ function rekey(
         error("$cid component: private key $kfile not found")
     end
 
-    twin = connect(cmp)
-    twin.enc = enc
+    twin = connect(cmp, enc=enc)
     try
         if scheme === SIG_RSA
             pubkey = rsa_private_key(cmp.id)
@@ -276,33 +275,44 @@ Return true if `pubkey` (PEM or DER) parses as a public key of the declared
 function valid_pubkey(pubkey::Vector{UInt8}, type::Integer)
     isempty(pubkey) && return false
     try
-        ispem = length(pubkey) >= 10 && pubkey[1:10] == codeunits("-----BEGIN")
-        ctx = MbedTLS.PKContext()
-        MbedTLS.parse_public_key!(ctx, ispem ? [pubkey; 0x00] : pubkey)
+        ctx = parse_pubkey(pubkey)
         name = MbedTLS.get_name(ctx)
         if type == SIG_RSA
             return name == "RSA" && MbedTLS.bitlength(ctx) >= 2048
         elseif type == SIG_ECDSA
-            return name == "EC" && MbedTLS.bitlength(ctx) == 256 &&
-                   has_p256_oid(ispem ? pem_to_der(pubkey) : pubkey)
+            return name == "EC" && ec_group_id(ctx) == ECP_DP_SECP256R1
         end
     catch
     end
     return false
 end
 
-# DER encoding of the prime256v1 (secp256r1, P-256) curve OID 1.2.840.10045.3.1.7
-const P256_OID = UInt8[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]
-
-function pem_to_der(pem::Vector{UInt8})
-    lines = split(String(copy(pem)), '\n')
-    body = join(filter(l -> !isempty(strip(l)) && !startswith(l, "-----"), lines))
-    return base64decode(body)
+# PEM input must be NUL terminated and counts the terminator; DER input must
+# be passed with its exact length (MbedTLS.parse_public_key! always adds one).
+function parse_pubkey(pubkey::Vector{UInt8})
+    ispem = occursin("-----BEGIN", String(copy(pubkey)))
+    buf = ispem ? [pubkey; 0x00] : copy(pubkey)
+    ctx = MbedTLS.PKContext()
+    GC.@preserve buf begin
+        rc = ccall(
+            (:mbedtls_pk_parse_public_key, MbedTLS.libmbedcrypto), Cint,
+            (Ptr{Cvoid}, Ptr{UInt8}, Csize_t), ctx.data, pointer(buf), length(buf)
+        )
+    end
+    rc == 0 || error("invalid public key: mbedtls error $rc")
+    return ctx
 end
 
-function has_p256_oid(der::Vector{UInt8})
-    n = length(P256_OID)
-    return any(i -> view(der, i:i+n-1) == P256_OID, 1:length(der)-n+1)
+# mbedtls_ecp_group_id of MBEDTLS_ECP_DP_SECP256R1 (P-256).
+const ECP_DP_SECP256R1 = Cint(3)
+
+# The curve is read from the parsed key, so it does not depend on how the
+# public key is encoded (named curve, PEM, DER). MbedTLS.jl does not expose it:
+# the context holds `pk_info` followed by `pk_ctx`, an `mbedtls_ecp_keypair`
+# whose first member is the group, whose first member is its id.
+function ec_group_id(ctx::MbedTLS.PKContext)
+    pk_ctx = unsafe_load(Ptr{Ptr{Cvoid}}(ctx.data + sizeof(Ptr{Cvoid})))
+    return unsafe_load(Ptr{Cint}(pk_ctx))
 end
 
 #=

@@ -183,6 +183,12 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "jsonrpc_register" begin
             include("json-rpc/test_jsonrpc_register.jl")
         end
+        @time @safetestset "jsonrpc_key_type" begin
+            include("json-rpc/test_jsonrpc_key_type.jl")
+        end
+        @time @safetestset "jsonrpc_rekey" begin
+            include("json-rpc/test_jsonrpc_rekey.jl")
+        end
     end
     if GROUP == "all" || GROUP == "api"
         @time @safetestset "anonym" begin

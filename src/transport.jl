@@ -1032,8 +1032,23 @@ function transport_send(socket::AbstractPlainSocket, msg::Register)
 end
 
 function transport_send(socket::AbstractPlainSocket, msg::Rekey)
-    pkt = [TYPE_REKEY, id2bytes(msg.id), msg.cid, msg.pin, msg.pubkey, msg.type]
-    transport_write(socket, pkt)
+    if msg.twin.enc == JSON && isa(socket, WS)
+        pkt = JSON3.write(Dict(
+            "rembus" => "1.0",
+            "id" => string(msg.id),
+            "method" => msg.cid,
+            "params" => Dict(
+                "type" => TYPE_REKEY,
+                "pin" => base64encode(msg.pin),
+                "key_val" => base64encode(msg.pubkey),
+                "key_type" => msg.type
+            )
+        ))
+        ws_write(socket.sock, pkt)
+    else
+        pkt = [TYPE_REKEY, id2bytes(msg.id), msg.cid, msg.pin, msg.pubkey, msg.type]
+        transport_write(socket, pkt)
+    end
     return true
 end
 
