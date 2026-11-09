@@ -788,7 +788,7 @@ function authenticate(router::Router, twin::Twin)
 
     meta = Dict(string(proto) => lner.port for (proto, lner) in router.listeners)
     msg = IdentityMsg(twin, twin.uid.id, meta)
-    response = twin_request(twin, msg, router.settings.request_timeout)
+    response = identity_request(router, twin, msg)
     @debug "[$twin] authenticate: $response"
     if (response.status == STS_GENERIC_ERROR)
         close(twin.socket)
@@ -813,6 +813,56 @@ function authenticate(router::Router, twin::Twin)
     end
 
     return nothing
+end
+
+#=
+Send the `IdentityMsg` and return the first useful response.
+
+A router in `authenticated` mode sends a challenge as soon as the connection is
+accepted and defers the `IdentityMsg` response until the attestation. If this
+component is provisioned (it owns a private key) the connect-time challenge is
+answered with the attestation, and the attestation response is returned.
+=#
+function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
+    timeout = router.settings.request_timeout
+    if !isfile(pkfile(twin.uid.id))
+        return twin_request(twin, msg, timeout)
+    end
+
+    direct = twin.socket.direct
+    timer = Timer(timeout) do _t
+        req = pop!(direct, CONNECTION_ID, nothing)
+        if req !== nothing && !isready(req.future)
+            put!(req.future, RembusTimeout(msg))
+        end
+    end
+    chl = FutureResponse(nothing, timer)
+    direct[CONNECTION_ID] = chl
+    idreq = twin_future_request(twin, msg, timeout)
+
+    first = Channel{Any}(2)
+    @async put!(first, fetch(idreq.future))
+    @async put!(first, fetch(chl.future))
+    response = take!(first)
+    if isa(response, RembusTimeout)
+        close(twin.socket)
+        throw(response)
+    elseif response.id == CONNECTION_ID && response.status == STS_CHALLENGE
+        # The Identity response is received after the attestation.
+        att = attestate(router, twin, response)
+        resp = twin_request(twin, att, timeout)
+        # The peer may have rejected the Identity while awaiting the attestation.
+        if isready(idreq.future)
+            idresp = fetch(idreq.future)
+            if isa(idresp, ResMsg) && idresp.status == STS_GENERIC_ERROR
+                return idresp
+            end
+        end
+        return resp
+    end
+    close(timer)
+    delete!(direct, CONNECTION_ID)
+    return response
 end
 
 """
@@ -1814,6 +1864,17 @@ function challenge_if_auth(router::Router, twin::Twin)
             end
         end
     end
+end
+
+"""
+    anonymous_allowed(router, twin, twin_id)
+
+Return `true` if `twin` is connected from the loopback interface and `twin_id`
+is not a provisioned component: it is then accepted without authentication
+even when the router is in `authenticated` mode.
+"""
+function anonymous_allowed(router::Router, twin::Twin, twin_id)
+    return peer_isloopback(twin.socket) && key_file(router, twin_id) === nothing
 end
 
 function if_authenticated(router::Router, twin_id)

@@ -2,11 +2,15 @@ include("../utils.jl")
 
 broker_name = "authenticated"
 node = "authenticated_mynode"
+# Provisioned node that is not configured in authenticated mode.
+plain_node = "authenticated_plain"
 
 function setup()
     dirs_files = [
         (joinpath(Rembus.rembus_dir(), node), ".secret"),
-        (joinpath(Rembus.broker_dir(broker_name), "keys"), node)
+        (joinpath(Rembus.broker_dir(broker_name), "keys"), node),
+        (joinpath(Rembus.rembus_dir(), plain_node), ".secret"),
+        (joinpath(Rembus.broker_dir(broker_name), "keys"), plain_node)
     ]
 
     for (dir, filename) in dirs_files
@@ -25,6 +29,7 @@ end
 
 function run()
     test_loopback()
+    test_client_not_authenticated()
     test_errors()
 end
 
@@ -59,6 +64,24 @@ function test_loopback()
         sleep(router.settings.challenge_timeout + 0.1)
         @test !isopen(rb)
     end
+end
+
+function test_client_not_authenticated()
+    router = from("$broker_name.broker").args[1]
+    router.settings.request_timeout = 20
+
+    # A provisioned node answers the challenge sent on connect even if it is
+    # not configured in authenticated mode.
+    rb = connect(plain_node)
+    @test isopen(rb)
+    @test reactive(rb) === nothing
+    shutdown(rb)
+
+    # An unprovisioned named node on the loopback interface is accepted.
+    rb = connect("authenticated_unknown")
+    @test isopen(rb)
+    @test reactive(rb) === nothing
+    shutdown(rb)
 end
 
 function test_errors()

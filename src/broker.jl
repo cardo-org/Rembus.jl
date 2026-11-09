@@ -447,7 +447,7 @@ function auth_identity(router::Router, msg)
     twin = msg.twin
     url = RbURL(msg.cid)
     twin_id = rid(url)
-    if if_authenticated(router, twin_id)
+    if if_authenticated(router, twin_id) && !anonymous_allowed(router, twin, twin_id)
         # cid is registered, send the challenge
         response = challenge(router, twin, msg.id)
         transport_send(twin, response)
@@ -481,6 +481,11 @@ function router_task(self, router::Router, implementor_rule)
                 url = RbURL(msg.cid)
                 twin_id = rid(url)
                 @debug "[$twin] auth identity: $msg"
+                if haskey(twin.handler, "challenge") &&
+                   anonymous_allowed(router, twin, twin_id)
+                    # Unprovisioned loopback node: no attestation to await.
+                    delete!(twin.handler, "challenge")
+                end
                 if haskey(twin.handler, "challenge")
                     @debug "[$twin] challenge active"
                     # Await Attestation
