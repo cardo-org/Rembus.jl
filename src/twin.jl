@@ -852,6 +852,7 @@ function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
         throw(response)
     elseif response.id == CONNECTION_ID && response.status == STS_CHALLENGE
         # The Identity response is received after the attestation.
+        close(chl.timer)
         att = attestate(router, twin, response)
         resp = twin_request(twin, att, timeout)
         # The peer may have rejected the Identity while awaiting the attestation.
@@ -868,14 +869,16 @@ function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
     return response
 end
 
+# The timer must only drop its own entry: CONNECTION_ID is also the id of the
+# Attestation request and a stale timer would otherwise steal its future.
 function new_challenge_future(direct, timeout)
-    timer = Timer(timeout) do _t
-        req = pop!(direct, CONNECTION_ID, nothing)
-        if req !== nothing && !isready(req.future)
-            put!(req.future, RembusTimeout("challenge timeout"))
+    chl = FutureResponse(nothing, Timer(timeout) do _t
+        if get(direct, CONNECTION_ID, nothing) === chl
+            delete!(direct, CONNECTION_ID)
+            isready(chl.future) || put!(chl.future, RembusTimeout("challenge timeout"))
         end
-    end
-    return FutureResponse(nothing, timer)
+    end)
+    return chl
 end
 
 #=
@@ -1254,13 +1257,13 @@ nothing to resolve) and `WsPing` (sends a WebSocket ping frame instead of
 resolving a future).
 """
 function sendto_origin(twin, msg)
-    if haskey(twin.socket.direct, msg.id)
-        put!(twin.socket.direct[msg.id].future, msg)
-        close(twin.socket.direct[msg.id].timer)
-        delete!(twin.socket.direct, msg.id)
-        return true
-    end
-    return false
+    # Take the entry out first: put! may yield and a new request reusing the
+    # same id (CONNECTION_ID) must not be closed/deleted by this call.
+    req = pop!(twin.socket.direct, msg.id, nothing)
+    req === nothing && return false
+    close(req.timer)
+    put!(req.future, msg)
+    return true
 end
 
 """

@@ -223,10 +223,9 @@ function admin_broadcast(router::Router, twin::Twin, msg::RembusMsg)
     end
 
     # resolve the future
-    if haskey(twin.socket.direct, msg.id)
-        req = twin.socket.direct[msg.id]
+    req = pop!(twin.socket.direct, msg.id, nothing)
+    if req !== nothing
         put!(req.future, ResMsg(msg, STS_SUCCESS))
-        delete!(twin.socket.direct, msg.id)
     end
 
     return nothing
