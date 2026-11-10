@@ -449,6 +449,7 @@ function auth_identity(router::Router, msg)
     twin = msg.twin
     url = RbURL(msg.cid)
     twin_id = rid(url)
+    @info "[trace][$twin] auth_identity: cid=$(msg.cid)"
     if if_authenticated(router, twin_id) && !anonymous_allowed(router, twin, twin_id)
         # cid is registered, send the challenge
         response = challenge(router, twin, msg.id)
