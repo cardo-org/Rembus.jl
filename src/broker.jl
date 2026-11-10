@@ -418,7 +418,7 @@ function rpc_response(router::Router, msg)
     @debug "[$twin] rpc_response: $msg"
     if haskey(twin.socket.out, msg.id)
         request = twin.socket.out[msg.id].request
-        if msg.status == STS_CHALLENGE
+        if msg.status == STS_CHALLENGE && !isa(request, Union{Register,Rekey})
             return resend_attestate(router, twin, msg)
         elseif isnothing(request) || isa(request, Attestation)
             @debug "[$twin] attestation ok: $msg"

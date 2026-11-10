@@ -20,6 +20,21 @@ ENV["REMBUS_DIR"] = joinpath(tempdir(), "rembus")
 ENV["REMBUS_TIMEOUT"] = "20"
 
 """
+    pin_request(twin, T, cid, pin, pubkey, type)
+
+Run the two-step Register/Rekey (`T` is `Rembus.Register` or `Rembus.Rekey`)
+and return the response to the proof request, or the challenge response if
+the broker does not answer with a nonce.
+"""
+function pin_request(twin, T, cid, pin, pubkey, type)
+    res = fetch(Rembus.send_msg(twin, T(twin, Rembus.id(), cid, UInt8[], UInt8[], 0)).future)
+    res.status == Rembus.STS_CHALLENGE || return res
+    nonce = Rembus.nonce_bytes(Rembus.response_data(res))
+    proof = Rembus.pin_proof(pin, cid, nonce, pubkey, type)
+    return fetch(Rembus.send_msg(twin, T(twin, Rembus.id(), cid, proof, pubkey, type)).future)
+end
+
+"""
     request_timeout()
 
 Return the default request timeout.

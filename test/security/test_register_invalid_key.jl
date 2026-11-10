@@ -58,9 +58,7 @@ n3x0XSvCAzqtXcJupzaPGhNJ6U0rgSJu
 pubkey_bytes(pem) = Vector{UInt8}(codeunits(pem))
 
 function send_register(twin, cid, pubkey, type)
-    proof = Rembus.pin_proof(pin, cid)
-    msg = Rembus.Register(twin, Rembus.id(), cid, proof, pubkey, type)
-    return fetch(Rembus.send_msg(twin, msg).future)
+    return pin_request(twin, Rembus.Register, cid, pin, pubkey, type)
 end
 
 function run()

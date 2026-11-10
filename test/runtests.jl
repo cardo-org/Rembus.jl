@@ -305,6 +305,9 @@ const GROUP = get(ENV, "GROUP", "all")
         @time @safetestset "register_invalid_key" begin
             include("security/test_register_invalid_key.jl")
         end
+        @time @safetestset "register_nonce" begin
+            include("security/test_register_nonce.jl")
+        end
         @time @safetestset "rekey" begin
             include("security/test_rekey.jl")
         end

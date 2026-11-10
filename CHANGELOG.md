@@ -5,6 +5,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.0] - Unreleased
 
+### Changed
+
+- **Breaking**: `Register` and `Rekey` are a two-step, nonce-bound exchange. An
+  empty `pin` is a challenge request answered with status 11 and a nonce; the
+  proof request carries `SHA256(CBOR([pin, cid, nonce, pubkey, type]))`. The
+  one-step proof `SHA256(CBOR([pin, cid]))` is rejected (no downgrade path).
+  `register` and `rekey` keep their signature.
+
 ### Added
 
 - `mqtts://` URL scheme for connecting to an MQTT broker over TLS. The CA is

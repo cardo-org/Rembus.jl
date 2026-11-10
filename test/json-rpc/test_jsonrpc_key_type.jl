@@ -34,10 +34,8 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/1RCNQXl1+t6Co6lyfBty74eWm7B
 pubkey_bytes(pem) = Vector{UInt8}(codeunits(pem))
 
 # Send a Register/Rekey JSON-RPC request without the `key_type` member.
-function send_without_key_type(twin, ptype, cid, pubkey)
-    msg = Rembus.Rekey(
-        twin, Rembus.id(), cid, Rembus.pin_proof(pin, cid), pubkey, Rembus.SIG_RSA
-    )
+function send_raw(twin, ptype, cid, pin_bytes, pubkey)
+    msg = Rembus.Rekey(twin, Rembus.id(), cid, pin_bytes, pubkey, Rembus.SIG_RSA)
     req = Rembus.FutureResponse(msg, Timer(20))
     twin.socket.direct[msg.id] = req
     pkt = JSON3.write(Dict(
@@ -46,12 +44,21 @@ function send_without_key_type(twin, ptype, cid, pubkey)
         "method" => cid,
         "params" => Dict(
             "type" => ptype,
-            "pin" => Rembus.base64encode(msg.pin),
+            "pin" => Rembus.base64encode(pin_bytes),
             "key_val" => Rembus.base64encode(pubkey),
         )
     ))
     Rembus.ws_write(twin.socket.sock, pkt)
     return fetch(req.future)
+end
+
+function send_without_key_type(twin, ptype, cid, pubkey)
+    res = send_raw(twin, ptype, cid, UInt8[], UInt8[])
+    res.status == Rembus.STS_CHALLENGE || return res
+    nonce = Rembus.base64decode(res.data)
+    # the missing key_type defaults to RSA
+    proof = Rembus.pin_proof(pin, cid, nonce, pubkey, Rembus.SIG_RSA)
+    return send_raw(twin, ptype, cid, proof, pubkey)
 end
 
 function run()

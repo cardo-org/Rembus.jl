@@ -705,6 +705,7 @@ mutable struct Twin <: AbstractTwin
     failovers::Vector{RbURL}
     failover_from::Float64
     chl::Union{Nothing,FutureResponse} # connect-time challenge, armed before the receiver starts
+    regnonces::Dict{Tuple{UInt8,String},Tuple{Vector{UInt8},Float64,Any}} # (op, cid) => (nonce, expiry, socket)
     ackdf::DataFrame
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, enc=CBOR, s=FLOAT) = new(
@@ -724,7 +725,8 @@ mutable struct Twin <: AbstractTwin
         false,
         [],
         0.0,
-        nothing
+        nothing,
+        Dict()
     )
 end
 
@@ -783,6 +785,7 @@ Unbind the ZMQ socket from the twin.
 function offline!(router::Router, twin::Twin)
     @debug "[$twin] closing: going offline"
     twin.socket = Float()
+    empty!(twin.regnonces)
     # Remove from address2twin
 
     filter!(((k, v),) -> twin != v, router.address2twin)

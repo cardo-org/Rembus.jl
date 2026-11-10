@@ -40,7 +40,9 @@ To register a component a single `pin` or a set of tenants must be configured
 in the `tenants.json` file.
 
 The `pin` shared secret is a 8 hex digits string (for example "deedbeef").
-It is not sent on the wire: the Register message carries `SHA256(CBOR([pin, cid]))`.
+It is not sent on the wire: the Register proof request carries
+`SHA256(CBOR([pin, cid, nonce, pubkey, type]))` where `nonce` is issued by the
+broker in a preceding challenge request.
 
 """
 function register(
@@ -66,14 +68,7 @@ function register(
             pubkey = ecdsa_private_key(cmp.id)
         end
 
-        msg = Register(twin, id(), cmp.id, pin_proof(pin, cmp.id), pubkey, scheme)
-        futresponse = send_msg(twin, msg)
-        response = fetch(futresponse.future)
-        if isa(response, Exception)
-            throw(response)
-        elseif (response.status != STS_SUCCESS)
-            rembuserror(code=response.status, reason=response_data(response))
-        end
+        pin_exchange(twin, Register, cmp.id, pin, pubkey, scheme)
         # finally save the key
         mv("$(kfile).tmp", kfile)
     catch e
@@ -97,7 +92,7 @@ Replace the key pair of the registered component `cid`.
 
 The component connects and authenticates with its current private key, then a
 new key pair is generated and the new public key is sent in a `Rekey` message
-(packet type 0x07) carrying the same `pin` proof used by [`register`](@ref).
+(packet type 0x07) carrying the same nonce-bound `pin` proof used by [`register`](@ref).
 The `scheme` may differ from the one used at registration time.
 
 The local private key is replaced only if the broker answers with success; on any
@@ -130,14 +125,7 @@ function rekey(
             error("invalid scheme $scheme")
         end
 
-        msg = Rekey(twin, id(), cmp.id, pin_proof(pin, cmp.id), pubkey, scheme)
-        futresponse = send_msg(twin, msg)
-        response = fetch(futresponse.future)
-        if isa(response, Exception)
-            throw(response)
-        elseif (response.status != STS_SUCCESS)
-            rembuserror(code=response.status, reason=response_data(response))
-        end
+        pin_exchange(twin, Rekey, cmp.id, pin, pubkey, scheme)
         mv("$(kfile).tmp", kfile, force=true)
     catch e
         rm("$(kfile).tmp", force=true)
@@ -145,6 +133,38 @@ function rekey(
     finally
         shutdown(twin)
     end
+end
+
+# Return the nonce carried by a challenge response as bytes, or nothing.
+function nonce_bytes(data)
+    isa(data, ZMQ.Message) && (data = message2data(data))
+    isa(data, AbstractString) && return base64decode(data)
+    isa(data, Vector{UInt8}) && return data
+    # the ZMQ client turns decoded arrays into Vector{Any}
+    isa(data, Vector) && all(x -> isa(x, UInt8), data) && return Vector{UInt8}(data)
+    return nothing
+end
+
+#=
+Two-step Register/Rekey: send the challenge request (empty pin), then the
+proof request bound to the returned nonce.
+=#
+function pin_exchange(twin, ::Type{T}, cid, pin, pubkey, scheme) where {T<:Union{Register,Rekey}}
+    response = fetch(send_msg(twin, T(twin, id(), cid, UInt8[], UInt8[], 0)).future)
+    isa(response, Exception) && throw(response)
+    if response.status != STS_CHALLENGE
+        rembuserror(code=response.status, reason=response_data(response))
+    end
+    nonce = nonce_bytes(response_data(response))
+    nonce === nothing && error("invalid $T challenge")
+
+    proof = pin_proof(pin, cid, nonce, pubkey, scheme)
+    response = fetch(send_msg(twin, T(twin, id(), cid, proof, pubkey, scheme)).future)
+    isa(response, Exception) && throw(response)
+    if response.status != STS_SUCCESS
+        rembuserror(code=response.status, reason=response_data(response))
+    end
+    return nothing
 end
 
 """
@@ -184,24 +204,95 @@ function isenabled(router, tenant_id::AbstractString)
 end
 
 #=
-    pin_proof(pin, cid)
+    pin_proof(pin, cid, nonce, pubkey, type)
 
-Return the value sent in the Register `pin` field: SHA256(CBOR([pin, cid])).
+Return the value sent in the Register/Rekey `pin` field:
+SHA256(CBOR([pin, cid, nonce, pubkey, type])).
 The pin itself is never sent on the wire.
 =#
-function pin_proof(pin::AbstractString, cid::AbstractString)
-    return MbedTLS.digest(MD_SHA256, encode([String(pin), String(cid)]))
+function pin_proof(
+    pin::AbstractString,
+    cid::AbstractString,
+    nonce::Vector{UInt8},
+    pubkey::Vector{UInt8},
+    type::Integer
+)
+    return MbedTLS.digest(
+        MD_SHA256, encode([String(pin), String(cid), nonce, pubkey, UInt(type)])
+    )
 end
 
-function check_token(router, tenant, cid::AbstractString, proof::Vector{UInt8})
-    if haskey(router.owners, tenant) &&
-       pin_proof(router.owners[tenant], cid) == proof
-        @debug "tenant [$tenant]: token is valid"
-        return true
-    else
-        @info "tenant [$tenant]: invalid token"
-        return false
+# Lifetime in seconds of an unused Register/Rekey nonce.
+const REGISTER_NONCE_TTL = Ref(60.0)
+const MAX_REGISTER_NONCES = 8
+const CID_GRAMMAR = r"^[A-Za-z0-9._-]{1,255}$"
+
+valid_cid(cid::AbstractString) =
+    occursin(CID_GRAMMAR, cid) && !startswith(cid, ".") && !occursin("..", cid)
+
+function issue_nonce!(twin::Twin, op::UInt8, cid::AbstractString)
+    now_ts = time()
+    filter!(((_, v),) -> v[2] > now_ts, twin.regnonces)
+    key = (op, String(cid))
+    delete!(twin.regnonces, key)
+    if length(twin.regnonces) >= MAX_REGISTER_NONCES
+        return nothing
     end
+    nonce = rand(RandomDevice(), UInt8, 32)
+    twin.regnonces[key] = (nonce, now_ts + REGISTER_NONCE_TTL[], twin.socket)
+    return nonce
+end
+
+# Single use: the nonce is discarded whatever the outcome of the proof check.
+function take_nonce!(twin::Twin, op::UInt8, cid::AbstractString)
+    entry = pop!(twin.regnonces, (op, String(cid)), nothing)
+    entry === nothing && return nothing
+    nonce, expiry, socket = entry
+    (expiry > time() && socket === twin.socket) || return nothing
+    return nonce
+end
+
+function check_token(router, tenant, cid::AbstractString, nonce, msg)
+    if nonce !== nothing && msg.type >= 0 && haskey(router.owners, tenant)
+        expected = pin_proof(router.owners[tenant], cid, nonce, msg.pubkey, msg.type)
+        if length(msg.pin) == length(expected) && constant_time_equal(msg.pin, expected)
+            @debug "tenant [$tenant]: token is valid"
+            return true
+        end
+    end
+    @info "tenant [$tenant]: invalid token"
+    return false
+end
+
+function constant_time_equal(a::Vector{UInt8}, b::Vector{UInt8})
+    acc = UInt8(0)
+    for i in eachindex(a)
+        acc |= a[i] ⊻ b[i]
+    end
+    return acc == 0
+end
+
+#=
+Handle the first step of Register/Rekey: reply with a nonce, or with an error
+if `cid` is not valid or the nonce limit is reached.
+=#
+function register_challenge(msg, op::UInt8)
+    twin = msg.twin
+    if !valid_cid(msg.cid)
+        return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid cid")
+    elseif op == TYPE_REKEY && (!twin.isauth || rid(twin) != msg.cid)
+        return ResMsg(
+            twin, msg.id, STS_GENERIC_ERROR,
+            "cid does not match the authenticated component"
+        )
+    end
+    nonce = issue_nonce!(twin, op, msg.cid)
+    if nonce === nothing
+        return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "too many pending challenges")
+    end
+    # The WebSocket JSON encoding carries binary data as base64 text.
+    isjson = twin.enc == JSON && isa(twin.socket, WS)
+    return ResMsg(twin, msg.id, STS_CHALLENGE, isjson ? base64encode(nonce) : nonce)
 end
 
 isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
@@ -212,6 +303,14 @@ isregistered(router, cid::AbstractString) = key_file(router, cid) !== nothing
 Register a component.
 =#
 function register_node(router, msg)
+    if length(msg.pin) != 0 && length(msg.pin) != 32
+        return ResMsg(msg.twin, msg.id, STS_GENERIC_ERROR, "invalid pin length")
+    elseif isempty(msg.pin)
+        return register_challenge(msg, TYPE_REGISTER)
+    elseif !valid_cid(msg.cid)
+        return ResMsg(msg.twin, msg.id, STS_GENERIC_ERROR, "invalid cid")
+    end
+    nonce = take_nonce!(msg.twin, TYPE_REGISTER, msg.cid)
     tenant = domain(msg.cid)
     @debug "registering pubkey of $(msg.cid), id: $(msg.id), tenant: $tenant"
 
@@ -223,7 +322,7 @@ function register_node(router, msg)
 
     sts = STS_SUCCESS
     reason = nothing
-    token_match = check_token(router, tenant, msg.cid, msg.pin)
+    token_match = check_token(router, tenant, msg.cid, nonce, msg)
     if msg.type != SIG_RSA && msg.type != SIG_ECDSA
         sts = STS_GENERIC_ERROR
         reason = "invalid key type $(msg.type)"
@@ -343,6 +442,12 @@ STS_GENERIC_ERROR.
 =#
 function rekey_node(router, msg)
     twin = msg.twin
+    if length(msg.pin) != 0 && length(msg.pin) != 32
+        return ResMsg(twin, msg.id, STS_GENERIC_ERROR, "invalid pin length")
+    elseif isempty(msg.pin)
+        return register_challenge(msg, TYPE_REKEY)
+    end
+    nonce = take_nonce!(twin, TYPE_REKEY, msg.cid)
     tenant = domain(msg.cid)
     reason = nothing
 
@@ -350,7 +455,7 @@ function rekey_node(router, msg)
         reason = "cid does not match the authenticated component"
     elseif !isenabled(router, tenant)
         reason = "tenant [$tenant] not enabled"
-    elseif !check_token(router, tenant, msg.cid, msg.pin)
+    elseif !check_token(router, tenant, msg.cid, nonce, msg)
         reason = "wrong tenant/pin"
     elseif (perr = pubkey_error(msg.pubkey, msg.type)) !== nothing
         reason = "invalid pubkey: $perr"

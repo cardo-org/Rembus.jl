@@ -8,9 +8,8 @@ function init(pin)
     add_tenant(".", pin, broker_name)
 end
 
-function send_rekey(twin, cid, proof, pubkey, type)
-    msg = Rembus.Rekey(twin, Rembus.id(), cid, proof, pubkey, type)
-    return fetch(Rembus.send_msg(twin, msg).future)
+function send_rekey(twin, cid, pubkey, type)
+    return pin_request(twin, Rembus.Rekey, cid, pin, pubkey, type)
 end
 
 function run()
@@ -42,14 +41,13 @@ function rk(url)
     @test read(key) == old_pubkey
 
     twin = connect(url)
-    proof = Rembus.pin_proof(pin, rid(node))
 
     # invalid pubkey, cid mismatch, bad type: the old key is kept
-    res = send_rekey(twin, rid(node), proof, UInt8[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], Rembus.SIG_RSA)
+    res = send_rekey(twin, rid(node), UInt8[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], Rembus.SIG_RSA)
     @test res.status == Rembus.STS_GENERIC_ERROR
-    res = send_rekey(twin, rid(node), proof, old_pubkey, Rembus.SIG_ECDSA)
+    res = send_rekey(twin, rid(node), old_pubkey, Rembus.SIG_ECDSA)
     @test res.status == Rembus.STS_GENERIC_ERROR
-    res = send_rekey(twin, "someone_else", Rembus.pin_proof(pin, "someone_else"), old_pubkey, Rembus.SIG_RSA)
+    res = send_rekey(twin, "someone_else", old_pubkey, Rembus.SIG_RSA)
     @test res.status == Rembus.STS_GENERIC_ERROR
     @test read(key) == old_pubkey
     # the connection is still usable

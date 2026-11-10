@@ -30,11 +30,10 @@ function run()
 
     # invalid public key: error response with status 10, old key kept
     twin = connect(node, enc=Rembus.JSON)
-    msg = Rembus.Rekey(
-        twin, Rembus.id(), rid(node), Rembus.pin_proof(pin, rid(node)),
+    res = pin_request(
+        twin, Rembus.Rekey, rid(node), pin,
         UInt8[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], Rembus.SIG_RSA
     )
-    res = fetch(Rembus.send_msg(twin, msg).future)
     @test res.status == Rembus.STS_GENERIC_ERROR
     @test read(public_key) == old_public
     close(twin)
