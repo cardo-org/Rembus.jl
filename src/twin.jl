@@ -697,16 +697,13 @@ node's mesh routing tables with the peer's exports via
 function do_connect(twin::Twin)
     if !isopen(twin.socket)
         router = top_router(twin.router)
-        @info "[trace][$twin] do_connect: start"
         if router.settings.connection_mode === authenticated && hasname(twin)
             transport_connect(twin)
             await_challenge(router, twin)
         else
             transport_connect(twin)
-            @info "[trace][$twin] do_connect: transport connected"
             authenticate(router, twin)
         end
-        @info "[trace][$twin] do_connect: authenticated"
     end
 
     if isopen(twin.socket)
@@ -844,23 +841,19 @@ function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
         chl = new_challenge_future(direct, timeout)
         direct[CONNECTION_ID] = chl
     end
-    @info "[trace][$twin] identity_request: sending identity (chl armed=$(haskey(direct, CONNECTION_ID)))"
     idreq = twin_future_request(twin, msg, timeout)
 
     first = Channel{Any}(2)
     @async put!(first, fetch(idreq.future))
     @async put!(first, fetch(chl.future))
     response = take!(first)
-    @info "[trace][$twin] identity_request: first response=$(typeof(response)) id=$(isa(response, ResMsg) ? response.id : nothing) sts=$(isa(response, ResMsg) ? response.status : nothing)"
     if isa(response, RembusTimeout)
         close(twin.socket)
         throw(response)
     elseif response.id == CONNECTION_ID && response.status == STS_CHALLENGE
         # The Identity response is received after the attestation.
         att = attestate(router, twin, response)
-        @info "[trace][$twin] identity_request: sending attestation"
         resp = twin_request(twin, att, timeout)
-        @info "[trace][$twin] identity_request: attestation response sts=$(resp.status)"
         # The peer may have rejected the Identity while awaiting the attestation.
         if isready(idreq.future)
             idresp = fetch(idreq.future)
@@ -1259,9 +1252,6 @@ nothing to resolve) and `WsPing` (sends a WebSocket ping frame instead of
 resolving a future).
 """
 function sendto_origin(twin, msg)
-    if msg.id == CONNECTION_ID
-        @info "[trace][$twin] sendto_origin: challenge response, pending=$(haskey(twin.socket.direct, msg.id))"
-    end
     if haskey(twin.socket.direct, msg.id)
         put!(twin.socket.direct[msg.id].future, msg)
         close(twin.socket.direct[msg.id].timer)
@@ -1893,7 +1883,6 @@ end
 function challenge_if_auth(router::Router, twin::Twin)
     if router.mode === authenticated
         chl = challenge(router, twin, CONNECTION_ID)
-        @info "[trace][$twin] challenge_if_auth: sending challenge"
         transport_send(twin, chl)
 
         # Setup a timer for disconnecting the node if it is not authenticated meantime.
