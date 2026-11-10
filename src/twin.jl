@@ -1615,14 +1615,17 @@ sent an Identity message. In this case the Identity response is delayed
 until the original challenge is resolved with an Attestation.
 =#
 function await_attestation(router::Router, twin::Twin, socket, msg)
-    future = Channel{UInt8}(1)
+    # Room for both the timeout and a late attestation: a blocking put! in
+    # the "att" handler would otherwise stall the twin forever.
+    future = Channel{UInt8}(2)
     t = Timer(router.settings.request_timeout) do _t
         put!(future, STS_GENERIC_ERROR)
     end
 
     twin.handler["att"] = (sts) -> put!(future, sts)
-    sts = fetch(future)
+    sts = take!(future)
     close(t)
+    delete!(twin.handler, "att")
     transport_send(socket, ResMsg(twin, msg.id, sts, nothing))
 end
 
