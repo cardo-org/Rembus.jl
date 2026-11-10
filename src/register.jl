@@ -140,8 +140,6 @@ function nonce_bytes(data)
     isa(data, ZMQ.Message) && (data = message2data(data))
     isa(data, AbstractString) && return base64decode(data)
     isa(data, Vector{UInt8}) && return data
-    # the ZMQ client turns decoded arrays into Vector{Any}
-    isa(data, Vector) && all(x -> isa(x, UInt8), data) && return Vector{UInt8}(data)
     return nothing
 end
 

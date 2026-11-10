@@ -21,6 +21,20 @@ using TestItems
     @test !Rembus.isconnectionerror(twin.socket, ErrorException("something nasty"))
 end
 
+@testitem "regnonces_cleanup_and_bytes" begin
+    router = Rembus.Router{Rembus.Twin}("test_router")
+    twin = Rembus.Twin(Rembus.RbURL(), router)
+    nonce = Rembus.issue_nonce!(twin, Rembus.TYPE_REGISTER, "component1")
+    @test length(nonce) == 32
+    @test !isempty(twin.regnonces)
+    Rembus.end_receiver(twin)
+    @test isempty(twin.regnonces)
+
+    bytes = rand(UInt8, 32)
+    @test Rembus.dataframe_if_tagvalue(bytes) === bytes
+    @test Rembus.nonce_bytes(Rembus.dataframe_if_tagvalue(bytes)) == bytes
+end
+
 @testitem "cleanup" begin
     router = Rembus.Router{Rembus.Twin}("test_router")
     twin = Rembus.Twin(Rembus.RbURL("component1"), router)

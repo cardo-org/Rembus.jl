@@ -1154,6 +1154,8 @@ function tagvalue_if_dataframe(data)
 end
 
 function dataframe_if_tagvalue(buffer)
+    # A byte string is a single value, not a list of arguments.
+    isa(buffer, Vector{UInt8}) && return buffer
     if isa(buffer, Vector)
         result = []
 

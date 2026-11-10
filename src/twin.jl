@@ -1215,6 +1215,8 @@ anonymous twins with [`destroy_twin`](@ref), since an anonymous component
 has no stable identity to reconnect against.
 """
 function end_receiver(twin::Twin)
+    # Outstanding Register/Rekey nonces die with the connection.
+    empty!(twin.regnonces)
     if hasname(twin)
         detach(twin)
     else
