@@ -422,7 +422,9 @@ function rpc_response(router::Router, msg)
             return resend_attestate(router, twin, msg)
         elseif isnothing(request) || isa(request, Attestation)
             @debug "[$twin] attestation ok: $msg"
-            put!(twin.socket.out[CONNECTION_ID].future, msg)
+            if haskey(twin.socket.out, CONNECTION_ID)
+                put!(twin.socket.out[CONNECTION_ID].future, msg)
+            end
         else
             msg.twin = twin.socket.out[msg.id].request.twin
             msg.reqdata = request

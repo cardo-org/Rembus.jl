@@ -209,6 +209,7 @@ Establish the connection from a component or from a broker's twin..
 =#
 function zmq_connect(rb)
     rb.socket = ZDealer()
+    arm_challenge!(rb)
     url = nodeurl(rb)
     ZMQ.connect(rb.socket.sock, url)
     rb.socket.task[] = @async zmq_receive(rb)
@@ -260,11 +261,13 @@ function tcp_connect(rb, isconnected::Condition)
             MbedTLS.handshake(ctx)
 
             rb.socket = TLS(ctx)
+            arm_challenge!(rb)
             notify(isconnected)
             twin_receiver(rb)
         elseif uri.scheme == "tcp"
             sock = Sockets.connect(uri.host, parse(Int, uri.port))
             rb.socket = TCP(sock)
+            arm_challenge!(rb)
             notify(isconnected)
             twin_receiver(rb)
         else
@@ -291,6 +294,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
             client = HTTP.Client(transport=HTTP.Transport(tls_config=tls_config))
             HTTP.WebSockets.open(socket -> begin
                     rb.socket = WS(socket)
+                    arm_challenge!(rb)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
@@ -302,6 +306,7 @@ function ws_connect(rb::Twin, isconnected::Condition)
                     ### setup_receiver(process, socket, rb, isconnected)
                     ### read_socket(socket, rb, isconnected)
                     rb.socket = WS(socket)
+                    arm_challenge!(rb)
                     notify(isconnected)
                     @async keep_alive(rb)
                     twin_receiver(rb)
@@ -830,14 +835,12 @@ function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
     end
 
     direct = twin.socket.direct
-    timer = Timer(timeout) do _t
-        req = pop!(direct, CONNECTION_ID, nothing)
-        if req !== nothing && !isready(req.future)
-            put!(req.future, RembusTimeout(msg))
-        end
+    chl = twin.chl
+    twin.chl = nothing
+    if chl === nothing
+        chl = new_challenge_future(direct, timeout)
+        direct[CONNECTION_ID] = chl
     end
-    chl = FutureResponse(nothing, timer)
-    direct[CONNECTION_ID] = chl
     idreq = twin_future_request(twin, msg, timeout)
 
     first = Channel{Any}(2)
@@ -860,9 +863,37 @@ function identity_request(router::Router, twin::Twin, msg::IdentityMsg)
         end
         return resp
     end
-    close(timer)
+    close(chl.timer)
     delete!(direct, CONNECTION_ID)
     return response
+end
+
+function new_challenge_future(direct, timeout)
+    timer = Timer(timeout) do _t
+        req = pop!(direct, CONNECTION_ID, nothing)
+        if req !== nothing && !isready(req.future)
+            put!(req.future, RembusTimeout("challenge timeout"))
+        end
+    end
+    return FutureResponse(nothing, timer)
+end
+
+#=
+Register the pending future for the connect-time challenge as soon as the
+socket exists, so that a challenge received before `identity_request` runs
+is not lost.
+=#
+function arm_challenge!(twin::Twin)
+    router = top_router(twin.router)
+    if router.settings.connection_mode !== authenticated &&
+       hasname(twin) && requireauthentication(twin.socket) &&
+       isfile(pkfile(twin.uid.id))
+        timeout = router.settings.request_timeout
+        chl = new_challenge_future(twin.socket.direct, timeout)
+        twin.socket.direct[CONNECTION_ID] = chl
+        twin.chl = chl
+    end
+    return nothing
 end
 
 """

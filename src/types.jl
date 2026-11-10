@@ -704,6 +704,7 @@ mutable struct Twin <: AbstractTwin
     probe::Bool
     failovers::Vector{RbURL}
     failover_from::Float64
+    chl::Union{Nothing,FutureResponse} # connect-time challenge, armed before the receiver starts
     ackdf::DataFrame
     process::Visor.Process
     Twin(uid::RbURL, r::AbstractRouter, enc=CBOR, s=FLOAT) = new(
@@ -722,7 +723,8 @@ mutable struct Twin <: AbstractTwin
         Dict(), # msg_from
         false,
         [],
-        0.0
+        0.0,
+        nothing
     )
 end
 
