@@ -223,7 +223,7 @@ end
 # Lifetime in seconds of an unused Register/Rekey nonce.
 const REGISTER_NONCE_TTL = Ref(60.0)
 const MAX_REGISTER_NONCES = 8
-const CID_GRAMMAR = r"^[A-Za-z0-9._-]{1,255}$"
+const CID_GRAMMAR = r"^[A-Za-z0-9._@-]{1,255}$"
 
 valid_cid(cid::AbstractString) =
     occursin(CID_GRAMMAR, cid) && !startswith(cid, ".") && !occursin("..", cid)
